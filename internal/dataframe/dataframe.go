@@ -311,69 +311,47 @@ func (df *DataFrame) concatSeries(name string, seriesList []ISeries) ISeries {
 
 // concatStringSeries concatenates string series
 func (df *DataFrame) concatStringSeries(name string, seriesList []ISeries, totalLength int, mem memory.Allocator) ISeries {
-	values := make([]string, 0, totalLength)
-	for _, s := range seriesList {
-		arr := s.Array()
-		strArr := arr.(*array.String)
-		for i := 0; i < strArr.Len(); i++ {
-			if !strArr.IsNull(i) {
-				values = append(values, strArr.Value(i))
-			} else {
-				values = append(values, "")
-			}
-		}
-		arr.Release()
-	}
-	return series.New(name, values, mem)
+	return concatTypedSeries(name, seriesList, totalLength, mem, "", func(arr arrow.Array, i int) string {
+		return arr.(*array.String).Value(i)
+	})
 }
 
 // concatInt64Series concatenates int64 series
 func (df *DataFrame) concatInt64Series(name string, seriesList []ISeries, totalLength int, mem memory.Allocator) ISeries {
-	values := make([]int64, 0, totalLength)
-	for _, s := range seriesList {
-		arr := s.Array()
-		intArr := arr.(*array.Int64)
-		for i := 0; i < intArr.Len(); i++ {
-			if !intArr.IsNull(i) {
-				values = append(values, intArr.Value(i))
-			} else {
-				values = append(values, 0)
-			}
-		}
-		arr.Release()
-	}
-	return series.New(name, values, mem)
+	return concatTypedSeries(name, seriesList, totalLength, mem, int64(0), func(arr arrow.Array, i int) int64 {
+		return arr.(*array.Int64).Value(i)
+	})
 }
 
 // concatFloat64Series concatenates float64 series
 func (df *DataFrame) concatFloat64Series(name string, seriesList []ISeries, totalLength int, mem memory.Allocator) ISeries {
-	values := make([]float64, 0, totalLength)
-	for _, s := range seriesList {
-		arr := s.Array()
-		floatArr := arr.(*array.Float64)
-		for i := 0; i < floatArr.Len(); i++ {
-			if !floatArr.IsNull(i) {
-				values = append(values, floatArr.Value(i))
-			} else {
-				values = append(values, 0.0)
-			}
-		}
-		arr.Release()
-	}
-	return series.New(name, values, mem)
+	return concatTypedSeries(name, seriesList, totalLength, mem, 0.0, func(arr arrow.Array, i int) float64 {
+		return arr.(*array.Float64).Value(i)
+	})
 }
 
 // concatBoolSeries concatenates boolean series
-func (df *DataFrame) concatBoolSeries(name string, seriesList []ISeries, totalLength int, mem memory.Allocator) ISeries {
-	values := make([]bool, 0, totalLength)
+func (df *DataFrame) concatBoolSeries(
+	name string, seriesList []ISeries, totalLength int, mem memory.Allocator,
+) ISeries {
+	return concatTypedSeries(name, seriesList, totalLength, mem, false, func(arr arrow.Array, i int) bool {
+		return arr.(*array.Boolean).Value(i)
+	})
+}
+
+// concatTypedSeries is a generic helper for concatenating typed series
+func concatTypedSeries[T any](
+	name string, seriesList []ISeries, totalLength int, mem memory.Allocator,
+	defaultValue T, getValue func(arrow.Array, int) T,
+) ISeries {
+	values := make([]T, 0, totalLength)
 	for _, s := range seriesList {
 		arr := s.Array()
-		boolArr := arr.(*array.Boolean)
-		for i := 0; i < boolArr.Len(); i++ {
-			if !boolArr.IsNull(i) {
-				values = append(values, boolArr.Value(i))
+		for i := 0; i < arr.Len(); i++ {
+			if !arr.IsNull(i) {
+				values = append(values, getValue(arr, i))
 			} else {
-				values = append(values, false)
+				values = append(values, defaultValue)
 			}
 		}
 		arr.Release()
