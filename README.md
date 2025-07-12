@@ -45,9 +45,9 @@ import (
     "log"
 
     "github.com/apache/arrow/go/v17/arrow/memory"
-    "github.com/paveg/gorilla/internal/dataframe"
-    "github.com/paveg/gorilla/internal/expr"
-    "github.com/paveg/gorilla/internal/series"
+    "github.com/paveg/gorilla/dataframe"
+    "github.com/paveg/gorilla/expr"
+    "github.com/paveg/gorilla/series"
 )
 
 func main() {

@@ -6,7 +6,7 @@ This document provides a comprehensive overview of all remaining tasks to comple
 
 ### 1. Parallel LazyFrame.Collect() Implementation
 
-**Location**: `internal/dataframe/lazy.go:450`
+**Location**: `dataframe/lazy.go:450`
 
 ```go
 // TODO: Implement parallel execution pipeline for LazyFrame.Collect()
@@ -92,10 +92,10 @@ This document provides a comprehensive overview of all remaining tasks to comple
 
 For comprehensive task lists in each component:
 
-- **DataFrame**: `internal/dataframe/TODO.md` - 25+ tasks
-- **Expression System**: `internal/expr/TODO.md` - 15+ tasks  
+- **DataFrame**: `dataframe/TODO.md` - 25+ tasks
+- **Expression System**: `expr/TODO.md` - 15+ tasks  
 - **Parallel Processing**: `internal/parallel/TODO.md` - 12+ tasks
-- **Series Operations**: `internal/series/TODO.md` - 18+ tasks
+- **Series Operations**: `series/TODO.md` - 18+ tasks
 
 ---
 
@@ -114,7 +114,7 @@ Use these commands to find all TODOs in the codebase:
 
 ```bash
 # Find all TODO comments in code
-grep -r "TODO:" internal/
+grep -r "TODO:" ./
 
 # Find all TODO markdown files  
 find . -name "TODO.md"
