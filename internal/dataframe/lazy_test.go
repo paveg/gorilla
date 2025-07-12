@@ -262,9 +262,9 @@ func TestLazyFrameParallelExecution_DISABLED(t *testing.T) {
 
 	for i := 0; i < size; i++ {
 		names[i] = fmt.Sprintf("Employee_%d", i)
-		ages[i] = int64(25 + (i % 40))        // Ages 25-64
-		salaries[i] = float64(40000 + i*100)  // Increasing salaries
-		active[i] = i%2 == 0                  // Alternating active status
+		ages[i] = int64(25 + (i % 40))       // Ages 25-64
+		salaries[i] = float64(40000 + i*100) // Increasing salaries
+		active[i] = i%2 == 0                 // Alternating active status
 	}
 
 	nameSeries := series.New("name", names, mem)

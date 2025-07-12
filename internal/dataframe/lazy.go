@@ -480,67 +480,6 @@ func (lf *LazyFrame) collectSequential() (*DataFrame, error) {
 	return current, nil
 }
 
-// collectParallel implements parallel execution pipeline
-func (lf *LazyFrame) collectParallel() (*DataFrame, error) {
-	// Calculate optimal chunk size based on data size and worker count
-	chunkSize := lf.calculateChunkSize()
-	totalRows := lf.source.Len()
-
-	// Create chunks
-	chunks := make([]chunkTask, 0)
-	for start := 0; start < totalRows; start += chunkSize {
-		end := start + chunkSize
-		if end > totalRows {
-			end = totalRows
-		}
-		chunks = append(chunks, chunkTask{
-			start:      start,
-			end:        end,
-			operations: lf.operations,
-		})
-	}
-
-	// Process chunks in parallel
-	processedChunks := parallel.ProcessIndexed(lf.pool, chunks, func(index int, task chunkTask) *DataFrame {
-		result, err := lf.processChunk(task)
-		if err != nil {
-			// Return empty DataFrame on error
-			// TODO: Better error handling in parallel processing
-			return New()
-		}
-		return result
-	})
-
-	// Concatenate results
-	if len(processedChunks) == 0 {
-		return New(), nil
-	}
-
-	// Filter out empty chunks before concatenation
-	var nonEmptyChunks []*DataFrame
-	for _, chunk := range processedChunks {
-		if chunk != nil && chunk.Width() > 0 {
-			// For chunks that have columns, add them regardless of row count
-			// Empty chunks with proper structure should be handled by Concat
-			nonEmptyChunks = append(nonEmptyChunks, chunk)
-		}
-	}
-
-	if len(nonEmptyChunks) == 0 {
-		return New(), nil
-	}
-
-	if len(nonEmptyChunks) == 1 {
-		return nonEmptyChunks[0], nil
-	}
-
-	// Concatenate all non-empty chunks
-	result := nonEmptyChunks[0]
-	others := nonEmptyChunks[1:]
-
-	return result.Concat(others...), nil
-}
-
 // collectParallelSafe implements a safer parallel execution pipeline
 // that pre-slices data to avoid concurrent access to source DataFrame
 func (lf *LazyFrame) collectParallelSafe() (*DataFrame, error) {
@@ -564,7 +503,7 @@ func (lf *LazyFrame) collectParallelSafe() (*DataFrame, error) {
 		if chunk == nil || chunk.Width() == 0 {
 			return New()
 		}
-		
+
 		result := chunk
 		// Apply all operations to this chunk
 		for _, op := range lf.operations {
@@ -577,7 +516,7 @@ func (lf *LazyFrame) collectParallelSafe() (*DataFrame, error) {
 				result.Release() // Release intermediate results
 			}
 			result = nextResult
-			
+
 			// Verify result has valid structure
 			if result == nil || result.Width() == 0 {
 				return New()
@@ -616,55 +555,14 @@ func (lf *LazyFrame) collectParallelSafe() (*DataFrame, error) {
 	return result.Concat(others...), nil
 }
 
-// chunkTask represents a chunk of data to be processed
-type chunkTask struct {
-	start      int
-	end        int
-	operations []LazyOperation
-}
-
-// processChunk processes a single chunk of data
-func (lf *LazyFrame) processChunk(task chunkTask) (*DataFrame, error) {
-	// Create chunk from source DataFrame
-	chunk := lf.source.Slice(task.start, task.end)
-	if chunk == nil {
-		return New(), nil
-	}
-	defer chunk.Release()
-
-	// Verify chunk has valid structure
-	if chunk.Width() == 0 {
-		return New(), nil
-	}
-
-	// Apply all operations to this chunk
-	current := chunk
-	for _, op := range task.operations {
-		result, err := op.Apply(current)
-		if err != nil {
-			return nil, err
-		}
-		if current != chunk {
-			current.Release() // Release intermediate results
-		}
-		current = result
-		
-		// Verify result has valid structure
-		if result == nil || result.Width() == 0 {
-			return New(), nil
-		}
-	}
-
-	return current, nil
-}
-
 // calculateChunkSize determines optimal chunk size for parallel processing
 func (lf *LazyFrame) calculateChunkSize() int {
 	totalRows := lf.source.Len()
 	workerCount := runtime.NumCPU()
 
 	// Base chunk size: aim for 2-4 chunks per worker
-	baseChunkSize := totalRows / (workerCount * 3)
+	const chunksPerWorker = 3
+	baseChunkSize := totalRows / (workerCount * chunksPerWorker)
 
 	// Minimum chunk size to avoid overhead
 	const minChunkSize = 500
