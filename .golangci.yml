@@ -83,7 +83,7 @@ issues:
       linters:
         - mnd
         - gocritic
-    - path: internal/expr/evaluator\.go
+    - path: expr/evaluator\.go
       linters:
         - gocyclo
         - gocritic
@@ -91,13 +91,13 @@ issues:
         - stylecheck
         - dupl
         - lll
-    - path: internal/dataframe/lazy\.go
+    - path: dataframe/lazy\.go
       linters:
         - gocyclo
         - goconst
         - dupl
         - lll
-    - path: internal/series/series\.go
+    - path: series/series\.go
       linters:
         - gocyclo
     # Allow TODO comments

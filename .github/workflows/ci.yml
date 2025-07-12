@@ -136,7 +136,7 @@ jobs:
         go-version: '1.23'
 
     - name: Run integration tests
-      run: go test -v ./internal/dataframe -run "Integration"
+      run: go test -v ./dataframe -run "Integration"
 
     - name: Test CLI demo
       run: |

@@ -7,9 +7,9 @@ import (
 	"github.com/apache/arrow/go/v17/arrow"
 	"github.com/apache/arrow/go/v17/arrow/array"
 	"github.com/apache/arrow/go/v17/arrow/memory"
-	"github.com/paveg/gorilla/internal/expr"
+	"github.com/paveg/gorilla/expr"
 	"github.com/paveg/gorilla/internal/parallel"
-	"github.com/paveg/gorilla/internal/series"
+	"github.com/paveg/gorilla/series"
 )
 
 // LazyOperation represents a deferred operation on a DataFrame
@@ -398,6 +398,32 @@ func (w *WithColumnOperation) String() string {
 	return fmt.Sprintf("with_column(%s, %s)", w.name, w.expr.String())
 }
 
+// GroupByOperation represents a group by and aggregation operation
+type GroupByOperation struct {
+	groupByCols  []string
+	aggregations []*expr.AggregationExpr
+}
+
+func (g *GroupByOperation) Apply(df *DataFrame) (*DataFrame, error) {
+	if len(g.groupByCols) == 0 || len(g.aggregations) == 0 {
+		return New(), nil
+	}
+
+	// Create GroupBy object
+	gb := df.GroupBy(g.groupByCols...)
+
+	// Perform aggregations
+	return gb.Agg(g.aggregations...), nil
+}
+
+func (g *GroupByOperation) String() string {
+	var aggStrs []string
+	for _, agg := range g.aggregations {
+		aggStrs = append(aggStrs, agg.String())
+	}
+	return fmt.Sprintf("group_by(%v).agg(%v)", g.groupByCols, aggStrs)
+}
+
 // LazyFrame holds a DataFrame and a sequence of deferred operations
 type LazyFrame struct {
 	source     *DataFrame
@@ -442,6 +468,58 @@ func (lf *LazyFrame) WithColumn(name string, expr expr.Expr) *LazyFrame {
 		operations: newOps,
 		pool:       lf.pool,
 	}
+}
+
+// GroupBy adds a group by and aggregation operation to the lazy frame
+func (lf *LazyFrame) GroupBy(columns ...string) *LazyGroupBy {
+	return &LazyGroupBy{
+		lazyFrame:   lf,
+		groupByCols: columns,
+	}
+}
+
+// LazyGroupBy represents a lazy groupby operation that can be followed by aggregations
+type LazyGroupBy struct {
+	lazyFrame   *LazyFrame
+	groupByCols []string
+}
+
+// Agg performs aggregation operations and returns a new LazyFrame
+func (lgb *LazyGroupBy) Agg(aggregations ...*expr.AggregationExpr) *LazyFrame {
+	newOps := append(lgb.lazyFrame.operations, &GroupByOperation{
+		groupByCols:  lgb.groupByCols,
+		aggregations: aggregations,
+	})
+	return &LazyFrame{
+		source:     lgb.lazyFrame.source,
+		operations: newOps,
+		pool:       lgb.lazyFrame.pool,
+	}
+}
+
+// Sum creates a sum aggregation for the specified column
+func (lgb *LazyGroupBy) Sum(column string) *LazyFrame {
+	return lgb.Agg(expr.Sum(expr.Col(column)))
+}
+
+// Count creates a count aggregation for the specified column
+func (lgb *LazyGroupBy) Count(column string) *LazyFrame {
+	return lgb.Agg(expr.Count(expr.Col(column)))
+}
+
+// Mean creates a mean aggregation for the specified column
+func (lgb *LazyGroupBy) Mean(column string) *LazyFrame {
+	return lgb.Agg(expr.Mean(expr.Col(column)))
+}
+
+// Min creates a min aggregation for the specified column
+func (lgb *LazyGroupBy) Min(column string) *LazyFrame {
+	return lgb.Agg(expr.Min(expr.Col(column)))
+}
+
+// Max creates a max aggregation for the specified column
+func (lgb *LazyGroupBy) Max(column string) *LazyFrame {
+	return lgb.Agg(expr.Max(expr.Col(column)))
 }
 
 // Collect executes all deferred operations and returns the resulting DataFrame

@@ -3,12 +3,15 @@ package dataframe
 
 import (
 	"fmt"
+	"runtime"
 	"strings"
 
 	"github.com/apache/arrow/go/v17/arrow"
 	"github.com/apache/arrow/go/v17/arrow/array"
 	"github.com/apache/arrow/go/v17/arrow/memory"
-	"github.com/paveg/gorilla/internal/series"
+	"github.com/paveg/gorilla/expr"
+	"github.com/paveg/gorilla/internal/parallel"
+	"github.com/paveg/gorilla/series"
 )
 
 // DataFrame represents a table of data with typed columns
@@ -477,4 +480,382 @@ func safeDataType(s ISeries) (result arrow.DataType) {
 	}()
 
 	return s.DataType()
+}
+
+// GroupBy represents a grouped DataFrame for aggregation operations
+type GroupBy struct {
+	df          *DataFrame
+	groupByCols []string
+	groups      map[string][]int // group key -> row indices
+}
+
+// GroupBy creates a GroupBy object for the specified columns
+func (df *DataFrame) GroupBy(columns ...string) *GroupBy {
+	// Validate columns exist
+	for _, col := range columns {
+		if !df.HasColumn(col) {
+			return &GroupBy{
+				df:          df,
+				groupByCols: columns,
+				groups:      make(map[string][]int),
+			}
+		}
+	}
+
+	return &GroupBy{
+		df:          df,
+		groupByCols: columns,
+		groups:      df.buildGroups(columns),
+	}
+}
+
+// buildGroups creates a hash map of group keys to row indices
+func (df *DataFrame) buildGroups(columns []string) map[string][]int {
+	groups := make(map[string][]int)
+	rowCount := df.Len()
+
+	if rowCount == 0 {
+		return groups
+	}
+
+	// Get column arrays
+	columnArrays := make([]arrow.Array, len(columns))
+	for i, col := range columns {
+		if series, exists := df.Column(col); exists {
+			columnArrays[i] = series.Array()
+		}
+	}
+	defer func() {
+		for _, arr := range columnArrays {
+			if arr != nil {
+				arr.Release()
+			}
+		}
+	}()
+
+	// Build groups
+	for rowIdx := 0; rowIdx < rowCount; rowIdx++ {
+		groupKey := df.buildGroupKey(columnArrays, rowIdx)
+		groups[groupKey] = append(groups[groupKey], rowIdx)
+	}
+
+	return groups
+}
+
+// buildGroupKey creates a unique string key for a group based on row values
+func (df *DataFrame) buildGroupKey(columnArrays []arrow.Array, rowIdx int) string {
+	var keyParts []string
+
+	for _, arr := range columnArrays {
+		if arr == nil {
+			keyParts = append(keyParts, "null")
+			continue
+		}
+
+		if arr.IsNull(rowIdx) {
+			keyParts = append(keyParts, "null")
+			continue
+		}
+
+		switch typedArr := arr.(type) {
+		case *array.String:
+			keyParts = append(keyParts, typedArr.Value(rowIdx))
+		case *array.Int64:
+			keyParts = append(keyParts, fmt.Sprintf("%d", typedArr.Value(rowIdx)))
+		case *array.Float64:
+			keyParts = append(keyParts, fmt.Sprintf("%f", typedArr.Value(rowIdx)))
+		case *array.Boolean:
+			keyParts = append(keyParts, fmt.Sprintf("%t", typedArr.Value(rowIdx)))
+		default:
+			keyParts = append(keyParts, "unknown")
+		}
+	}
+
+	return strings.Join(keyParts, "|")
+}
+
+// Agg performs aggregation operations on the grouped data
+func (gb *GroupBy) Agg(aggregations ...*expr.AggregationExpr) *DataFrame {
+	if len(aggregations) == 0 || len(gb.groups) == 0 {
+		return New()
+	}
+
+	// Use parallel processing for large number of groups
+	const minGroupsForParallel = 100
+	if len(gb.groups) >= minGroupsForParallel {
+		return gb.aggParallel(aggregations...)
+	}
+
+	return gb.aggSequential(aggregations...)
+}
+
+// aggSequential performs aggregation sequentially
+func (gb *GroupBy) aggSequential(aggregations ...*expr.AggregationExpr) *DataFrame {
+	// Prepare result columns: group columns + aggregation columns
+	var resultSeries []ISeries
+	mem := memory.NewGoAllocator()
+
+	// Add group columns to result
+	for _, groupCol := range gb.groupByCols {
+		if originalSeries, exists := gb.df.Column(groupCol); exists {
+			groupValues := gb.extractGroupColumnValues(originalSeries)
+			resultSeries = append(resultSeries, series.New(groupCol, groupValues, mem))
+		}
+	}
+
+	// Add aggregation columns to result
+	for _, agg := range aggregations {
+		columnExpr, ok := agg.Column().(*expr.ColumnExpr)
+		if !ok {
+			continue // Skip non-column aggregations for now
+		}
+
+		columnName := columnExpr.Name()
+		if originalSeries, exists := gb.df.Column(columnName); exists {
+			aggValues := gb.performAggregation(originalSeries, agg)
+			aggColumnName := gb.getAggregationColumnName(agg, columnName)
+			resultSeries = append(resultSeries, gb.createAggregationSeries(aggColumnName, aggValues, agg.AggType(), mem))
+		}
+	}
+
+	return New(resultSeries...)
+}
+
+// aggParallel performs aggregation using parallel processing
+func (gb *GroupBy) aggParallel(aggregations ...*expr.AggregationExpr) *DataFrame {
+	// Prepare result columns: group columns + aggregation columns
+	var resultSeries []ISeries
+	mem := memory.NewGoAllocator()
+
+	// Add group columns to result (sequential since it's simple)
+	for _, groupCol := range gb.groupByCols {
+		if originalSeries, exists := gb.df.Column(groupCol); exists {
+			groupValues := gb.extractGroupColumnValues(originalSeries)
+			resultSeries = append(resultSeries, series.New(groupCol, groupValues, mem))
+		}
+	}
+
+	// Process aggregations in parallel
+	pool := parallel.NewWorkerPool(runtime.NumCPU())
+	defer pool.Close()
+
+	// Create work items for each aggregation
+	type aggWork struct {
+		agg        *expr.AggregationExpr
+		columnName string
+		series     ISeries
+	}
+
+	var workItems []aggWork
+	for _, agg := range aggregations {
+		columnExpr, ok := agg.Column().(*expr.ColumnExpr)
+		if !ok {
+			continue
+		}
+
+		columnName := columnExpr.Name()
+		if originalSeries, exists := gb.df.Column(columnName); exists {
+			workItems = append(workItems, aggWork{
+				agg:        agg,
+				columnName: columnName,
+				series:     originalSeries,
+			})
+		}
+	}
+
+	// Process aggregations in parallel
+	aggResults := parallel.Process(pool, workItems, func(work aggWork) ISeries {
+		aggValues := gb.performAggregation(work.series, work.agg)
+		aggColumnName := gb.getAggregationColumnName(work.agg, work.columnName)
+		return gb.createAggregationSeries(aggColumnName, aggValues, work.agg.AggType(), memory.NewGoAllocator())
+	})
+
+	// Add aggregation results to result series
+	resultSeries = append(resultSeries, aggResults...)
+
+	return New(resultSeries...)
+}
+
+// extractGroupColumnValues extracts unique values for group columns
+func (gb *GroupBy) extractGroupColumnValues(series ISeries) []string {
+	var values []string
+	originalArray := series.Array()
+	defer originalArray.Release()
+
+	// Extract first value from each group (all values in a group are the same)
+	for _, indices := range gb.groups {
+		if len(indices) > 0 {
+			rowIdx := indices[0]
+			if rowIdx < originalArray.Len() && !originalArray.IsNull(rowIdx) {
+				switch typedArr := originalArray.(type) {
+				case *array.String:
+					values = append(values, typedArr.Value(rowIdx))
+				case *array.Int64:
+					values = append(values, fmt.Sprintf("%d", typedArr.Value(rowIdx)))
+				case *array.Float64:
+					values = append(values, fmt.Sprintf("%f", typedArr.Value(rowIdx)))
+				case *array.Boolean:
+					values = append(values, fmt.Sprintf("%t", typedArr.Value(rowIdx)))
+				default:
+					values = append(values, "")
+				}
+			} else {
+				values = append(values, "")
+			}
+		}
+	}
+
+	return values
+}
+
+// performAggregation performs the specified aggregation on a series
+func (gb *GroupBy) performAggregation(series ISeries, agg *expr.AggregationExpr) []float64 {
+	var results []float64
+	originalArray := series.Array()
+	defer originalArray.Release()
+
+	for _, indices := range gb.groups {
+		result := gb.aggregateGroup(originalArray, indices, agg.AggType())
+		results = append(results, result)
+	}
+
+	return results
+}
+
+// aggregateGroup performs aggregation on a single group
+func (gb *GroupBy) aggregateGroup(arr arrow.Array, indices []int, aggType expr.AggregationType) float64 {
+	if len(indices) == 0 {
+		return 0.0
+	}
+
+	switch aggType {
+	case expr.AggCount:
+		return float64(len(indices))
+
+	case expr.AggSum:
+		return gb.sumGroup(arr, indices)
+
+	case expr.AggMean:
+		sum := gb.sumGroup(arr, indices)
+		count := float64(len(indices))
+		if count > 0 {
+			return sum / count
+		}
+		return 0.0
+
+	case expr.AggMin:
+		return gb.minGroup(arr, indices)
+
+	case expr.AggMax:
+		return gb.maxGroup(arr, indices)
+
+	default:
+		return 0.0
+	}
+}
+
+// sumGroup calculates sum for a group
+func (gb *GroupBy) sumGroup(arr arrow.Array, indices []int) float64 {
+	var sum float64
+	for _, idx := range indices {
+		if idx < arr.Len() && !arr.IsNull(idx) {
+			switch typedArr := arr.(type) {
+			case *array.Int64:
+				sum += float64(typedArr.Value(idx))
+			case *array.Float64:
+				sum += typedArr.Value(idx)
+			}
+		}
+	}
+	return sum
+}
+
+// extractNumericValue extracts a numeric value from an array at the given index
+func (gb *GroupBy) extractNumericValue(arr arrow.Array, idx int) (float64, bool) {
+	if idx >= arr.Len() || arr.IsNull(idx) {
+		return 0, false
+	}
+
+	switch typedArr := arr.(type) {
+	case *array.Int64:
+		return float64(typedArr.Value(idx)), true
+	case *array.Float64:
+		return typedArr.Value(idx), true
+	default:
+		return 0, false
+	}
+}
+
+// minGroup calculates minimum for a group
+func (gb *GroupBy) minGroup(arr arrow.Array, indices []int) float64 {
+	var minimum float64
+	first := true
+
+	for _, idx := range indices {
+		if val, ok := gb.extractNumericValue(arr, idx); ok {
+			if first || val < minimum {
+				minimum = val
+				first = false
+			}
+		}
+	}
+
+	return minimum
+}
+
+// maxGroup calculates maximum for a group
+func (gb *GroupBy) maxGroup(arr arrow.Array, indices []int) float64 {
+	var maximum float64
+	first := true
+
+	for _, idx := range indices {
+		if val, ok := gb.extractNumericValue(arr, idx); ok {
+			if first || val > maximum {
+				maximum = val
+				first = false
+			}
+		}
+	}
+
+	return maximum
+}
+
+// getAggregationColumnName generates a name for the aggregation column
+func (gb *GroupBy) getAggregationColumnName(agg *expr.AggregationExpr, columnName string) string {
+	if agg.Alias() != "" {
+		return agg.Alias()
+	}
+
+	var aggName string
+	switch agg.AggType() {
+	case expr.AggSum:
+		aggName = "sum"
+	case expr.AggCount:
+		aggName = "count"
+	case expr.AggMean:
+		aggName = "mean"
+	case expr.AggMin:
+		aggName = "min"
+	case expr.AggMax:
+		aggName = "max"
+	}
+
+	return fmt.Sprintf("%s_%s", aggName, columnName)
+}
+
+// createAggregationSeries creates a series for aggregation results
+func (gb *GroupBy) createAggregationSeries(
+	name string, values []float64, aggType expr.AggregationType, mem memory.Allocator,
+) ISeries {
+	// For count operations, return int64 series
+	if aggType == expr.AggCount {
+		intValues := make([]int64, len(values))
+		for i, v := range values {
+			intValues[i] = int64(v)
+		}
+		return series.New(name, intValues, mem)
+	}
+
+	// For other aggregations, return float64 series
+	return series.New(name, values, mem)
 }
