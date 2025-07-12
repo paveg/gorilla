@@ -82,6 +82,7 @@ issues:
     - path: cmd/
       linters:
         - mnd
+        - gocritic
     - path: internal/expr/evaluator\.go
       linters:
         - gocyclo

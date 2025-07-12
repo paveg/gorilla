@@ -1,0 +1,16 @@
+pre-commit:
+  commands:
+    markdownlint:
+      glob: "*.md"
+      run: markdownlint {staged_files}
+    gofmt:
+      glob: "*.go"
+      run: gofmt -w {staged_files}
+      # lefthook automatically stages changes made by hooks if they are configured to do so.
+      # No need for `&& git add {staged_files}` here.
+    govet:
+      glob: "*.go"
+      run: go vet ./...
+    golangci-lint:
+      glob: "*.go"
+      run: golangci-lint run --fix

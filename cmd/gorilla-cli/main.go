@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/apache/arrow/go/v17/arrow/memory"
 	"github.com/paveg/gorilla/internal/dataframe"
@@ -12,30 +13,50 @@ import (
 	"github.com/paveg/gorilla/internal/series"
 )
 
+const version = "0.1.0"
+
 func main() {
-	var (
-		demo      = flag.Bool("demo", false, "Run basic demo")
-		benchmark = flag.Bool("benchmark", false, "Run benchmark tests")
-	)
+	// Define flags
+	versionFlag := flag.Bool("v", false, "Print version and exit")
+	flag.BoolVar(versionFlag, "version", false, "Print version and exit") // alias
+	demoFlag := flag.Bool("demo", false, "Run basic demo")
+	benchmarkFlag := flag.Bool("benchmark", false, "Run benchmark tests")
+
+	// Customize usage message for -h, --help
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Gorilla DataFrame Library CLI (version %s)\n\n", version)
+		fmt.Fprintf(os.Stderr, "Usage: gorilla-cli [options]\n\n")
+		fmt.Fprintf(os.Stderr, "Options:\n")
+		fmt.Fprintf(os.Stderr, "  --demo\n\t\tRun basic demo\n")
+		fmt.Fprintf(os.Stderr, "  --benchmark\n\t\tRun benchmark tests\n")
+		fmt.Fprintf(os.Stderr, "  -v, --version\n\t\tPrint version information and exit\n")
+		fmt.Fprintf(os.Stderr, "  -h, --help\n\t\tShow this help message and exit\n")
+	}
+
 	flag.Parse()
 
+	// Handle version flag
+	if *versionFlag {
+		fmt.Printf("gorilla-cli version %s\n", version)
+		return
+	}
+
+	// Handle other flags
 	switch {
-	case *demo:
+	case *demoFlag:
 		runDemo()
-	case *benchmark:
+	case *benchmarkFlag:
 		runBenchmark()
 	default:
-		fmt.Println("Gorilla DataFrame Library CLI")
-		fmt.Println("Usage:")
-		fmt.Println("  -demo       Run basic demonstration")
-		fmt.Println("  -benchmark  Run benchmark tests")
+		// If no flags are provided, print usage and exit.
+		flag.Usage()
 		os.Exit(1)
 	}
 }
 
 func runDemo() {
 	fmt.Println("🦍 Gorilla DataFrame Library Demo")
-	fmt.Println("================================")
+	fmt.Println("=================================")
 
 	mem := memory.NewGoAllocator()
 
@@ -107,14 +128,63 @@ func runBenchmark() {
 	fmt.Println("🚀 Gorilla DataFrame Library Benchmark")
 	fmt.Println("=====================================")
 
-	// TODO: Implement comprehensive benchmark suite
-	// Planned benchmarks:
-	fmt.Println("TODO: Implement benchmark suite - would measure:")
-	fmt.Println("- Series creation performance")
-	fmt.Println("- DataFrame operations throughput")
-	fmt.Println("- Lazy evaluation optimization")
-	fmt.Println("- Parallel processing efficiency")
-	fmt.Println("- Memory usage patterns")
+	const numRows = 1_000_000 // 1 million rows for benchmarking
+	mem := memory.NewGoAllocator()
 
-	fmt.Println("\nBenchmark suite would run here...")
+	// --- Benchmark: Series Creation ---
+	fmt.Printf("\nBenchmarking Series creation for %d rows...\n", numRows)
+	start := time.Now()
+	names := make([]string, numRows)
+	ages := make([]int64, numRows)
+	salaries := make([]float64, numRows)
+	departments := make([]string, numRows)
+	depts := []string{"Engineering", "Sales", "Marketing", "HR", "Finance"}
+
+	for i := 0; i < numRows; i++ {
+		names[i] = fmt.Sprintf("Employee_%d", i+1)
+		ages[i] = int64(25 + (i % 40))
+		salaries[i] = float64(40000 + (i%60)*1000)
+		departments[i] = depts[i%len(depts)]
+	}
+
+	nameSeries := series.New("name", names, mem)
+	ageSeries := series.New("age", ages, mem)
+	salarySeries := series.New("salary", salaries, mem)
+	deptSeries := series.New("department", departments, mem)
+	seriesCreationTime := time.Since(start)
+	fmt.Printf("Series Creation Time: %s\n", seriesCreationTime)
+
+	// --- Benchmark: DataFrame Creation ---
+	fmt.Printf("\nBenchmarking DataFrame creation for %d rows...\n", numRows)
+	start = time.Now()
+	df := dataframe.New(nameSeries, ageSeries, salarySeries, deptSeries)
+	dfCreationTime := time.Since(start)
+	fmt.Printf("DataFrame Creation Time: %s\n", dfCreationTime)
+
+	// Ensure Series and DataFrame are released after use
+	defer nameSeries.Release()
+	defer ageSeries.Release()
+	defer salarySeries.Release()
+	defer deptSeries.Release()
+	defer df.Release()
+
+	// --- Benchmark: Lazy Evaluation (Filter, WithColumn, Select, Collect) ---
+	fmt.Printf("\nBenchmarking Lazy Evaluation (Filter, WithColumn, Select, Collect) for %d rows...\n", numRows)
+	start = time.Now()
+	lazyDf := df.Lazy().
+		Filter(expr.Col("age").Gt(expr.Lit(int64(35)))).
+		WithColumn("bonus", expr.Col("salary").Mul(expr.Lit(0.1))).
+		Select("name", "age", "salary", "bonus", "department")
+
+	result, err := lazyDf.Collect()
+	if err != nil {
+		log.Fatalf("Error during lazy evaluation benchmark: %v", err)
+	}
+	defer result.Release()
+	defer lazyDf.Release()
+
+	lazyEvalTime := time.Since(start)
+	fmt.Printf("Lazy Evaluation Time: %s\n", lazyEvalTime)
+
+	fmt.Println("\nBenchmark suite completed successfully! 🎉")
 }
