@@ -5,13 +5,17 @@ This document provides a comprehensive overview of all remaining tasks to comple
 ## 🚨 Critical Priority (Performance Blockers)
 
 ### 1. Parallel LazyFrame.Collect() Implementation
+
 **Location**: `internal/dataframe/lazy.go:450`
+
 ```go
 // TODO: Implement parallel execution pipeline for LazyFrame.Collect()
 ```
+
 **Description**: The most critical performance optimization needed. Currently operations are applied sequentially.
 
 **Implementation Plan**:
+
 1. Split DataFrame into row-based chunks  
 2. Create tasks that apply full operation pipeline to each chunk
 3. Use `parallel.Process` to execute tasks concurrently
@@ -24,16 +28,19 @@ This document provides a comprehensive overview of all remaining tasks to comple
 ## 🔥 High Priority (Core Features)
 
 ### 2. Query Optimization Engine
+
 - **Predicate Pushdown**: Move filter operations early in pipeline
 - **Projection Pushdown**: Only process columns needed by final result  
 - **Operation Fusion**: Combine multiple operations into single pass
 
 ### 3. Essential Data Operations
+
 - **GroupBy** with parallel aggregation
 - **Join** operations (inner, left, right, full outer)
 - **Sorting** with parallel merge sort
 
 ### 4. Type System Expansion
+
 - Mixed arithmetic type coercion (int32/int64, float32/float64)
 - Date/time/timestamp types with timezone support
 - Decimal/money types for financial calculations
@@ -43,17 +50,20 @@ This document provides a comprehensive overview of all remaining tasks to comple
 ## 📊 Medium Priority (Advanced Features)
 
 ### 5. I/O Operations
+
 - CSV reader/writer with parallel parsing
 - Parquet file format support  
 - Database connectivity (SQL execution)
 - Streaming data ingestion
 
 ### 6. Memory Management
+
 - Streaming processing for datasets larger than memory
 - Memory usage monitoring and automatic spilling
 - Memory pool management for Arrow arrays
 
 ### 7. Advanced Analytics
+
 - Statistical functions (correlation, regression)
 - Time series operations (resampling, rolling windows)
 - Window functions (row_number, rank, lag/lead)
@@ -63,12 +73,14 @@ This document provides a comprehensive overview of all remaining tasks to comple
 ## 🛠️ Low Priority (Polish & UX)
 
 ### 8. Developer Experience
+
 - DataFrame visualization for debugging
 - Data profiling and quality checks
 - Schema validation and type inference
 - SQL-like query interface
 
 ### 9. Performance Optimizations
+
 - Dynamic worker pool scaling
 - CPU affinity and NUMA-aware allocation
 - SIMD vectorized operations
@@ -89,7 +101,7 @@ For comprehensive task lists in each component:
 
 ## 🎯 Next Recommended Steps
 
-1. **Start with Critical**: Implement parallel `LazyFrame.Collect()` 
+1. **Start with Critical**: Implement parallel `LazyFrame.Collect()`
 2. **Add GroupBy**: Essential for data analysis workflows
 3. **Implement Joins**: Required for multi-table operations
 4. **Optimize Memory**: Add chunking and streaming support

@@ -8,7 +8,7 @@ import (
 	"github.com/apache/arrow/go/v17/arrow"
 	"github.com/apache/arrow/go/v17/arrow/array"
 	"github.com/apache/arrow/go/v17/arrow/memory"
-	"github.com/paveg/gorilla/internal/series"
+	"github.com/paveg/gorilla/series"
 )
 
 // DataFrame represents a table of data with typed columns
