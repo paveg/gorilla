@@ -458,7 +458,7 @@ func (lf *LazyFrame) Collect() (*DataFrame, error) {
 	// Use parallel execution for larger datasets
 	const minRowsForParallel = 1000
 	if lf.source.Len() >= minRowsForParallel && lf.pool != nil {
-		return lf.collectParallelSafe()
+		return lf.collectParallel()
 	}
 
 	// Fall back to sequential execution for small datasets
@@ -478,81 +478,6 @@ func (lf *LazyFrame) collectSequential() (*DataFrame, error) {
 	}
 
 	return current, nil
-}
-
-// collectParallelSafe implements a safer parallel execution pipeline
-// that pre-slices data to avoid concurrent access to source DataFrame
-func (lf *LazyFrame) collectParallelSafe() (*DataFrame, error) {
-	// Calculate optimal chunk size based on data size and worker count
-	chunkSize := lf.calculateChunkSize()
-	totalRows := lf.source.Len()
-
-	// Pre-slice all chunks to avoid concurrent access to source DataFrame
-	var chunks []*DataFrame
-	for start := 0; start < totalRows; start += chunkSize {
-		end := start + chunkSize
-		if end > totalRows {
-			end = totalRows
-		}
-		chunk := lf.source.Slice(start, end)
-		chunks = append(chunks, chunk)
-	}
-
-	// Process chunks in parallel - each chunk is now independent
-	processedChunks := parallel.Process(lf.pool, chunks, func(chunk *DataFrame) *DataFrame {
-		if chunk == nil || chunk.Width() == 0 {
-			return New()
-		}
-
-		result := chunk
-		// Apply all operations to this chunk
-		for _, op := range lf.operations {
-			nextResult, err := op.Apply(result)
-			if err != nil {
-				// Return empty DataFrame on error
-				return New()
-			}
-			if result != chunk {
-				result.Release() // Release intermediate results
-			}
-			result = nextResult
-
-			// Verify result has valid structure
-			if result == nil || result.Width() == 0 {
-				return New()
-			}
-		}
-		return result
-	})
-
-	// Release the original chunks since we have processed results
-	for _, chunk := range chunks {
-		if chunk != nil {
-			chunk.Release()
-		}
-	}
-
-	// Filter out empty chunks before concatenation
-	var nonEmptyChunks []*DataFrame
-	for _, chunk := range processedChunks {
-		if chunk != nil && chunk.Width() > 0 {
-			nonEmptyChunks = append(nonEmptyChunks, chunk)
-		}
-	}
-
-	if len(nonEmptyChunks) == 0 {
-		return New(), nil
-	}
-
-	if len(nonEmptyChunks) == 1 {
-		return nonEmptyChunks[0], nil
-	}
-
-	// Concatenate all non-empty chunks
-	result := nonEmptyChunks[0]
-	others := nonEmptyChunks[1:]
-
-	return result.Concat(others...), nil
 }
 
 // calculateChunkSize determines optimal chunk size for parallel processing
@@ -577,6 +502,122 @@ func (lf *LazyFrame) calculateChunkSize() int {
 	}
 
 	return baseChunkSize
+}
+
+// createIndependentChunk creates a chunk with completely independent data copies
+// to ensure thread-safety during parallel processing
+func (lf *LazyFrame) createIndependentChunk(start, end int) *DataFrame {
+	if start < 0 || end <= start || start >= lf.source.Len() {
+		return New() // Return empty DataFrame for invalid range
+	}
+
+	// Clamp end to actual length
+	totalRows := lf.source.Len()
+	if end > totalRows {
+		end = totalRows
+	}
+
+	// Create independent series for each column with deep data copying
+	var independentSeries []ISeries
+	mem := memory.NewGoAllocator() // Dedicated allocator for this chunk
+
+	for _, colName := range lf.source.Columns() {
+		if originalSeries, exists := lf.source.Column(colName); exists {
+			// Create independent copy of series data for this chunk
+			independentSeries = append(independentSeries, lf.createIndependentSeries(originalSeries, start, end, mem))
+		}
+	}
+
+	return New(independentSeries...)
+}
+
+// createIndependentSeries creates a completely independent series copy with no shared memory references
+func (lf *LazyFrame) createIndependentSeries(s ISeries, start, end int, mem memory.Allocator) ISeries {
+	// Get array once and ensure we release it after copying all data
+	originalArray := s.Array()
+	if originalArray == nil {
+		return series.New(s.Name(), []string{}, mem)
+	}
+	defer originalArray.Release()
+
+	sliceLength := end - start
+	if sliceLength <= 0 {
+		return series.New(s.Name(), []string{}, mem)
+	}
+
+	// Use shared helper to avoid code duplication
+	return createSlicedSeriesFromArray(s.Name(), originalArray, start, sliceLength, mem)
+}
+
+// collectParallel implements parallel execution with proper memory management
+// Key insight: Arrow arrays are thread-safe for reads, but we need independent chunks
+// and must avoid aggressive Release() calls that invalidate shared references
+func (lf *LazyFrame) collectParallel() (*DataFrame, error) {
+	// Calculate optimal chunk size based on data size and worker count
+	chunkSize := lf.calculateChunkSize()
+	totalRows := lf.source.Len()
+
+	// Create independent chunks sequentially to avoid concurrent memory access
+	var chunks []*DataFrame
+	for start := 0; start < totalRows; start += chunkSize {
+		end := start + chunkSize
+		if end > totalRows {
+			end = totalRows
+		}
+
+		// Create chunk with independent data copies
+		chunk := lf.createIndependentChunk(start, end)
+		chunks = append(chunks, chunk)
+	}
+
+	// Process chunks in parallel - each chunk now has independent memory
+	processedChunks := parallel.Process(lf.pool, chunks, func(chunk *DataFrame) *DataFrame {
+		if chunk == nil || chunk.Width() == 0 {
+			return New()
+		}
+
+		result := chunk
+		// Apply all operations to this chunk
+		for _, op := range lf.operations {
+			nextResult, err := op.Apply(result)
+			if err != nil {
+				// Return empty DataFrame on error
+				return New()
+			}
+
+			// Don't aggressively release - this was causing the memory corruption
+			// Let Go's garbage collector handle cleanup
+			result = nextResult
+
+			// Verify result has valid structure
+			if result == nil || result.Width() == 0 {
+				return New()
+			}
+		}
+		return result
+	})
+
+	// Filter out empty chunks before concatenation
+	var nonEmptyChunks []*DataFrame
+	for _, chunk := range processedChunks {
+		if chunk != nil && chunk.Width() > 0 && chunk.Len() > 0 {
+			nonEmptyChunks = append(nonEmptyChunks, chunk)
+		}
+	}
+
+	if len(nonEmptyChunks) == 0 {
+		return New(), nil
+	}
+
+	if len(nonEmptyChunks) == 1 {
+		return nonEmptyChunks[0], nil
+	}
+
+	// Concatenate all non-empty chunks
+	result := nonEmptyChunks[0]
+	others := nonEmptyChunks[1:]
+
+	return result.Concat(others...), nil
 }
 
 // String returns a string representation of the lazy frame and its operations

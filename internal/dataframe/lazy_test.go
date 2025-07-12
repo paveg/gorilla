@@ -247,9 +247,8 @@ func TestLazyFrameComplexChaining(t *testing.T) {
 	assert.Greater(t, len(lines), 7) // At least LazyFrame: + source lines + operations: + 5 operations
 }
 
-// TODO: Fix parallel execution - Arrow memory management issue in concurrent context
-func TestLazyFrameParallelExecution_DISABLED(t *testing.T) {
-	t.Skip("Parallel execution disabled due to Arrow memory management issues in concurrent context")
+// Test parallel execution for large datasets
+func TestLazyFrameParallelExecution(t *testing.T) {
 	// Create a large dataset to trigger parallel execution
 	mem := memory.NewGoAllocator()
 
