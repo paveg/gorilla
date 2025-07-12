@@ -310,21 +310,27 @@ func (df *DataFrame) concatSeries(name string, seriesList []ISeries) ISeries {
 }
 
 // concatStringSeries concatenates string series
-func (df *DataFrame) concatStringSeries(name string, seriesList []ISeries, totalLength int, mem memory.Allocator) ISeries {
+func (df *DataFrame) concatStringSeries(
+	name string, seriesList []ISeries, totalLength int, mem memory.Allocator,
+) ISeries {
 	return concatTypedSeries(name, seriesList, totalLength, mem, "", func(arr arrow.Array, i int) string {
 		return arr.(*array.String).Value(i)
 	})
 }
 
 // concatInt64Series concatenates int64 series
-func (df *DataFrame) concatInt64Series(name string, seriesList []ISeries, totalLength int, mem memory.Allocator) ISeries {
+func (df *DataFrame) concatInt64Series(
+	name string, seriesList []ISeries, totalLength int, mem memory.Allocator,
+) ISeries {
 	return concatTypedSeries(name, seriesList, totalLength, mem, int64(0), func(arr arrow.Array, i int) int64 {
 		return arr.(*array.Int64).Value(i)
 	})
 }
 
 // concatFloat64Series concatenates float64 series
-func (df *DataFrame) concatFloat64Series(name string, seriesList []ISeries, totalLength int, mem memory.Allocator) ISeries {
+func (df *DataFrame) concatFloat64Series(
+	name string, seriesList []ISeries, totalLength int, mem memory.Allocator,
+) ISeries {
 	return concatTypedSeries(name, seriesList, totalLength, mem, 0.0, func(arr arrow.Array, i int) float64 {
 		return arr.(*array.Float64).Value(i)
 	})
