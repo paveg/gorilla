@@ -1,0 +1,109 @@
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+linters-settings:
+  govet:
+    shadow: true
+  gocyclo:
+    min-complexity: 15
+  dupl:
+    threshold: 100
+  goconst:
+    min-len: 3
+    min-occurrences: 3
+  misspell:
+    locale: US
+  lll:
+    line-length: 120
+  goimports:
+    local-prefixes: github.com/paveg/gorilla
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - experimental
+      - opinionated
+      - performance
+      - style
+    disabled-checks:
+      - whyNoLint
+      - unnamedResult
+      - appendAssign
+  depguard:
+    rules:
+      main:
+        deny:
+          - pkg: "github.com/sirupsen/logrus"
+            desc: "use standard log package"
+
+linters:
+  enable:
+    - bodyclose
+    - copyloopvar
+    - depguard
+    - dogsled
+    - dupl
+    - errcheck
+    - exhaustive
+    - gochecknoinits
+    - goconst
+    - gocritic
+    - gocyclo
+    - gofmt
+    - mnd
+    - goprintffuncname
+    - gosec
+    - gosimple
+    - govet
+    - ineffassign
+    - lll
+    - misspell
+    - nakedret
+    - nolintlint
+    - rowserrcheck
+    - staticcheck
+    - stylecheck
+    - typecheck
+    - unconvert
+    - unparam
+    - unused
+    - whitespace
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - mnd
+        - goconst
+        - dupl
+        - depguard
+        - exhaustive
+        - unparam
+    - path: cmd/
+      linters:
+        - mnd
+    - path: internal/expr/evaluator\.go
+      linters:
+        - gocyclo
+        - gocritic
+        - exhaustive
+        - stylecheck
+        - dupl
+        - lll
+    - path: internal/dataframe/lazy\.go
+      linters:
+        - gocyclo
+        - goconst
+        - dupl
+        - lll
+    - path: internal/series/series\.go
+      linters:
+        - gocyclo
+    # Allow TODO comments
+    - linters:
+        - godox
+      text: "TODO"
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
