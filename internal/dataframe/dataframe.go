@@ -163,54 +163,94 @@ func (df *DataFrame) Slice(start, end int) *DataFrame {
 }
 
 // sliceSeries creates a new series containing elements from start to end
+// This method is thread-safe and creates completely independent data copies
 func (df *DataFrame) sliceSeries(s ISeries, start, end int) ISeries {
 	originalArray := s.Array()
+	if originalArray == nil {
+		// Return empty series if source array is nil
+		mem := memory.NewGoAllocator()
+		return series.New(s.Name(), []string{}, mem)
+	}
 	defer originalArray.Release()
 
 	sliceLength := end - start
-	mem := memory.NewGoAllocator()
-
-	switch typedArr := originalArray.(type) {
-	case *array.String:
-		values := make([]string, sliceLength)
-		for i := 0; i < sliceLength; i++ {
-			if !typedArr.IsNull(start + i) {
-				values[i] = typedArr.Value(start + i)
-			}
-		}
-		return series.New(s.Name(), values, mem)
-
-	case *array.Int64:
-		values := make([]int64, sliceLength)
-		for i := 0; i < sliceLength; i++ {
-			if !typedArr.IsNull(start + i) {
-				values[i] = typedArr.Value(start + i)
-			}
-		}
-		return series.New(s.Name(), values, mem)
-
-	case *array.Float64:
-		values := make([]float64, sliceLength)
-		for i := 0; i < sliceLength; i++ {
-			if !typedArr.IsNull(start + i) {
-				values[i] = typedArr.Value(start + i)
-			}
-		}
-		return series.New(s.Name(), values, mem)
-
-	case *array.Boolean:
-		values := make([]bool, sliceLength)
-		for i := 0; i < sliceLength; i++ {
-			if !typedArr.IsNull(start + i) {
-				values[i] = typedArr.Value(start + i)
-			}
-		}
-		return series.New(s.Name(), values, mem)
-
-	default:
-		// For unsupported types, return empty series
+	if sliceLength <= 0 {
+		// Return empty series for invalid range
+		mem := memory.NewGoAllocator()
 		return series.New(s.Name(), []string{}, mem)
 	}
+
+	// Use dedicated memory allocator to avoid sharing across goroutines
+	mem := memory.NewGoAllocator()
+
+	return createSlicedSeriesFromArray(s.Name(), originalArray, start, sliceLength, mem)
+}
+
+// createSlicedSeriesFromArray creates a series from an array slice with independent memory
+func createSlicedSeriesFromArray(
+	name string, originalArray arrow.Array, start, length int, mem memory.Allocator,
+) ISeries {
+	switch typedArr := originalArray.(type) {
+	case *array.String:
+		return createSlicedStringSeries(name, typedArr, start, length, mem)
+	case *array.Int64:
+		return createSlicedInt64Series(name, typedArr, start, length, mem)
+	case *array.Float64:
+		return createSlicedFloat64Series(name, typedArr, start, length, mem)
+	case *array.Boolean:
+		return createSlicedBoolSeries(name, typedArr, start, length, mem)
+	default:
+		// For unsupported types, return empty series
+		return series.New(name, []string{}, mem)
+	}
+}
+
+// createSlicedStringSeries creates a string series slice
+func createSlicedStringSeries(name string, typedArr *array.String, start, length int, mem memory.Allocator) ISeries {
+	values := make([]string, length)
+	for i := 0; i < length; i++ {
+		srcIndex := start + i
+		if srcIndex < typedArr.Len() && !typedArr.IsNull(srcIndex) {
+			values[i] = typedArr.Value(srcIndex)
+		}
+	}
+	return series.New(name, values, mem)
+}
+
+// createSlicedInt64Series creates an int64 series slice
+func createSlicedInt64Series(name string, typedArr *array.Int64, start, length int, mem memory.Allocator) ISeries {
+	values := make([]int64, length)
+	for i := 0; i < length; i++ {
+		srcIndex := start + i
+		if srcIndex < typedArr.Len() && !typedArr.IsNull(srcIndex) {
+			values[i] = typedArr.Value(srcIndex)
+		}
+	}
+	return series.New(name, values, mem)
+}
+
+// createSlicedFloat64Series creates a float64 series slice
+func createSlicedFloat64Series(name string, typedArr *array.Float64, start, length int, mem memory.Allocator) ISeries {
+	values := make([]float64, length)
+	for i := 0; i < length; i++ {
+		srcIndex := start + i
+		if srcIndex < typedArr.Len() && !typedArr.IsNull(srcIndex) {
+			values[i] = typedArr.Value(srcIndex)
+		}
+	}
+	return series.New(name, values, mem)
+}
+
+// createSlicedBoolSeries creates a boolean series slice
+func createSlicedBoolSeries(name string, typedArr *array.Boolean, start, length int, mem memory.Allocator) ISeries {
+	values := make([]bool, length)
+	for i := 0; i < length; i++ {
+		srcIndex := start + i
+		if srcIndex < typedArr.Len() && !typedArr.IsNull(srcIndex) {
+			values[i] = typedArr.Value(srcIndex)
+		}
+	}
+	return series.New(name, values, mem)
 }
 
 // Concat concatenates multiple DataFrames vertically (row-wise)
