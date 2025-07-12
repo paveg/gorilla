@@ -1,3 +1,4 @@
+// Package parallel provides concurrent processing utilities
 package parallel
 
 import (
@@ -18,9 +19,9 @@ func NewWorkerPool(numWorkers int) *WorkerPool {
 	if numWorkers <= 0 {
 		numWorkers = runtime.NumCPU()
 	}
-	
+
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	return &WorkerPool{
 		numWorkers: numWorkers,
 		ctx:        ctx,
@@ -37,13 +38,13 @@ func Process[T, R any](
 	if len(items) == 0 {
 		return nil
 	}
-	
+
 	// Channel for input items
 	itemCh := make(chan T, len(items))
-	
+
 	// Channel for results
 	resultCh := make(chan indexedResult[R], len(items))
-	
+
 	// Start workers
 	var wg sync.WaitGroup
 	for i := 0; i < wp.numWorkers; i++ {
@@ -61,7 +62,7 @@ func Process[T, R any](
 			}
 		}()
 	}
-	
+
 	// Send items to workers
 	go func() {
 		defer close(itemCh)
@@ -73,19 +74,19 @@ func Process[T, R any](
 			}
 		}
 	}()
-	
+
 	// Close result channel when all workers are done
 	go func() {
 		wg.Wait()
 		close(resultCh)
 	}()
-	
+
 	// Collect results
 	results := make([]R, 0, len(items))
 	for result := range resultCh {
 		results = append(results, result.result)
 	}
-	
+
 	return results
 }
 
@@ -98,13 +99,13 @@ func ProcessIndexed[T, R any](
 	if len(items) == 0 {
 		return nil
 	}
-	
+
 	// Channel for input items with index
 	itemCh := make(chan indexedItem[T], len(items))
-	
+
 	// Channel for results with index
 	resultCh := make(chan indexedResult[R], len(items))
-	
+
 	// Start workers
 	var wg sync.WaitGroup
 	for i := 0; i < wp.numWorkers; i++ {
@@ -125,7 +126,7 @@ func ProcessIndexed[T, R any](
 			}
 		}()
 	}
-	
+
 	// Send items to workers
 	go func() {
 		defer close(itemCh)
@@ -137,19 +138,19 @@ func ProcessIndexed[T, R any](
 			}
 		}
 	}()
-	
+
 	// Close result channel when all workers are done
 	go func() {
 		wg.Wait()
 		close(resultCh)
 	}()
-	
+
 	// Collect results and maintain order
 	results := make([]R, len(items))
 	for result := range resultCh {
 		results[result.index] = result.result
 	}
-	
+
 	return results
 }
 

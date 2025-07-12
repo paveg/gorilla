@@ -1,3 +1,4 @@
+// Package expr provides expression evaluation for DataFrame operations
 package expr
 
 import (

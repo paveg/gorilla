@@ -64,13 +64,13 @@ func (e *Evaluator) evaluateColumnBoolean(expr *ColumnExpr, columns map[string]a
 	if !exists {
 		return nil, fmt.Errorf("column not found: %s", expr.name)
 	}
-	
+
 	// Check if it's already a boolean array
 	if _, ok := arr.(*array.Boolean); ok {
 		arr.Retain()
 		return arr, nil
 	}
-	
+
 	return nil, fmt.Errorf("column %s is not a boolean type", expr.name)
 }
 
@@ -80,7 +80,7 @@ func (e *Evaluator) evaluateLiteral(expr *LiteralExpr, columns map[string]arrow.
 	if length == 0 {
 		return nil, fmt.Errorf("cannot determine array length for literal")
 	}
-	
+
 	switch val := expr.value.(type) {
 	case string:
 		builder := array.NewStringBuilder(e.mem)
@@ -120,12 +120,12 @@ func (e *Evaluator) evaluateLiteralBoolean(expr *LiteralExpr, columns map[string
 	if length == 0 {
 		return nil, fmt.Errorf("cannot determine array length for literal")
 	}
-	
+
 	val, ok := expr.value.(bool)
 	if !ok {
 		return nil, fmt.Errorf("literal is not a boolean: %T", expr.value)
 	}
-	
+
 	builder := array.NewBooleanBuilder(e.mem)
 	defer builder.Release()
 	for i := 0; i < length; i++ {
@@ -141,13 +141,13 @@ func (e *Evaluator) evaluateBinaryBoolean(expr *BinaryExpr, columns map[string]a
 		return nil, fmt.Errorf("evaluating left operand: %w", err)
 	}
 	defer left.Release()
-	
+
 	right, err := e.Evaluate(expr.right, columns)
 	if err != nil {
 		return nil, fmt.Errorf("evaluating right operand: %w", err)
 	}
 	defer right.Release()
-	
+
 	// Apply the binary operation
 	switch expr.op {
 	case OpEq, OpNe, OpLt, OpLe, OpGt, OpGe:
@@ -166,13 +166,13 @@ func (e *Evaluator) evaluateBinary(expr *BinaryExpr, columns map[string]arrow.Ar
 		return nil, fmt.Errorf("evaluating left operand: %w", err)
 	}
 	defer left.Release()
-	
+
 	right, err := e.Evaluate(expr.right, columns)
 	if err != nil {
 		return nil, fmt.Errorf("evaluating right operand: %w", err)
 	}
 	defer right.Release()
-	
+
 	// Apply the binary operation
 	switch expr.op {
 	case OpAdd, OpSub, OpMul, OpDiv:
@@ -204,23 +204,23 @@ func (e *Evaluator) evaluateArithmetic(left, right arrow.Array, op BinaryOp) (ar
 			return e.evaluateMixedArithmetic(rightArr, leftArr, op, false) // left is float, right is int
 		}
 	}
-	
+
 	return nil, fmt.Errorf("unsupported arithmetic operation between %T and %T", left, right)
 }
 
 func (e *Evaluator) evaluateInt64Arithmetic(left, right *array.Int64, op BinaryOp) (arrow.Array, error) {
 	builder := array.NewInt64Builder(e.mem)
 	defer builder.Release()
-	
+
 	for i := 0; i < left.Len(); i++ {
 		if left.IsNull(i) || right.IsNull(i) {
 			builder.AppendNull()
 			continue
 		}
-		
+
 		l := left.Value(i)
 		r := right.Value(i)
-		
+
 		var result int64
 		switch op {
 		case OpAdd:
@@ -238,26 +238,26 @@ func (e *Evaluator) evaluateInt64Arithmetic(left, right *array.Int64, op BinaryO
 		default:
 			return nil, fmt.Errorf("unsupported arithmetic operation: %v", op)
 		}
-		
+
 		builder.Append(result)
 	}
-	
+
 	return builder.NewArray(), nil
 }
 
 func (e *Evaluator) evaluateFloat64Arithmetic(left, right *array.Float64, op BinaryOp) (arrow.Array, error) {
 	builder := array.NewFloat64Builder(e.mem)
 	defer builder.Release()
-	
+
 	for i := 0; i < left.Len(); i++ {
 		if left.IsNull(i) || right.IsNull(i) {
 			builder.AppendNull()
 			continue
 		}
-		
+
 		l := left.Value(i)
 		r := right.Value(i)
-		
+
 		var result float64
 		switch op {
 		case OpAdd:
@@ -271,10 +271,10 @@ func (e *Evaluator) evaluateFloat64Arithmetic(left, right *array.Float64, op Bin
 		default:
 			return nil, fmt.Errorf("unsupported arithmetic operation: %v", op)
 		}
-		
+
 		builder.Append(result)
 	}
-	
+
 	return builder.NewArray(), nil
 }
 
@@ -282,23 +282,23 @@ func (e *Evaluator) evaluateMixedArithmetic(intArr *array.Int64, floatArr *array
 	// Result is always float64 for mixed arithmetic
 	builder := array.NewFloat64Builder(e.mem)
 	defer builder.Release()
-	
+
 	for i := 0; i < intArr.Len(); i++ {
 		if intArr.IsNull(i) || floatArr.IsNull(i) {
 			builder.AppendNull()
 			continue
 		}
-		
+
 		intVal := float64(intArr.Value(i)) // Convert int to float
 		floatVal := floatArr.Value(i)
-		
+
 		var left, right float64
 		if intIsLeft {
 			left, right = intVal, floatVal
 		} else {
 			left, right = floatVal, intVal
 		}
-		
+
 		var result float64
 		switch op {
 		case OpAdd:
@@ -312,10 +312,10 @@ func (e *Evaluator) evaluateMixedArithmetic(intArr *array.Int64, floatArr *array
 		default:
 			return nil, fmt.Errorf("unsupported mixed arithmetic operation: %v", op)
 		}
-		
+
 		builder.Append(result)
 	}
-	
+
 	return builder.NewArray(), nil
 }
 
@@ -339,23 +339,23 @@ func (e *Evaluator) evaluateComparison(left, right arrow.Array, op BinaryOp) (ar
 			return e.evaluateBooleanComparison(leftArr, rightArr, op)
 		}
 	}
-	
+
 	return nil, fmt.Errorf("unsupported comparison between %T and %T", left, right)
 }
 
 func (e *Evaluator) evaluateInt64Comparison(left, right *array.Int64, op BinaryOp) (arrow.Array, error) {
 	builder := array.NewBooleanBuilder(e.mem)
 	defer builder.Release()
-	
+
 	for i := 0; i < left.Len(); i++ {
 		if left.IsNull(i) || right.IsNull(i) {
 			builder.AppendNull()
 			continue
 		}
-		
+
 		l := left.Value(i)
 		r := right.Value(i)
-		
+
 		var result bool
 		switch op {
 		case OpEq:
@@ -373,26 +373,26 @@ func (e *Evaluator) evaluateInt64Comparison(left, right *array.Int64, op BinaryO
 		default:
 			return nil, fmt.Errorf("unsupported comparison operation: %v", op)
 		}
-		
+
 		builder.Append(result)
 	}
-	
+
 	return builder.NewArray(), nil
 }
 
 func (e *Evaluator) evaluateFloat64Comparison(left, right *array.Float64, op BinaryOp) (arrow.Array, error) {
 	builder := array.NewBooleanBuilder(e.mem)
 	defer builder.Release()
-	
+
 	for i := 0; i < left.Len(); i++ {
 		if left.IsNull(i) || right.IsNull(i) {
 			builder.AppendNull()
 			continue
 		}
-		
+
 		l := left.Value(i)
 		r := right.Value(i)
-		
+
 		var result bool
 		switch op {
 		case OpEq:
@@ -410,26 +410,26 @@ func (e *Evaluator) evaluateFloat64Comparison(left, right *array.Float64, op Bin
 		default:
 			return nil, fmt.Errorf("unsupported comparison operation: %v", op)
 		}
-		
+
 		builder.Append(result)
 	}
-	
+
 	return builder.NewArray(), nil
 }
 
 func (e *Evaluator) evaluateStringComparison(left, right *array.String, op BinaryOp) (arrow.Array, error) {
 	builder := array.NewBooleanBuilder(e.mem)
 	defer builder.Release()
-	
+
 	for i := 0; i < left.Len(); i++ {
 		if left.IsNull(i) || right.IsNull(i) {
 			builder.AppendNull()
 			continue
 		}
-		
+
 		l := left.Value(i)
 		r := right.Value(i)
-		
+
 		var result bool
 		switch op {
 		case OpEq:
@@ -447,26 +447,26 @@ func (e *Evaluator) evaluateStringComparison(left, right *array.String, op Binar
 		default:
 			return nil, fmt.Errorf("unsupported comparison operation: %v", op)
 		}
-		
+
 		builder.Append(result)
 	}
-	
+
 	return builder.NewArray(), nil
 }
 
 func (e *Evaluator) evaluateBooleanComparison(left, right *array.Boolean, op BinaryOp) (arrow.Array, error) {
 	builder := array.NewBooleanBuilder(e.mem)
 	defer builder.Release()
-	
+
 	for i := 0; i < left.Len(); i++ {
 		if left.IsNull(i) || right.IsNull(i) {
 			builder.AppendNull()
 			continue
 		}
-		
+
 		l := left.Value(i)
 		r := right.Value(i)
-		
+
 		var result bool
 		switch op {
 		case OpEq:
@@ -476,33 +476,33 @@ func (e *Evaluator) evaluateBooleanComparison(left, right *array.Boolean, op Bin
 		default:
 			return nil, fmt.Errorf("unsupported boolean comparison operation: %v", op)
 		}
-		
+
 		builder.Append(result)
 	}
-	
+
 	return builder.NewArray(), nil
 }
 
 func (e *Evaluator) evaluateLogical(left, right arrow.Array, op BinaryOp) (arrow.Array, error) {
 	leftBool, ok1 := left.(*array.Boolean)
 	rightBool, ok2 := right.(*array.Boolean)
-	
+
 	if !ok1 || !ok2 {
 		return nil, fmt.Errorf("logical operations require boolean operands")
 	}
-	
+
 	builder := array.NewBooleanBuilder(e.mem)
 	defer builder.Release()
-	
+
 	for i := 0; i < left.Len(); i++ {
 		if leftBool.IsNull(i) || rightBool.IsNull(i) {
 			builder.AppendNull()
 			continue
 		}
-		
+
 		l := leftBool.Value(i)
 		r := rightBool.Value(i)
-		
+
 		var result bool
 		switch op {
 		case OpAnd:
@@ -512,10 +512,10 @@ func (e *Evaluator) evaluateLogical(left, right arrow.Array, op BinaryOp) (arrow
 		default:
 			return nil, fmt.Errorf("unsupported logical operation: %v", op)
 		}
-		
+
 		builder.Append(result)
 	}
-	
+
 	return builder.NewArray(), nil
 }
 

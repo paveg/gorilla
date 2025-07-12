@@ -25,7 +25,7 @@ type FilterOperation struct {
 func (f *FilterOperation) Apply(df *DataFrame) (*DataFrame, error) {
 	// Create expression evaluator
 	eval := expr.NewEvaluator(nil)
-	
+
 	// Get column arrays for evaluation
 	columns := make(map[string]arrow.Array)
 	for _, colName := range df.Columns() {
@@ -38,14 +38,14 @@ func (f *FilterOperation) Apply(df *DataFrame) (*DataFrame, error) {
 			arr.Release()
 		}
 	}()
-	
+
 	// Evaluate the filter predicate
 	mask, err := eval.EvaluateBoolean(f.predicate, columns)
 	if err != nil {
 		return nil, fmt.Errorf("evaluating filter predicate: %w", err)
 	}
 	defer mask.Release()
-	
+
 	// Apply the filter mask
 	return f.applyFilterMask(df, mask)
 }
@@ -55,7 +55,7 @@ func (f *FilterOperation) applyFilterMask(df *DataFrame, mask arrow.Array) (*Dat
 	if !ok {
 		return nil, fmt.Errorf("filter mask must be boolean array")
 	}
-	
+
 	// Count true values to determine result size
 	trueCount := 0
 	for i := 0; i < boolMask.Len(); i++ {
@@ -63,16 +63,16 @@ func (f *FilterOperation) applyFilterMask(df *DataFrame, mask arrow.Array) (*Dat
 			trueCount++
 		}
 	}
-	
+
 	if trueCount == 0 {
 		// Return empty DataFrame with same structure
 		return f.createEmptyDataFrame(df), nil
 	}
-	
+
 	// Create filtered series for each column
 	var filteredSeries []ISeries
 	mem := memory.NewGoAllocator()
-	
+
 	for _, colName := range df.Columns() {
 		if originalSeries, exists := df.Column(colName); exists {
 			filtered, err := f.filterSeries(originalSeries, boolMask, trueCount, mem)
@@ -86,14 +86,14 @@ func (f *FilterOperation) applyFilterMask(df *DataFrame, mask arrow.Array) (*Dat
 			filteredSeries = append(filteredSeries, filtered)
 		}
 	}
-	
+
 	return New(filteredSeries...), nil
 }
 
 func (f *FilterOperation) createEmptyDataFrame(df *DataFrame) *DataFrame {
 	mem := memory.NewGoAllocator()
 	var emptySeries []ISeries
-	
+
 	for _, colName := range df.Columns() {
 		if originalSeries, exists := df.Column(colName); exists {
 			// Create empty series with same type
@@ -109,13 +109,13 @@ func (f *FilterOperation) createEmptyDataFrame(df *DataFrame) *DataFrame {
 			}
 		}
 	}
-	
+
 	return New(emptySeries...)
 }
 
 func (f *FilterOperation) filterSeries(originalSeries ISeries, mask *array.Boolean, resultSize int, mem memory.Allocator) (ISeries, error) {
 	name := originalSeries.Name()
-	
+
 	switch originalSeries.DataType().Name() {
 	case "utf8":
 		return f.filterStringSeries(originalSeries, mask, resultSize, name, mem)
@@ -133,12 +133,12 @@ func (f *FilterOperation) filterSeries(originalSeries ISeries, mask *array.Boole
 func (f *FilterOperation) filterStringSeries(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, mem memory.Allocator) (ISeries, error) {
 	originalArray := originalSeries.Array()
 	defer originalArray.Release()
-	
+
 	stringArray, ok := originalArray.(*array.String)
 	if !ok {
 		return nil, fmt.Errorf("expected string array")
 	}
-	
+
 	filteredValues := make([]string, 0, resultSize)
 	for i := 0; i < mask.Len(); i++ {
 		if !mask.IsNull(i) && mask.Value(i) {
@@ -147,19 +147,19 @@ func (f *FilterOperation) filterStringSeries(originalSeries ISeries, mask *array
 			}
 		}
 	}
-	
+
 	return series.New(name, filteredValues, mem), nil
 }
 
 func (f *FilterOperation) filterInt64Series(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, mem memory.Allocator) (ISeries, error) {
 	originalArray := originalSeries.Array()
 	defer originalArray.Release()
-	
+
 	intArray, ok := originalArray.(*array.Int64)
 	if !ok {
 		return nil, fmt.Errorf("expected int64 array")
 	}
-	
+
 	filteredValues := make([]int64, 0, resultSize)
 	for i := 0; i < mask.Len(); i++ {
 		if !mask.IsNull(i) && mask.Value(i) {
@@ -168,19 +168,19 @@ func (f *FilterOperation) filterInt64Series(originalSeries ISeries, mask *array.
 			}
 		}
 	}
-	
+
 	return series.New(name, filteredValues, mem), nil
 }
 
 func (f *FilterOperation) filterFloat64Series(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, mem memory.Allocator) (ISeries, error) {
 	originalArray := originalSeries.Array()
 	defer originalArray.Release()
-	
+
 	floatArray, ok := originalArray.(*array.Float64)
 	if !ok {
 		return nil, fmt.Errorf("expected float64 array")
 	}
-	
+
 	filteredValues := make([]float64, 0, resultSize)
 	for i := 0; i < mask.Len(); i++ {
 		if !mask.IsNull(i) && mask.Value(i) {
@@ -189,19 +189,19 @@ func (f *FilterOperation) filterFloat64Series(originalSeries ISeries, mask *arra
 			}
 		}
 	}
-	
+
 	return series.New(name, filteredValues, mem), nil
 }
 
 func (f *FilterOperation) filterBoolSeries(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, mem memory.Allocator) (ISeries, error) {
 	originalArray := originalSeries.Array()
 	defer originalArray.Release()
-	
+
 	boolArray, ok := originalArray.(*array.Boolean)
 	if !ok {
 		return nil, fmt.Errorf("expected boolean array")
 	}
-	
+
 	filteredValues := make([]bool, 0, resultSize)
 	for i := 0; i < mask.Len(); i++ {
 		if !mask.IsNull(i) && mask.Value(i) {
@@ -210,7 +210,7 @@ func (f *FilterOperation) filterBoolSeries(originalSeries ISeries, mask *array.B
 			}
 		}
 	}
-	
+
 	return series.New(name, filteredValues, mem), nil
 }
 
@@ -240,7 +240,7 @@ type WithColumnOperation struct {
 func (w *WithColumnOperation) Apply(df *DataFrame) (*DataFrame, error) {
 	// Create expression evaluator
 	eval := expr.NewEvaluator(nil)
-	
+
 	// Get column arrays for evaluation
 	columns := make(map[string]arrow.Array)
 	for _, colName := range df.Columns() {
@@ -253,24 +253,24 @@ func (w *WithColumnOperation) Apply(df *DataFrame) (*DataFrame, error) {
 			arr.Release()
 		}
 	}()
-	
+
 	// Evaluate the expression to create new column
 	newColumnArray, err := eval.Evaluate(w.expr, columns)
 	if err != nil {
 		return nil, fmt.Errorf("evaluating new column expression: %w", err)
 	}
 	defer newColumnArray.Release()
-	
+
 	// Create new series from the evaluated array
 	newSeries, err := w.createSeriesFromArray(w.name, newColumnArray)
 	if err != nil {
 		return nil, fmt.Errorf("creating series from evaluated array: %w", err)
 	}
-	
+
 	// Copy existing series and add/replace the new one
 	var allSeries []ISeries
 	mem := memory.NewGoAllocator()
-	
+
 	// Copy existing columns
 	for _, colName := range df.Columns() {
 		if colName == w.name {
@@ -290,16 +290,16 @@ func (w *WithColumnOperation) Apply(df *DataFrame) (*DataFrame, error) {
 			allSeries = append(allSeries, copied)
 		}
 	}
-	
+
 	// Add the new column
 	allSeries = append(allSeries, newSeries)
-	
+
 	return New(allSeries...), nil
 }
 
 func (w *WithColumnOperation) createSeriesFromArray(name string, arr arrow.Array) (ISeries, error) {
 	mem := memory.NewGoAllocator()
-	
+
 	switch typedArr := arr.(type) {
 	case *array.String:
 		values := make([]string, typedArr.Len())
@@ -309,7 +309,7 @@ func (w *WithColumnOperation) createSeriesFromArray(name string, arr arrow.Array
 			}
 		}
 		return series.New(name, values, mem), nil
-		
+
 	case *array.Int64:
 		values := make([]int64, typedArr.Len())
 		for i := 0; i < typedArr.Len(); i++ {
@@ -318,7 +318,7 @@ func (w *WithColumnOperation) createSeriesFromArray(name string, arr arrow.Array
 			}
 		}
 		return series.New(name, values, mem), nil
-		
+
 	case *array.Float64:
 		values := make([]float64, typedArr.Len())
 		for i := 0; i < typedArr.Len(); i++ {
@@ -327,7 +327,7 @@ func (w *WithColumnOperation) createSeriesFromArray(name string, arr arrow.Array
 			}
 		}
 		return series.New(name, values, mem), nil
-		
+
 	case *array.Boolean:
 		values := make([]bool, typedArr.Len())
 		for i := 0; i < typedArr.Len(); i++ {
@@ -336,7 +336,7 @@ func (w *WithColumnOperation) createSeriesFromArray(name string, arr arrow.Array
 			}
 		}
 		return series.New(name, values, mem), nil
-		
+
 	default:
 		return nil, fmt.Errorf("unsupported array type for series creation: %T", arr)
 	}
@@ -346,7 +346,7 @@ func (w *WithColumnOperation) copySeries(originalSeries ISeries, mem memory.Allo
 	name := originalSeries.Name()
 	originalArray := originalSeries.Array()
 	defer originalArray.Release()
-	
+
 	switch originalSeries.DataType().Name() {
 	case "utf8":
 		stringArray := originalArray.(*array.String)
@@ -357,7 +357,7 @@ func (w *WithColumnOperation) copySeries(originalSeries ISeries, mem memory.Allo
 			}
 		}
 		return series.New(name, values, mem), nil
-		
+
 	case "int64":
 		intArray := originalArray.(*array.Int64)
 		values := make([]int64, intArray.Len())
@@ -367,7 +367,7 @@ func (w *WithColumnOperation) copySeries(originalSeries ISeries, mem memory.Allo
 			}
 		}
 		return series.New(name, values, mem), nil
-		
+
 	case "float64":
 		floatArray := originalArray.(*array.Float64)
 		values := make([]float64, floatArray.Len())
@@ -377,7 +377,7 @@ func (w *WithColumnOperation) copySeries(originalSeries ISeries, mem memory.Allo
 			}
 		}
 		return series.New(name, values, mem), nil
-		
+
 	case "bool":
 		boolArray := originalArray.(*array.Boolean)
 		values := make([]bool, boolArray.Len())
@@ -387,7 +387,7 @@ func (w *WithColumnOperation) copySeries(originalSeries ISeries, mem memory.Allo
 			}
 		}
 		return series.New(name, values, mem), nil
-		
+
 	default:
 		return nil, fmt.Errorf("unsupported series type for copying: %s", originalSeries.DataType().Name())
 	}
@@ -446,7 +446,7 @@ func (lf *LazyFrame) WithColumn(name string, expr expr.Expr) *LazyFrame {
 // Collect executes all deferred operations and returns the resulting DataFrame
 func (lf *LazyFrame) Collect() (*DataFrame, error) {
 	current := lf.source
-	
+
 	// TODO: Implement parallel execution pipeline for LazyFrame.Collect()
 	// This is the most critical performance optimization needed:
 	// 1. Split DataFrame into chunks based on row ranges
@@ -454,7 +454,7 @@ func (lf *LazyFrame) Collect() (*DataFrame, error) {
 	// 3. Use parallel.Process to execute tasks concurrently across worker pool
 	// 4. Concatenate results from all chunks into final DataFrame
 	// 5. Implement query optimization (predicate pushdown, projection pushdown)
-	
+
 	// Currently: Apply operations sequentially (functional but not parallel)
 	for _, op := range lf.operations {
 		result, err := op.Apply(current)
@@ -463,7 +463,7 @@ func (lf *LazyFrame) Collect() (*DataFrame, error) {
 		}
 		current = result
 	}
-	
+
 	return current, nil
 }
 

@@ -9,7 +9,7 @@ import (
 
 func TestNewSeries(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	
+
 	tests := []struct {
 		name           string
 		columnName     string
@@ -57,7 +57,7 @@ func TestNewSeries(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var series interface{}
-			
+
 			switch data := tt.data.(type) {
 			case []string:
 				series = New(tt.columnName, data, mem)
@@ -106,16 +106,16 @@ func TestNewSeries(t *testing.T) {
 
 func TestSeriesValue(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	
+
 	data := []string{"first", "second", "third"}
 	series := New("test", data, mem)
 	defer series.Release()
-	
+
 	// Test valid indices
 	assert.Equal(t, "first", series.Value(0))
 	assert.Equal(t, "second", series.Value(1))
 	assert.Equal(t, "third", series.Value(2))
-	
+
 	// Test invalid indices (should return zero value)
 	assert.Equal(t, "", series.Value(-1))
 	assert.Equal(t, "", series.Value(3))
@@ -124,10 +124,10 @@ func TestSeriesValue(t *testing.T) {
 
 func TestSeriesDataType(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	
+
 	tests := []struct {
-		name     string
-		data     interface{}
+		name      string
+		data      interface{}
 		typeCheck func(interface{}) bool
 	}{
 		{
@@ -139,7 +139,7 @@ func TestSeriesDataType(t *testing.T) {
 			},
 		},
 		{
-			name: "int64 series has int64 type", 
+			name: "int64 series has int64 type",
 			data: []int64{1, 2},
 			typeCheck: func(s interface{}) bool {
 				series := s.(*Series[int64])
@@ -147,11 +147,11 @@ func TestSeriesDataType(t *testing.T) {
 			},
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var series interface{}
-			
+
 			switch data := tt.data.(type) {
 			case []string:
 				series = New("test", data, mem)
@@ -160,7 +160,7 @@ func TestSeriesDataType(t *testing.T) {
 				series = New("test", data, mem)
 				defer series.(*Series[int64]).Release()
 			}
-			
+
 			assert.True(t, tt.typeCheck(series))
 		})
 	}
@@ -168,10 +168,10 @@ func TestSeriesDataType(t *testing.T) {
 
 func TestSeriesString(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	
+
 	series := New("test_column", []string{"a", "b", "c"}, mem)
 	defer series.Release()
-	
+
 	str := series.String()
 	assert.Contains(t, str, "Series[string]")
 	assert.Contains(t, str, "test_column")
@@ -180,11 +180,11 @@ func TestSeriesString(t *testing.T) {
 
 func TestSeriesIsNull(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	
+
 	// Test with regular data (no nulls)
 	series := New("test", []string{"a", "b", "c"}, mem)
 	defer series.Release()
-	
+
 	// All values should be non-null
 	for i := 0; i < series.Len(); i++ {
 		assert.False(t, series.IsNull(i))
@@ -193,7 +193,7 @@ func TestSeriesIsNull(t *testing.T) {
 
 func TestUnsupportedType(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	
+
 	// Test that unsupported types panic
 	assert.Panics(t, func() {
 		New("test", []complex64{1 + 2i, 3 + 4i}, mem)

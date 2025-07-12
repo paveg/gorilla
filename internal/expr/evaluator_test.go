@@ -16,22 +16,22 @@ func createTestColumns(t *testing.T, mem memory.Allocator) map[string]arrow.Arra
 	defer intBuilder.Release()
 	intBuilder.AppendValues([]int64{10, 20, 30, 40}, nil)
 	intArray := intBuilder.NewArray()
-	
+
 	floatBuilder := array.NewFloat64Builder(mem)
 	defer floatBuilder.Release()
 	floatBuilder.AppendValues([]float64{1.5, 2.5, 3.5, 4.5}, nil)
 	floatArray := floatBuilder.NewArray()
-	
+
 	stringBuilder := array.NewStringBuilder(mem)
 	defer stringBuilder.Release()
 	stringBuilder.AppendValues([]string{"a", "b", "c", "d"}, nil)
 	stringArray := stringBuilder.NewArray()
-	
+
 	boolBuilder := array.NewBooleanBuilder(mem)
 	defer boolBuilder.Release()
 	boolBuilder.AppendValues([]bool{true, false, true, false}, nil)
 	boolArray := boolBuilder.NewArray()
-	
+
 	return map[string]arrow.Array{
 		"age":    intArray,
 		"score":  floatArray,
@@ -42,12 +42,12 @@ func createTestColumns(t *testing.T, mem memory.Allocator) map[string]arrow.Arra
 
 func TestNewEvaluator(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	
+
 	// Test with explicit allocator
 	eval := NewEvaluator(mem)
 	assert.NotNil(t, eval)
 	assert.Equal(t, mem, eval.mem)
-	
+
 	// Test with nil allocator (should create default)
 	eval2 := NewEvaluator(nil)
 	assert.NotNil(t, eval2)
@@ -63,19 +63,19 @@ func TestEvaluateColumn(t *testing.T) {
 			arr.Release()
 		}
 	}()
-	
+
 	// Test evaluating existing column
 	colExpr := Col("age")
 	result, err := eval.Evaluate(colExpr, columns)
 	require.NoError(t, err)
 	defer result.Release()
-	
+
 	intResult, ok := result.(*array.Int64)
 	require.True(t, ok)
 	assert.Equal(t, 4, intResult.Len())
 	assert.Equal(t, int64(10), intResult.Value(0))
 	assert.Equal(t, int64(20), intResult.Value(1))
-	
+
 	// Test evaluating non-existent column
 	nonExistentExpr := Col("nonexistent")
 	_, err = eval.Evaluate(nonExistentExpr, columns)
@@ -92,7 +92,7 @@ func TestEvaluateLiteral(t *testing.T) {
 			arr.Release()
 		}
 	}()
-	
+
 	tests := []struct {
 		name          string
 		value         interface{}
@@ -104,17 +104,17 @@ func TestEvaluateLiteral(t *testing.T) {
 		{"string literal", "hello", "utf8", "hello"},
 		{"bool literal", true, "bool", true},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			litExpr := Lit(tt.value)
 			result, err := eval.Evaluate(litExpr, columns)
 			require.NoError(t, err)
 			defer result.Release()
-			
+
 			assert.Equal(t, 4, result.Len()) // Should match column length
 			assert.Equal(t, tt.expectedType, result.DataType().Name())
-			
+
 			// Check that all values are the literal value
 			switch arr := result.(type) {
 			case *array.Int64:
@@ -147,7 +147,7 @@ func TestEvaluateArithmetic(t *testing.T) {
 			arr.Release()
 		}
 	}()
-	
+
 	tests := []struct {
 		name     string
 		expr     Expr
@@ -174,17 +174,17 @@ func TestEvaluateArithmetic(t *testing.T) {
 			expected: []int64{5, 10, 15, 20},
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := eval.Evaluate(tt.expr, columns)
 			require.NoError(t, err)
 			defer result.Release()
-			
+
 			intResult, ok := result.(*array.Int64)
 			require.True(t, ok)
 			assert.Equal(t, len(tt.expected), intResult.Len())
-			
+
 			for i, expected := range tt.expected {
 				assert.Equal(t, expected, intResult.Value(i))
 			}
@@ -201,7 +201,7 @@ func TestEvaluateComparison(t *testing.T) {
 			arr.Release()
 		}
 	}()
-	
+
 	tests := []struct {
 		name     string
 		expr     Expr
@@ -228,17 +228,17 @@ func TestEvaluateComparison(t *testing.T) {
 			expected: []bool{true, false, true, true},
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := eval.EvaluateBoolean(tt.expr, columns)
 			require.NoError(t, err)
 			defer result.Release()
-			
+
 			boolResult, ok := result.(*array.Boolean)
 			require.True(t, ok)
 			assert.Equal(t, len(tt.expected), boolResult.Len())
-			
+
 			for i, expected := range tt.expected {
 				assert.Equal(t, expected, boolResult.Value(i))
 			}
@@ -255,16 +255,16 @@ func TestEvaluateLogical(t *testing.T) {
 			arr.Release()
 		}
 	}()
-	
+
 	// Test logical AND: (age > 15) && active
 	expr := Col("age").Gt(Lit(int64(15))).And(Col("active"))
 	result, err := eval.EvaluateBoolean(expr, columns)
 	require.NoError(t, err)
 	defer result.Release()
-	
+
 	boolResult, ok := result.(*array.Boolean)
 	require.True(t, ok)
-	
+
 	// Expected: [false, false, true, false]
 	// age > 15: [false, true, true, true]
 	// active:   [true, false, true, false]
@@ -284,17 +284,17 @@ func TestEvaluateComplexExpression(t *testing.T) {
 			arr.Release()
 		}
 	}()
-	
+
 	// Test complex expression: (age * 2) > 50
 	left := Col("age").Mul(Lit(int64(2)))
 	expr := &BinaryExpr{left: left, op: OpGt, right: Lit(int64(50))}
 	result, err := eval.EvaluateBoolean(expr, columns)
 	require.NoError(t, err)
 	defer result.Release()
-	
+
 	boolResult, ok := result.(*array.Boolean)
 	require.True(t, ok)
-	
+
 	// age * 2: [20, 40, 60, 80]
 	// > 50:    [false, false, true, true]
 	expected := []bool{false, false, true, true}
@@ -312,16 +312,16 @@ func TestEvaluateStringComparison(t *testing.T) {
 			arr.Release()
 		}
 	}()
-	
+
 	// Test string equality
 	expr := Col("name").Eq(Lit("b"))
 	result, err := eval.EvaluateBoolean(expr, columns)
 	require.NoError(t, err)
 	defer result.Release()
-	
+
 	boolResult, ok := result.(*array.Boolean)
 	require.True(t, ok)
-	
+
 	// name == "b": [false, true, false, false]
 	expected := []bool{false, true, false, false}
 	for i, exp := range expected {
@@ -338,15 +338,15 @@ func TestEvaluateErrors(t *testing.T) {
 			arr.Release()
 		}
 	}()
-	
+
 	// Test unsupported expression type
 	_, err := eval.Evaluate(nil, columns)
 	assert.Error(t, err)
-	
+
 	// Test column not found
 	_, err = eval.Evaluate(Col("nonexistent"), columns)
 	assert.Error(t, err)
-	
+
 	// Test unsupported literal type
 	_, err = eval.Evaluate(Lit(complex(1, 2)), columns)
 	assert.Error(t, err)

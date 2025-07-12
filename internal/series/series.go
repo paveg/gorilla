@@ -1,3 +1,4 @@
+// Package series provides data structures for column operations
 package series
 
 import (

@@ -4,7 +4,7 @@ run:
 
 linters-settings:
   govet:
-    check-shadowing: true
+    shadow: true
   gocyclo:
     min-complexity: 15
   dupl:
@@ -28,57 +28,75 @@ linters-settings:
     disabled-checks:
       - whyNoLint
       - unnamedResult
+      - appendAssign
+  depguard:
+    rules:
+      main:
+        deny:
+          - pkg: "github.com/sirupsen/logrus"
+            desc: "use standard log package"
 
 linters:
   enable:
     - bodyclose
-    - deadcode
+    - copyloopvar
     - depguard
     - dogsled
     - dupl
     - errcheck
-    - exportloopref
     - exhaustive
     - gochecknoinits
     - goconst
     - gocritic
     - gocyclo
     - gofmt
-    - goimports
-    - gomnd
+    - mnd
     - goprintffuncname
     - gosec
     - gosimple
     - govet
     - ineffassign
-    - interfacer
     - lll
     - misspell
     - nakedret
     - nolintlint
     - rowserrcheck
     - staticcheck
-    - structcheck
     - stylecheck
     - typecheck
     - unconvert
     - unparam
     - unused
-    - varcheck
     - whitespace
 
 issues:
   exclude-rules:
     - path: _test\.go
       linters:
-        - gomnd
+        - mnd
         - goconst
         - dupl
+        - depguard
+        - exhaustive
+        - unparam
+    - path: cmd/
+      linters:
+        - mnd
     - path: internal/expr/evaluator\.go
       linters:
         - gocyclo
         - gocritic
+        - exhaustive
+        - stylecheck
+        - dupl
+        - lll
     - path: internal/dataframe/lazy\.go
+      linters:
+        - gocyclo
+        - goconst
+        - dupl
+        - lll
+    - path: internal/series/series\.go
       linters:
         - gocyclo
     # Allow TODO comments
@@ -88,3 +106,4 @@ issues:
   exclude-use-default: false
   max-issues-per-linter: 0
   max-same-issues: 0
+

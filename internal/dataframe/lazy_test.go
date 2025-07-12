@@ -13,22 +13,22 @@ import (
 
 func createTestDataFrameForLazy(t *testing.T) *DataFrame {
 	mem := memory.NewGoAllocator()
-	
+
 	names := series.New("name", []string{"Alice", "Bob", "Charlie", "Diana"}, mem)
 	ages := series.New("age", []int64{25, 30, 35, 28}, mem)
 	salaries := series.New("salary", []float64{50000, 60000, 70000, 55000}, mem)
 	active := series.New("active", []bool{true, true, false, true}, mem)
-	
+
 	return New(names, ages, salaries, active)
 }
 
 func TestDataFrameLazy(t *testing.T) {
 	df := createTestDataFrameForLazy(t)
 	defer df.Release()
-	
+
 	lazyDf := df.Lazy()
 	defer lazyDf.Release()
-	
+
 	assert.NotNil(t, lazyDf)
 	assert.Equal(t, df, lazyDf.source)
 	assert.Empty(t, lazyDf.operations)
@@ -38,12 +38,12 @@ func TestDataFrameLazy(t *testing.T) {
 func TestLazyFrameFilter(t *testing.T) {
 	df := createTestDataFrameForLazy(t)
 	defer df.Release()
-	
+
 	lazyDf := df.Lazy().Filter(expr.Col("age").Gt(expr.Lit(30)))
 	defer lazyDf.Release()
-	
+
 	assert.Len(t, lazyDf.operations, 1)
-	
+
 	// Check that the operation is a FilterOperation
 	filterOp, ok := lazyDf.operations[0].(*FilterOperation)
 	assert.True(t, ok)
@@ -55,12 +55,12 @@ func TestLazyFrameFilter(t *testing.T) {
 func TestLazyFrameSelect(t *testing.T) {
 	df := createTestDataFrameForLazy(t)
 	defer df.Release()
-	
+
 	lazyDf := df.Lazy().Select("name", "age")
 	defer lazyDf.Release()
-	
+
 	assert.Len(t, lazyDf.operations, 1)
-	
+
 	// Check that the operation is a SelectOperation
 	selectOp, ok := lazyDf.operations[0].(*SelectOperation)
 	assert.True(t, ok)
@@ -72,12 +72,12 @@ func TestLazyFrameSelect(t *testing.T) {
 func TestLazyFrameWithColumn(t *testing.T) {
 	df := createTestDataFrameForLazy(t)
 	defer df.Release()
-	
+
 	lazyDf := df.Lazy().WithColumn("bonus", expr.Col("salary").Mul(expr.Lit(0.1)))
 	defer lazyDf.Release()
-	
+
 	assert.Len(t, lazyDf.operations, 1)
-	
+
 	// Check that the operation is a WithColumnOperation
 	withColOp, ok := lazyDf.operations[0].(*WithColumnOperation)
 	assert.True(t, ok)
@@ -89,22 +89,22 @@ func TestLazyFrameWithColumn(t *testing.T) {
 func TestLazyFrameChaining(t *testing.T) {
 	df := createTestDataFrameForLazy(t)
 	defer df.Release()
-	
+
 	lazyDf := df.Lazy().
 		Filter(expr.Col("age").Gt(expr.Lit(25))).
 		WithColumn("bonus", expr.Col("salary").Mul(expr.Lit(0.1))).
 		Select("name", "age", "bonus")
 	defer lazyDf.Release()
-	
+
 	assert.Len(t, lazyDf.operations, 3)
-	
+
 	// Check operation types
 	_, ok := lazyDf.operations[0].(*FilterOperation)
 	assert.True(t, ok)
-	
+
 	_, ok = lazyDf.operations[1].(*WithColumnOperation)
 	assert.True(t, ok)
-	
+
 	_, ok = lazyDf.operations[2].(*SelectOperation)
 	assert.True(t, ok)
 }
@@ -112,14 +112,14 @@ func TestLazyFrameChaining(t *testing.T) {
 func TestLazyFrameString(t *testing.T) {
 	df := createTestDataFrameForLazy(t)
 	defer df.Release()
-	
+
 	lazyDf := df.Lazy().
 		Filter(expr.Col("age").Gt(expr.Lit(30))).
 		Select("name", "age")
 	defer lazyDf.Release()
-	
+
 	str := lazyDf.String()
-	
+
 	assert.Contains(t, str, "LazyFrame:")
 	assert.Contains(t, str, "source:")
 	assert.Contains(t, str, "operations:")
@@ -130,15 +130,15 @@ func TestLazyFrameString(t *testing.T) {
 func TestLazyFrameCollect(t *testing.T) {
 	df := createTestDataFrameForLazy(t)
 	defer df.Release()
-	
+
 	// Test basic collect with Select operation
 	lazyDf := df.Lazy().Select("name", "age")
 	defer lazyDf.Release()
-	
+
 	result, err := lazyDf.Collect()
 	require.NoError(t, err)
 	defer result.Release()
-	
+
 	// Select operation should be applied correctly
 	assert.Equal(t, df.Len(), result.Len())
 	assert.Equal(t, 2, result.Width()) // Select only selected "name", "age"
@@ -147,7 +147,7 @@ func TestLazyFrameCollect(t *testing.T) {
 func TestFilterOperationString(t *testing.T) {
 	predicate := expr.Col("age").Gt(expr.Lit(25))
 	filterOp := &FilterOperation{predicate: predicate}
-	
+
 	str := filterOp.String()
 	assert.Contains(t, str, "filter(")
 	assert.Contains(t, str, "age")
@@ -156,7 +156,7 @@ func TestFilterOperationString(t *testing.T) {
 
 func TestSelectOperationString(t *testing.T) {
 	selectOp := &SelectOperation{columns: []string{"name", "age", "salary"}}
-	
+
 	str := selectOp.String()
 	assert.Contains(t, str, "select(")
 	assert.Contains(t, str, "name")
@@ -167,7 +167,7 @@ func TestSelectOperationString(t *testing.T) {
 func TestWithColumnOperationString(t *testing.T) {
 	expr := expr.Col("salary").Mul(expr.Lit(0.1))
 	withColOp := &WithColumnOperation{name: "bonus", expr: expr}
-	
+
 	str := withColOp.String()
 	assert.Contains(t, str, "with_column(")
 	assert.Contains(t, str, "bonus")
@@ -177,18 +177,18 @@ func TestWithColumnOperationString(t *testing.T) {
 func TestSelectOperationApply(t *testing.T) {
 	df := createTestDataFrameForLazy(t)
 	defer df.Release()
-	
+
 	selectOp := &SelectOperation{columns: []string{"name", "age"}}
-	
+
 	result, err := selectOp.Apply(df)
 	require.NoError(t, err)
 	defer result.Release()
-	
+
 	// Verify the select operation worked
 	assert.Equal(t, df.Len(), result.Len())
 	assert.Equal(t, 2, result.Width())
 	assert.Equal(t, []string{"name", "age"}, result.Columns())
-	
+
 	// Verify columns exist
 	_, exists := result.Column("name")
 	assert.True(t, exists)
@@ -201,14 +201,14 @@ func TestSelectOperationApply(t *testing.T) {
 func TestLazyFrameMultipleFilters(t *testing.T) {
 	df := createTestDataFrameForLazy(t)
 	defer df.Release()
-	
+
 	lazyDf := df.Lazy().
 		Filter(expr.Col("age").Gt(expr.Lit(25))).
 		Filter(expr.Col("salary").Gt(expr.Lit(55000)))
 	defer lazyDf.Release()
-	
+
 	assert.Len(t, lazyDf.operations, 2)
-	
+
 	for _, op := range lazyDf.operations {
 		_, ok := op.(*FilterOperation)
 		assert.True(t, ok)
@@ -218,7 +218,7 @@ func TestLazyFrameMultipleFilters(t *testing.T) {
 func TestLazyFrameComplexChaining(t *testing.T) {
 	df := createTestDataFrameForLazy(t)
 	defer df.Release()
-	
+
 	// Test a complex chain of operations
 	lazyDf := df.Lazy().
 		Filter(expr.Col("active").Eq(expr.Lit(true))).
@@ -227,16 +227,16 @@ func TestLazyFrameComplexChaining(t *testing.T) {
 		Select("name", "age", "total_comp").
 		Filter(expr.Col("age").Gt(expr.Lit(27)))
 	defer lazyDf.Release()
-	
+
 	assert.Len(t, lazyDf.operations, 5)
-	
+
 	// Verify operation order and types
 	assert.IsType(t, &FilterOperation{}, lazyDf.operations[0])
 	assert.IsType(t, &WithColumnOperation{}, lazyDf.operations[1])
 	assert.IsType(t, &WithColumnOperation{}, lazyDf.operations[2])
 	assert.IsType(t, &SelectOperation{}, lazyDf.operations[3])
 	assert.IsType(t, &FilterOperation{}, lazyDf.operations[4])
-	
+
 	// Test string representation
 	str := lazyDf.String()
 	lines := strings.Split(str, "\n")
