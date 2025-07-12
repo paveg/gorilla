@@ -7,9 +7,9 @@ import (
 	"github.com/apache/arrow/go/v17/arrow"
 	"github.com/apache/arrow/go/v17/arrow/array"
 	"github.com/apache/arrow/go/v17/arrow/memory"
-	"github.com/paveg/gorilla/internal/expr"
+	"github.com/paveg/gorilla/expr"
 	"github.com/paveg/gorilla/internal/parallel"
-	"github.com/paveg/gorilla/internal/series"
+	"github.com/paveg/gorilla/series"
 )
 
 // LazyOperation represents a deferred operation on a DataFrame

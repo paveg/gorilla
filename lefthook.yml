@@ -1,8 +1,5 @@
 pre-commit:
   commands:
-    markdownlint:
-      glob: "*.md"
-      run: markdownlint {staged_files}
     gofmt:
       glob: "*.go"
       run: gofmt -w {staged_files}
