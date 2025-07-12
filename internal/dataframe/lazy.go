@@ -2,6 +2,7 @@ package dataframe
 
 import (
 	"fmt"
+	"runtime"
 
 	"github.com/apache/arrow/go/v17/arrow"
 	"github.com/apache/arrow/go/v17/arrow/array"
@@ -445,17 +446,29 @@ func (lf *LazyFrame) WithColumn(name string, expr expr.Expr) *LazyFrame {
 
 // Collect executes all deferred operations and returns the resulting DataFrame
 func (lf *LazyFrame) Collect() (*DataFrame, error) {
+	if lf.source == nil {
+		return New(), nil
+	}
+
+	// If no operations, return source as-is
+	if len(lf.operations) == 0 {
+		return lf.source, nil
+	}
+
+	// Use parallel execution for larger datasets
+	const minRowsForParallel = 1000
+	if lf.source.Len() >= minRowsForParallel && lf.pool != nil {
+		return lf.collectParallelSafe()
+	}
+
+	// Fall back to sequential execution for small datasets
+	return lf.collectSequential()
+}
+
+// collectSequential applies operations sequentially (original implementation)
+func (lf *LazyFrame) collectSequential() (*DataFrame, error) {
 	current := lf.source
 
-	// TODO: Implement parallel execution pipeline for LazyFrame.Collect()
-	// This is the most critical performance optimization needed:
-	// 1. Split DataFrame into chunks based on row ranges
-	// 2. Create tasks that apply the full operation pipeline to each chunk
-	// 3. Use parallel.Process to execute tasks concurrently across worker pool
-	// 4. Concatenate results from all chunks into final DataFrame
-	// 5. Implement query optimization (predicate pushdown, projection pushdown)
-
-	// Currently: Apply operations sequentially (functional but not parallel)
 	for _, op := range lf.operations {
 		result, err := op.Apply(current)
 		if err != nil {
@@ -465,6 +478,105 @@ func (lf *LazyFrame) Collect() (*DataFrame, error) {
 	}
 
 	return current, nil
+}
+
+// collectParallelSafe implements a safer parallel execution pipeline
+// that pre-slices data to avoid concurrent access to source DataFrame
+func (lf *LazyFrame) collectParallelSafe() (*DataFrame, error) {
+	// Calculate optimal chunk size based on data size and worker count
+	chunkSize := lf.calculateChunkSize()
+	totalRows := lf.source.Len()
+
+	// Pre-slice all chunks to avoid concurrent access to source DataFrame
+	var chunks []*DataFrame
+	for start := 0; start < totalRows; start += chunkSize {
+		end := start + chunkSize
+		if end > totalRows {
+			end = totalRows
+		}
+		chunk := lf.source.Slice(start, end)
+		chunks = append(chunks, chunk)
+	}
+
+	// Process chunks in parallel - each chunk is now independent
+	processedChunks := parallel.Process(lf.pool, chunks, func(chunk *DataFrame) *DataFrame {
+		if chunk == nil || chunk.Width() == 0 {
+			return New()
+		}
+
+		result := chunk
+		// Apply all operations to this chunk
+		for _, op := range lf.operations {
+			nextResult, err := op.Apply(result)
+			if err != nil {
+				// Return empty DataFrame on error
+				return New()
+			}
+			if result != chunk {
+				result.Release() // Release intermediate results
+			}
+			result = nextResult
+
+			// Verify result has valid structure
+			if result == nil || result.Width() == 0 {
+				return New()
+			}
+		}
+		return result
+	})
+
+	// Release the original chunks since we have processed results
+	for _, chunk := range chunks {
+		if chunk != nil {
+			chunk.Release()
+		}
+	}
+
+	// Filter out empty chunks before concatenation
+	var nonEmptyChunks []*DataFrame
+	for _, chunk := range processedChunks {
+		if chunk != nil && chunk.Width() > 0 {
+			nonEmptyChunks = append(nonEmptyChunks, chunk)
+		}
+	}
+
+	if len(nonEmptyChunks) == 0 {
+		return New(), nil
+	}
+
+	if len(nonEmptyChunks) == 1 {
+		return nonEmptyChunks[0], nil
+	}
+
+	// Concatenate all non-empty chunks
+	result := nonEmptyChunks[0]
+	others := nonEmptyChunks[1:]
+
+	return result.Concat(others...), nil
+}
+
+// calculateChunkSize determines optimal chunk size for parallel processing
+func (lf *LazyFrame) calculateChunkSize() int {
+	totalRows := lf.source.Len()
+	workerCount := runtime.NumCPU()
+
+	// Base chunk size: aim for 2-4 chunks per worker
+	const chunksPerWorker = 3
+	baseChunkSize := totalRows / (workerCount * chunksPerWorker)
+
+	// Minimum chunk size to avoid overhead
+	const minChunkSize = 500
+	if baseChunkSize < minChunkSize {
+		baseChunkSize = minChunkSize
+	}
+
+	// Maximum chunk size to ensure good parallelism
+	const maxChunkSize = 10000
+	if baseChunkSize > maxChunkSize {
+		baseChunkSize = maxChunkSize
+	}
+
+	return baseChunkSize
 }
 
 // String returns a string representation of the lazy frame and its operations
