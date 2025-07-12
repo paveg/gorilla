@@ -82,7 +82,6 @@ func demonstrateLazyEvaluation(df *dataframe.DataFrame) {
 		log.Fatal(err)
 	}
 	defer result.Release()
-	defer lazyDf.Release()
 
 	fmt.Println("Result after filtering for age > 30 and adding a bonus column:")
 	fmt.Println(result)
@@ -102,7 +101,6 @@ func demonstrateChaining(df *dataframe.DataFrame) {
 		log.Fatal(err)
 	}
 	defer result.Release()
-	defer lazyDf.Release()
 
 	fmt.Println("Result of finding employees < 35:")
 	fmt.Println(result)
