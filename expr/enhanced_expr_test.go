@@ -184,6 +184,34 @@ func TestConditionalExpressions(t *testing.T) {
 		assert.Contains(t, caseExpr.String(), "case")
 		assert.Contains(t, caseExpr.String(), "when")
 		assert.Contains(t, caseExpr.String(), "else")
+
+		// Test Whens() method returns correct slice of CaseWhen structs
+		whens := caseExpr.Whens()
+		assert.Len(t, whens, 2, "Should have exactly 2 WHEN clauses")
+
+		// Verify the overall string representation contains expected WHEN clauses
+		caseStr := caseExpr.String()
+		assert.Contains(t, caseStr, "when (col(test_col) < lit(5)) then lit(small)", "Should contain first WHEN clause")
+		assert.Contains(t, caseStr, "when (col(test_col) < lit(10)) then lit(medium)", "Should contain second WHEN clause")
+
+		// Test ElseValue() method returns correct else value
+		elseValue := caseExpr.ElseValue()
+		assert.NotNil(t, elseValue, "Else value should not be nil")
+		assert.Equal(t, ExprLiteral, elseValue.Type(), "Else value should be a literal expression")
+		assert.Equal(t, "lit(large)", elseValue.String(), "Else value should match expected literal")
+
+		// Verify ElseValue is the same as the expected literal
+		expectedElse := Lit("large")
+		assert.Equal(t, expectedElse.String(), elseValue.String(), "ElseValue should match the expected else literal")
+		assert.Equal(t, expectedElse.Type(), elseValue.Type(), "ElseValue should have same type as expected literal")
+
+		// Test that Whens() returns the expected number and verify structure integrity
+		assert.Equal(t, 2, len(whens), "Should return exactly 2 WHEN clauses")
+		
+		// Test edge case: CASE expression without else clause
+		caseWithoutElse := Case().When(col.Eq(Lit(1)), Lit("one"))
+		assert.Len(t, caseWithoutElse.Whens(), 1, "Should have 1 WHEN clause")
+		assert.Nil(t, caseWithoutElse.ElseValue(), "ElseValue should be nil when no ELSE clause is provided")
 	})
 }
 

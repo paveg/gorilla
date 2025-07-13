@@ -432,6 +432,10 @@ func (c *CaseExpr) Whens() []CaseWhen {
 	return c.whens
 }
 
+func (c *CaseExpr) ElseValue() Expr {
+	return c.elseValue
+}
+
 // When adds a condition-value pair to the case expression
 func (c *CaseExpr) When(condition, value Expr) *CaseExpr {
 	newWhens := make([]CaseWhen, len(c.whens)+1)
