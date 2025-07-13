@@ -1,7 +1,7 @@
 package dataframe
 
 import (
-	"github.com/apache/arrow/go/v17/arrow"
+	"github.com/apache/arrow-go/v18/arrow"
 )
 
 // ISeries provides a type-erased interface for Series of any type
