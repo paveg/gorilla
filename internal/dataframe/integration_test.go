@@ -19,6 +19,7 @@ func createIntegrationTestDataFrame(t *testing.T) *DataFrame {
 	salaries := series.New("salary", []float64{50000, 60000, 70000, 55000, 65000}, mem)
 	active := series.New("active", []bool{true, true, false, true, true}, mem)
 
+	// DataFrame takes ownership of the series - no need to release them manually
 	return New(names, ages, salaries, active)
 }
 

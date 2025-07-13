@@ -17,6 +17,7 @@ func TestDataFrameGroupBy(t *testing.T) {
 	prices := series.New("price", []float64{1.5, 2.0, 3.5, 4.0, 5.5}, mem)
 
 	df := New(categories, values, prices)
+	defer df.Release()
 
 	// Test GroupBy creation
 	gb := df.GroupBy("category")
@@ -47,9 +48,11 @@ func TestGroupBySum(t *testing.T) {
 	values := series.New("value", []int64{10, 20, 30, 40, 50}, mem)
 
 	df := New(categories, values)
+	defer df.Release()
 
 	// Test sum aggregation
 	result := df.GroupBy("category").Agg(expr.Sum(expr.Col("value")))
+	defer result.Release()
 
 	if result.Len() != 2 {
 		t.Errorf("Expected 2 rows in result, got %d", result.Len())
@@ -76,9 +79,11 @@ func TestGroupByCount(t *testing.T) {
 	values := series.New("value", []int64{10, 20, 30, 40, 50}, mem)
 
 	df := New(categories, values)
+	defer df.Release()
 
 	// Test count aggregation
 	result := df.GroupBy("category").Agg(expr.Count(expr.Col("value")))
+	defer result.Release()
 
 	if result.Len() != 2 {
 		t.Errorf("Expected 2 rows in result, got %d", result.Len())
@@ -108,9 +113,11 @@ func TestGroupByMean(t *testing.T) {
 	values := series.New("value", []float64{10.0, 20.0, 30.0, 40.0}, mem)
 
 	df := New(categories, values)
+	defer df.Release()
 
 	// Test mean aggregation
 	result := df.GroupBy("category").Agg(expr.Mean(expr.Col("value")))
+	defer result.Release()
 
 	if result.Len() != 2 {
 		t.Errorf("Expected 2 rows in result, got %d", result.Len())
@@ -128,6 +135,7 @@ func TestGroupByMultipleAggregations(t *testing.T) {
 	values := series.New("value", []int64{10, 20, 30, 40, 50}, mem)
 
 	df := New(categories, values)
+	defer df.Release()
 
 	// Test multiple aggregations
 	result := df.GroupBy("category").Agg(
@@ -135,6 +143,7 @@ func TestGroupByMultipleAggregations(t *testing.T) {
 		expr.Count(expr.Col("value")),
 		expr.Mean(expr.Col("value")),
 	)
+	defer result.Release()
 
 	expectedColumns := []string{"category", "sum_value", "count_value", "mean_value"}
 	for _, col := range expectedColumns {
@@ -155,11 +164,13 @@ func TestGroupByAggregationAlias(t *testing.T) {
 	values := series.New("value", []int64{10, 20, 30}, mem)
 
 	df := New(categories, values)
+	defer df.Release()
 
 	// Test aggregation with alias
 	result := df.GroupBy("category").Agg(
 		expr.Sum(expr.Col("value")).As("total"),
 	)
+	defer result.Release()
 
 	if !result.HasColumn("total") {
 		t.Error("Result should have 'total' column (aliased)")
@@ -178,9 +189,11 @@ func TestGroupByMultipleColumns(t *testing.T) {
 	values := series.New("value", []int64{10, 20, 30, 40}, mem)
 
 	df := New(category1, category2, values)
+	defer df.Release()
 
 	// Test grouping by multiple columns
 	result := df.GroupBy("cat1", "cat2").Agg(expr.Sum(expr.Col("value")))
+	defer result.Release()
 
 	if result.Len() != 4 {
 		t.Errorf("Expected 4 groups (A-X, A-Y, B-X, B-Y), got %d", result.Len())
@@ -201,12 +214,14 @@ func TestLazyFrameGroupBy(t *testing.T) {
 	values := series.New("value", []int64{10, 20, 30, 40, 50}, mem)
 
 	df := New(categories, values)
+	defer df.Release()
 
 	// Test lazy GroupBy with sum
 	result, err := df.Lazy().GroupBy("category").Sum("value").Collect()
 	if err != nil {
 		t.Fatalf("Error collecting lazy groupby: %v", err)
 	}
+	defer result.Release()
 
 	if result.Len() != 2 {
 		t.Errorf("Expected 2 rows in result, got %d", result.Len())
@@ -225,6 +240,7 @@ func TestLazyFrameGroupByChain(t *testing.T) {
 	enabled := series.New("enabled", []bool{true, true, false, true, true}, mem)
 
 	df := New(categories, values, enabled)
+	defer df.Release()
 
 	// Test chaining operations: filter then group by
 	result, err := df.Lazy().
@@ -236,6 +252,7 @@ func TestLazyFrameGroupByChain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error collecting chained operations: %v", err)
 	}
+	defer result.Release()
 
 	if result.Len() != 2 {
 		t.Errorf("Expected 2 rows in result, got %d", result.Len())
@@ -247,6 +264,7 @@ func TestGroupByEmptyDataFrame(t *testing.T) {
 
 	// Test GroupBy on empty DataFrame
 	result := df.GroupBy("nonexistent").Agg(expr.Sum(expr.Col("value")))
+	defer result.Release()
 
 	if result.Len() != 0 {
 		t.Errorf("Expected 0 rows for empty DataFrame, got %d", result.Len())
@@ -258,9 +276,11 @@ func TestGroupByNonexistentColumn(t *testing.T) {
 
 	categories := series.New("category", []string{"A", "B"}, mem)
 	df := New(categories)
+	defer df.Release()
 
 	// Test GroupBy with non-existent column
 	result := df.GroupBy("nonexistent").Agg(expr.Sum(expr.Col("value")))
+	defer result.Release()
 
 	if result.Len() != 0 {
 		t.Errorf("Expected 0 rows for non-existent column, got %d", result.Len())
