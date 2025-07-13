@@ -207,7 +207,7 @@ func TestConditionalExpressions(t *testing.T) {
 
 		// Test that Whens() returns the expected number and verify structure integrity
 		assert.Equal(t, 2, len(whens), "Should return exactly 2 WHEN clauses")
-		
+
 		// Test edge case: CASE expression without else clause
 		caseWithoutElse := Case().When(col.Eq(Lit(1)), Lit("one"))
 		assert.Len(t, caseWithoutElse.Whens(), 1, "Should have 1 WHEN clause")
