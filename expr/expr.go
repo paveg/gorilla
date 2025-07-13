@@ -408,7 +408,7 @@ type CaseWhen struct {
 
 // CaseExpr represents a CASE expression with multiple WHEN clauses
 type CaseExpr struct {
-	whens []CaseWhen
+	whens     []CaseWhen
 	elseValue Expr
 }
 
@@ -439,7 +439,7 @@ func (c *CaseExpr) When(condition, value Expr) *CaseExpr {
 	newWhens[len(c.whens)] = CaseWhen{condition: condition, value: value}
 
 	return &CaseExpr{
-		whens: newWhens,
+		whens:     newWhens,
 		elseValue: c.elseValue,
 	}
 }
@@ -447,7 +447,7 @@ func (c *CaseExpr) When(condition, value Expr) *CaseExpr {
 // Else sets the default value for the case expression
 func (c *CaseExpr) Else(value Expr) *CaseExpr {
 	return &CaseExpr{
-		whens: c.whens,
+		whens:     c.whens,
 		elseValue: value,
 	}
 }
