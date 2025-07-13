@@ -3,6 +3,8 @@
 package gorilla
 
 import (
+	"fmt"
+
 	"github.com/apache/arrow/go/v17/arrow"
 	"github.com/apache/arrow/go/v17/arrow/memory"
 	"github.com/paveg/gorilla/internal/dataframe"
@@ -347,42 +349,42 @@ func (e Expression) Eq(other Expression) Expression {
 	if colExpr, ok := e.expr.(*expr.ColumnExpr); ok {
 		return Expression{expr: colExpr.Eq(other.expr)}
 	}
-	panic("Eq operation only supported on column expressions")
+	panic(fmt.Sprintf("Eq operation only supported on column expressions, got %T", e.expr))
 }
 
 func (e Expression) Ne(other Expression) Expression {
 	if colExpr, ok := e.expr.(*expr.ColumnExpr); ok {
 		return Expression{expr: colExpr.Ne(other.expr)}
 	}
-	panic("Ne operation only supported on column expressions")
+	panic(fmt.Sprintf("Ne operation only supported on column expressions, got %T", e.expr))
 }
 
 func (e Expression) Lt(other Expression) Expression {
 	if colExpr, ok := e.expr.(*expr.ColumnExpr); ok {
 		return Expression{expr: colExpr.Lt(other.expr)}
 	}
-	panic("Lt operation only supported on column expressions")
+	panic(fmt.Sprintf("Lt operation only supported on column expressions, got %T", e.expr))
 }
 
 func (e Expression) Le(other Expression) Expression {
 	if colExpr, ok := e.expr.(*expr.ColumnExpr); ok {
 		return Expression{expr: colExpr.Le(other.expr)}
 	}
-	panic("Le operation only supported on column expressions")
+	panic(fmt.Sprintf("Le operation only supported on column expressions, got %T", e.expr))
 }
 
 func (e Expression) Gt(other Expression) Expression {
 	if colExpr, ok := e.expr.(*expr.ColumnExpr); ok {
 		return Expression{expr: colExpr.Gt(other.expr)}
 	}
-	panic("Gt operation only supported on column expressions")
+	panic(fmt.Sprintf("Gt operation only supported on column expressions, got %T", e.expr))
 }
 
 func (e Expression) Ge(other Expression) Expression {
 	if colExpr, ok := e.expr.(*expr.ColumnExpr); ok {
 		return Expression{expr: colExpr.Ge(other.expr)}
 	}
-	panic("Ge operation only supported on column expressions")
+	panic(fmt.Sprintf("Ge operation only supported on column expressions, got %T", e.expr))
 }
 
 // Add returns an addition expression.
@@ -394,7 +396,7 @@ func (e Expression) Add(other Expression) Expression {
 	case *expr.BinaryExpr:
 		return Expression{expr: exprType.Add(other.expr)}
 	default:
-		panic("Add operation only supported on column and binary expressions")
+		panic(fmt.Sprintf("Add operation only supported on column and binary expressions, got %T", e.expr))
 	}
 }
 
@@ -405,7 +407,7 @@ func (e Expression) Sub(other Expression) Expression {
 	case *expr.BinaryExpr:
 		return Expression{expr: exprType.Sub(other.expr)}
 	default:
-		panic("Sub operation only supported on column and binary expressions")
+		panic(fmt.Sprintf("Sub operation only supported on column and binary expressions, got %T", e.expr))
 	}
 }
 
@@ -416,7 +418,7 @@ func (e Expression) Mul(other Expression) Expression {
 	case *expr.BinaryExpr:
 		return Expression{expr: exprType.Mul(other.expr)}
 	default:
-		panic("Mul operation only supported on column and binary expressions")
+		panic(fmt.Sprintf("Mul operation only supported on column and binary expressions, got %T", e.expr))
 	}
 }
 
@@ -427,7 +429,7 @@ func (e Expression) Div(other Expression) Expression {
 	case *expr.BinaryExpr:
 		return Expression{expr: exprType.Div(other.expr)}
 	default:
-		panic("Div operation only supported on column and binary expressions")
+		panic(fmt.Sprintf("Div operation only supported on column and binary expressions, got %T", e.expr))
 	}
 }
 
@@ -437,14 +439,14 @@ func (e Expression) And(other Expression) Expression {
 	if binExpr, ok := e.expr.(*expr.BinaryExpr); ok {
 		return Expression{expr: binExpr.And(other.expr)}
 	}
-	panic("And operation only supported on binary expressions")
+	panic(fmt.Sprintf("And operation only supported on binary expressions, got %T", e.expr))
 }
 
 func (e Expression) Or(other Expression) Expression {
 	if binExpr, ok := e.expr.(*expr.BinaryExpr); ok {
 		return Expression{expr: binExpr.Or(other.expr)}
 	}
-	panic("Or operation only supported on binary expressions")
+	panic(fmt.Sprintf("Or operation only supported on binary expressions, got %T", e.expr))
 }
 
 // AggregationExpression methods
