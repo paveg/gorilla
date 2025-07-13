@@ -135,6 +135,16 @@ func (d *DataFrame) Slice(start, end int) *DataFrame {
 	return &DataFrame{df: d.df.Slice(start, end)}
 }
 
+// Sort returns a new DataFrame sorted by the specified column.
+func (d *DataFrame) Sort(column string, ascending bool) *DataFrame {
+	return &DataFrame{df: d.df.Sort(column, ascending)}
+}
+
+// SortBy returns a new DataFrame sorted by multiple columns.
+func (d *DataFrame) SortBy(columns []string, ascending []bool) *DataFrame {
+	return &DataFrame{df: d.df.SortBy(columns, ascending)}
+}
+
 // Concat concatenates this DataFrame with others.
 func (d *DataFrame) Concat(others ...*DataFrame) *DataFrame {
 	internalDfs := make([]*dataframe.DataFrame, len(others))
@@ -190,6 +200,16 @@ func (lf *LazyFrame) Select(columns ...string) *LazyFrame {
 // WithColumn adds a new column to the LazyFrame.
 func (lf *LazyFrame) WithColumn(name string, expr Expression) *LazyFrame {
 	return &LazyFrame{lf: lf.lf.WithColumn(name, expr.expr)}
+}
+
+// Sort adds a sort operation to the LazyFrame.
+func (lf *LazyFrame) Sort(column string, ascending bool) *LazyFrame {
+	return &LazyFrame{lf: lf.lf.Sort(column, ascending)}
+}
+
+// SortBy adds a multi-column sort operation to the LazyFrame.
+func (lf *LazyFrame) SortBy(columns []string, ascending []bool) *LazyFrame {
+	return &LazyFrame{lf: lf.lf.SortBy(columns, ascending)}
 }
 
 // GroupBy adds a group by operation to the LazyFrame.

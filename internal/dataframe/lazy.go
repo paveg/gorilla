@@ -3,6 +3,7 @@ package dataframe
 import (
 	"fmt"
 	"runtime"
+	"strings"
 
 	"github.com/apache/arrow/go/v17/arrow"
 	"github.com/apache/arrow/go/v17/arrow/array"
@@ -398,6 +399,28 @@ func (w *WithColumnOperation) String() string {
 	return fmt.Sprintf("with_column(%s, %s)", w.name, w.expr.String())
 }
 
+// SortOperation represents a sort operation
+type SortOperation struct {
+	columns   []string
+	ascending []bool
+}
+
+func (s *SortOperation) Apply(df *DataFrame) (*DataFrame, error) {
+	return df.SortBy(s.columns, s.ascending), nil
+}
+
+func (s *SortOperation) String() string {
+	var directions []string
+	for i, asc := range s.ascending {
+		if asc {
+			directions = append(directions, fmt.Sprintf("%s ASC", s.columns[i]))
+		} else {
+			directions = append(directions, fmt.Sprintf("%s DESC", s.columns[i]))
+		}
+	}
+	return fmt.Sprintf("sort_by(%s)", strings.Join(directions, ", "))
+}
+
 // GroupByOperation represents a group by and aggregation operation
 type GroupByOperation struct {
 	groupByCols  []string
@@ -463,6 +486,21 @@ func (lf *LazyFrame) Select(columns ...string) *LazyFrame {
 // WithColumn adds a column creation/modification operation to the lazy frame
 func (lf *LazyFrame) WithColumn(name string, expr expr.Expr) *LazyFrame {
 	newOps := append(lf.operations, &WithColumnOperation{name: name, expr: expr})
+	return &LazyFrame{
+		source:     lf.source,
+		operations: newOps,
+		pool:       lf.pool,
+	}
+}
+
+// Sort adds a sort operation to the lazy frame
+func (lf *LazyFrame) Sort(column string, ascending bool) *LazyFrame {
+	return lf.SortBy([]string{column}, []bool{ascending})
+}
+
+// SortBy adds a multi-column sort operation to the lazy frame
+func (lf *LazyFrame) SortBy(columns []string, ascending []bool) *LazyFrame {
+	newOps := append(lf.operations, &SortOperation{columns: columns, ascending: ascending})
 	return &LazyFrame{
 		source:     lf.source,
 		operations: newOps,

@@ -2,8 +2,10 @@
 package dataframe
 
 import (
+	"cmp"
 	"fmt"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/apache/arrow/go/v17/arrow"
@@ -182,6 +184,47 @@ func (df *DataFrame) Slice(start, end int) *DataFrame {
 	}
 
 	return New(slicedSeries...)
+}
+
+// Sort returns a new DataFrame sorted by the specified column
+func (df *DataFrame) Sort(column string, ascending bool) *DataFrame {
+	if !df.HasColumn(column) {
+		panic(fmt.Sprintf("column %s does not exist", column))
+	}
+
+	return df.SortBy([]string{column}, []bool{ascending})
+}
+
+// SortBy returns a new DataFrame sorted by multiple columns
+func (df *DataFrame) SortBy(columns []string, ascending []bool) *DataFrame {
+	if len(columns) != len(ascending) {
+		panic("columns and ascending arrays must have same length")
+	}
+
+	for _, column := range columns {
+		if !df.HasColumn(column) {
+			panic(fmt.Sprintf("column %s does not exist", column))
+		}
+	}
+
+	// Get all row indices
+	rowCount := df.Len()
+	if rowCount == 0 {
+		return New() // Return empty DataFrame
+	}
+
+	// Create sorted indices using parallel or sequential approach
+	const minRowsForParallelSort = 1000
+	var sortedIndices []int
+
+	if rowCount >= minRowsForParallelSort {
+		sortedIndices = df.sortParallel(columns, ascending)
+	} else {
+		sortedIndices = df.sortSequential(columns, ascending)
+	}
+
+	// Build new DataFrame with sorted data
+	return df.buildSortedDataFrame(sortedIndices)
 }
 
 // sliceSeries creates a new series containing elements from start to end
@@ -1283,4 +1326,271 @@ func (df *DataFrame) buildDefaultJoinColumn(
 		values[i] = ""
 	}
 	return series.New(name, values, mem)
+}
+
+// sortSequential performs sequential sorting using standard library sort
+func (df *DataFrame) sortSequential(columns []string, ascending []bool) []int {
+	rowCount := df.Len()
+	indices := make([]int, rowCount)
+	for i := range indices {
+		indices[i] = i
+	}
+
+	// Create comparison function for multi-column sorting
+	sort.Slice(indices, func(i, j int) bool {
+		return df.compareRows(indices[i], indices[j], columns, ascending)
+	})
+
+	return indices
+}
+
+// chunkResult represents a sorted chunk with its starting index
+type chunkResult struct {
+	startIdx int
+	indices  []int
+}
+
+// sortParallel performs parallel merge sort using worker pool
+func (df *DataFrame) sortParallel(columns []string, ascending []bool) []int {
+	rowCount := df.Len()
+
+	// Calculate chunk size based on worker count and data size
+	numWorkers := runtime.NumCPU()
+	minChunkSize := 500
+	maxChunkSize := 10000
+
+	chunkSize := rowCount / numWorkers
+	if chunkSize < minChunkSize {
+		chunkSize = minChunkSize
+	} else if chunkSize > maxChunkSize {
+		chunkSize = maxChunkSize
+	}
+
+	// If chunks would be too small, fall back to sequential sort
+	const minParallelChunks = 2
+	if rowCount/chunkSize < minParallelChunks {
+		return df.sortSequential(columns, ascending)
+	}
+
+	// Create chunks of indices for parallel sorting
+
+	chunks := make([]chunkResult, 0)
+	for start := 0; start < rowCount; start += chunkSize {
+		end := start + chunkSize
+		if end > rowCount {
+			end = rowCount
+		}
+
+		// Create indices for this chunk
+		chunkIndices := make([]int, end-start)
+		for i := range chunkIndices {
+			chunkIndices[i] = start + i
+		}
+
+		chunks = append(chunks, chunkResult{
+			startIdx: start,
+			indices:  chunkIndices,
+		})
+	}
+
+	// Create a worker pool for parallel processing
+	pool := parallel.NewWorkerPool(numWorkers)
+	defer pool.Close()
+
+	// Sort each chunk in parallel using the existing ProcessIndexed function
+	sortedChunks := parallel.ProcessIndexed(pool, chunks, func(index int, chunk chunkResult) chunkResult {
+		// Sort this chunk's indices
+		sort.Slice(chunk.indices, func(i, j int) bool {
+			return df.compareRows(chunk.indices[i], chunk.indices[j], columns, ascending)
+		})
+		return chunk
+	})
+
+	// Merge the sorted chunks
+	return df.mergeSortedChunks(sortedChunks, columns, ascending)
+}
+
+// compareRows compares two rows based on multiple columns and sort directions
+func (df *DataFrame) compareRows(rowA, rowB int, columns []string, ascending []bool) bool {
+	for i, column := range columns {
+		series, exists := df.columns[column]
+		if !exists {
+			continue
+		}
+
+		cmp := df.compareSeriesValues(series, rowA, rowB)
+		if cmp == 0 {
+			continue // Equal, check next column
+		}
+
+		if ascending[i] {
+			return cmp < 0
+		} else {
+			return cmp > 0
+		}
+	}
+	return false // All columns equal
+}
+
+// compareSeriesValues compares two values in a series
+func (df *DataFrame) compareSeriesValues(series ISeries, indexA, indexB int) int {
+	arr := series.Array()
+	if arr == nil {
+		return 0
+	}
+	defer arr.Release()
+
+	switch typedArr := arr.(type) {
+	case *array.String:
+		return compareOrderedValues(typedArr.Value(indexA), typedArr.Value(indexB))
+	case *array.Int64:
+		return compareOrderedValues(typedArr.Value(indexA), typedArr.Value(indexB))
+	case *array.Int32:
+		return compareOrderedValues(typedArr.Value(indexA), typedArr.Value(indexB))
+	case *array.Float64:
+		return compareOrderedValues(typedArr.Value(indexA), typedArr.Value(indexB))
+	case *array.Float32:
+		return compareOrderedValues(typedArr.Value(indexA), typedArr.Value(indexB))
+	case *array.Boolean:
+		return df.compareBoolValues(typedArr.Value(indexA), typedArr.Value(indexB))
+	}
+
+	return 0
+}
+
+// compareOrderedValues compares two values of any ordered type
+func compareOrderedValues[T cmp.Ordered](valA, valB T) int {
+	return cmp.Compare(valA, valB)
+}
+
+// compareBoolValues compares two boolean values (false < true)
+func (df *DataFrame) compareBoolValues(valA, valB bool) int {
+	if !valA && valB {
+		return -1
+	} else if valA && !valB {
+		return 1
+	}
+	return 0
+}
+
+// buildSortedDataFrame creates a new DataFrame with rows in sorted order
+func (df *DataFrame) buildSortedDataFrame(sortedIndices []int) *DataFrame {
+	mem := memory.NewGoAllocator()
+	var sortedSeries []ISeries
+
+	for _, colName := range df.order {
+		if series, exists := df.columns[colName]; exists {
+			sortedSeries = append(sortedSeries, df.buildSortedSeries(series, sortedIndices, mem))
+		}
+	}
+
+	return New(sortedSeries...)
+}
+
+// buildSortedSeries creates a new series with values in sorted order
+func (df *DataFrame) buildSortedSeries(s ISeries, sortedIndices []int, mem memory.Allocator) ISeries {
+	arr := s.Array()
+	if arr == nil {
+		return s
+	}
+	defer arr.Release()
+
+	switch typedArr := arr.(type) {
+	case *array.String:
+		values := make([]string, len(sortedIndices))
+		for i, idx := range sortedIndices {
+			values[i] = typedArr.Value(idx)
+		}
+		return series.New(s.Name(), values, mem)
+
+	case *array.Int64:
+		values := make([]int64, len(sortedIndices))
+		for i, idx := range sortedIndices {
+			values[i] = typedArr.Value(idx)
+		}
+		return series.New(s.Name(), values, mem)
+
+	case *array.Int32:
+		values := make([]int32, len(sortedIndices))
+		for i, idx := range sortedIndices {
+			values[i] = typedArr.Value(idx)
+		}
+		return series.New(s.Name(), values, mem)
+
+	case *array.Float64:
+		values := make([]float64, len(sortedIndices))
+		for i, idx := range sortedIndices {
+			values[i] = typedArr.Value(idx)
+		}
+		return series.New(s.Name(), values, mem)
+
+	case *array.Float32:
+		values := make([]float32, len(sortedIndices))
+		for i, idx := range sortedIndices {
+			values[i] = typedArr.Value(idx)
+		}
+		return series.New(s.Name(), values, mem)
+
+	case *array.Boolean:
+		values := make([]bool, len(sortedIndices))
+		for i, idx := range sortedIndices {
+			values[i] = typedArr.Value(idx)
+		}
+		return series.New(s.Name(), values, mem)
+	}
+
+	// Fallback: return original series
+	return s
+}
+
+// mergeSortedChunks merges multiple sorted chunks into a single sorted array
+func (df *DataFrame) mergeSortedChunks(chunks []chunkResult, columns []string, ascending []bool) []int {
+	if len(chunks) == 0 {
+		return []int{}
+	}
+
+	if len(chunks) == 1 {
+		return chunks[0].indices
+	}
+
+	// Calculate total size
+	totalSize := 0
+	for _, chunk := range chunks {
+		totalSize += len(chunk.indices)
+	}
+
+	// Merge chunks using k-way merge algorithm
+	result := make([]int, 0, totalSize)
+
+	// Track current position in each chunk
+	positions := make([]int, len(chunks))
+
+	// Keep merging until all chunks are exhausted
+	for {
+		// Find the chunk with the smallest current element
+		minChunk := -1
+		var minRow int
+
+		for i, chunk := range chunks {
+			if positions[i] < len(chunk.indices) {
+				currentRow := chunk.indices[positions[i]]
+
+				if minChunk == -1 || df.compareRows(currentRow, minRow, columns, ascending) {
+					minChunk = i
+					minRow = currentRow
+				}
+			}
+		}
+
+		// If no chunk has remaining elements, we're done
+		if minChunk == -1 {
+			break
+		}
+
+		// Add the minimum element to result and advance the position
+		result = append(result, minRow)
+		positions[minChunk]++
+	}
+
+	return result
 }
