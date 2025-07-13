@@ -15,6 +15,7 @@ func createTestDataFrame(t *testing.T) *DataFrame {
 	ages := series.New("age", []int64{25, 30, 35}, mem)
 	salaries := series.New("salary", []float64{50000, 60000, 70000}, mem)
 
+	// DataFrame takes ownership of the series - no need to release them manually
 	return New(names, ages, salaries)
 }
 
