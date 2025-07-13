@@ -351,3 +351,58 @@ func TestEvaluateErrors(t *testing.T) {
 	_, err = eval.Evaluate(Lit(complex(1, 2)), columns)
 	assert.Error(t, err)
 }
+
+func TestEvaluateInvalidExpr(t *testing.T) {
+	mem := memory.NewGoAllocator()
+	eval := NewEvaluator(mem)
+	columns := createTestColumns(t, mem)
+	defer func() {
+		for _, arr := range columns {
+			arr.Release()
+		}
+	}()
+
+	t.Run("evaluate invalid expression", func(t *testing.T) {
+		invalidExpr := Invalid("test error message")
+
+		result, err := eval.Evaluate(invalidExpr, columns)
+
+		assert.Nil(t, result)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid expression")
+		assert.Contains(t, err.Error(), "test error message")
+	})
+
+	t.Run("evaluate boolean invalid expression", func(t *testing.T) {
+		invalidExpr := Invalid("boolean operation not supported")
+
+		result, err := eval.EvaluateBoolean(invalidExpr, columns)
+
+		assert.Nil(t, result)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid expression")
+		assert.Contains(t, err.Error(), "boolean operation not supported")
+	})
+
+	t.Run("empty error message", func(t *testing.T) {
+		invalidExpr := Invalid("")
+
+		result, err := eval.Evaluate(invalidExpr, columns)
+
+		assert.Nil(t, result)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid expression")
+	})
+
+	t.Run("complex error scenario", func(t *testing.T) {
+		complexMessage := "Add operation only supported on column and binary expressions, got *expr.LiteralExpr"
+		invalidExpr := Invalid(complexMessage)
+
+		result, err := eval.EvaluateBoolean(invalidExpr, columns)
+
+		assert.Nil(t, result)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid expression")
+		assert.Contains(t, err.Error(), complexMessage)
+	})
+}
