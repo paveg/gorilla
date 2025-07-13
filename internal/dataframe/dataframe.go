@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
@@ -14,6 +15,10 @@ import (
 	"github.com/paveg/gorilla/internal/expr"
 	"github.com/paveg/gorilla/internal/parallel"
 	"github.com/paveg/gorilla/internal/series"
+)
+
+const (
+	nanosPerSecond = 1e9
 )
 
 // DataFrame represents a table of data with typed columns
@@ -264,6 +269,8 @@ func createSlicedSeriesFromArray(
 		return createSlicedFloat64Series(name, typedArr, start, length, mem)
 	case *array.Boolean:
 		return createSlicedBoolSeries(name, typedArr, start, length, mem)
+	case *array.Timestamp:
+		return createSlicedTimestampSeries(name, typedArr, start, length, mem)
 	default:
 		// For unsupported types, return empty series
 		return series.New(name, []string{}, mem)
@@ -313,6 +320,23 @@ func createSlicedBoolSeries(name string, typedArr *array.Boolean, start, length 
 		srcIndex := start + i
 		if srcIndex < typedArr.Len() && !typedArr.IsNull(srcIndex) {
 			values[i] = typedArr.Value(srcIndex)
+		}
+	}
+	return series.New(name, values, mem)
+}
+
+// createSlicedTimestampSeries creates a timestamp series slice
+func createSlicedTimestampSeries(
+	name string, typedArr *array.Timestamp, start, length int, mem memory.Allocator,
+) ISeries {
+	values := make([]time.Time, length)
+	for i := 0; i < length; i++ {
+		srcIndex := start + i
+		if srcIndex < typedArr.Len() && !typedArr.IsNull(srcIndex) {
+			// Convert Arrow timestamp back to time.Time
+			timestamp := typedArr.Value(srcIndex)
+			nanos := int64(timestamp)
+			values[i] = time.Unix(nanos/nanosPerSecond, nanos%nanosPerSecond).UTC()
 		}
 	}
 	return series.New(name, values, mem)

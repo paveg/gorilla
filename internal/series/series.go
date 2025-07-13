@@ -4,10 +4,15 @@ package series
 import (
 	"fmt"
 	"reflect"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+)
+
+const (
+	nanosPerSecond = 1e9
 )
 
 // Series represents a typed data column with Apache Arrow backend
@@ -66,6 +71,16 @@ func New[T any](name string, values []T, mem memory.Allocator) *Series[T] {
 		defer builder.Release()
 		for _, val := range v {
 			builder.Append(val)
+		}
+		arr = builder.NewArray()
+	case []time.Time:
+		// Use timestamp with nanosecond precision and timezone support
+		builder := array.NewTimestampBuilder(mem, &arrow.TimestampType{Unit: arrow.Nanosecond})
+		defer builder.Release()
+		for _, val := range v {
+			// Convert time.Time to nanoseconds since Unix epoch (in UTC)
+			timestamp := arrow.Timestamp(val.UTC().UnixNano())
+			builder.Append(timestamp)
 		}
 		arr = builder.NewArray()
 	default:
@@ -135,6 +150,16 @@ func (s *Series[T]) Values() []T {
 				values[i] = arr.Value(i)
 			}
 		}
+	case *array.Timestamp:
+		if any(result).([]time.Time) != nil {
+			values := any(result).([]time.Time)
+			for i := 0; i < arr.Len(); i++ {
+				// Convert Arrow timestamp (nanoseconds since Unix epoch) back to time.Time in UTC
+				timestamp := arr.Value(i)
+				nanos := int64(timestamp)
+				values[i] = time.Unix(nanos/nanosPerSecond, nanos%nanosPerSecond).UTC()
+			}
+		}
 	default:
 		panic(fmt.Sprintf("unsupported array type: %T", arr))
 	}
@@ -175,6 +200,12 @@ func (s *Series[T]) Value(index int) T {
 	case *array.Boolean:
 		if v, ok := any(&result).(*bool); ok {
 			*v = arr.Value(index)
+		}
+	case *array.Timestamp:
+		if v, ok := any(&result).(*time.Time); ok {
+			timestamp := arr.Value(index)
+			nanos := int64(timestamp)
+			*v = time.Unix(nanos/nanosPerSecond, nanos%nanosPerSecond).UTC()
 		}
 	}
 
