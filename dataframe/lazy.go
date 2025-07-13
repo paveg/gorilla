@@ -709,6 +709,62 @@ func (lf *LazyFrame) String() string {
 	return result
 }
 
+// Join adds a join operation to the lazy frame
+func (lf *LazyFrame) Join(right *LazyFrame, options *JoinOptions) *LazyFrame {
+	op := &JoinOperation{
+		right:   right,
+		options: options,
+	}
+
+	newOps := make([]LazyOperation, len(lf.operations)+1)
+	copy(newOps, lf.operations)
+	newOps[len(lf.operations)] = op
+
+	return &LazyFrame{
+		source:     lf.source,
+		operations: newOps,
+		pool:       lf.pool,
+	}
+}
+
+// JoinOperation represents a join operation
+type JoinOperation struct {
+	right   *LazyFrame
+	options *JoinOptions
+}
+
+func (j *JoinOperation) Apply(df *DataFrame) (*DataFrame, error) {
+	// First collect the right LazyFrame to get the actual DataFrame
+	rightDF, err := j.right.Collect()
+	if err != nil {
+		return nil, fmt.Errorf("collecting right DataFrame for join: %w", err)
+	}
+	defer rightDF.Release()
+
+	// Perform the join
+	return df.Join(rightDF, j.options)
+}
+
+func (j *JoinOperation) String() string {
+	joinTypeName := ""
+	switch j.options.Type {
+	case InnerJoin:
+		joinTypeName = "INNER"
+	case LeftJoin:
+		joinTypeName = "LEFT"
+	case RightJoin:
+		joinTypeName = "RIGHT"
+	case FullOuterJoin:
+		joinTypeName = "FULL OUTER"
+	}
+
+	if j.options.LeftKey != "" && j.options.RightKey != "" {
+		return fmt.Sprintf("%s JOIN ON %s = %s", joinTypeName, j.options.LeftKey, j.options.RightKey)
+	}
+
+	return fmt.Sprintf("%s JOIN ON %v = %v", joinTypeName, j.options.LeftKeys, j.options.RightKeys)
+}
+
 // Release releases resources
 func (lf *LazyFrame) Release() {
 	if lf.pool != nil {

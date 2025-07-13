@@ -20,6 +20,25 @@ type DataFrame struct {
 	order   []string // Maintains column order
 }
 
+// JoinType represents the type of join operation
+type JoinType int
+
+const (
+	InnerJoin JoinType = iota
+	LeftJoin
+	RightJoin
+	FullOuterJoin
+)
+
+// JoinOptions specifies parameters for join operations
+type JoinOptions struct {
+	Type      JoinType
+	LeftKey   string   // Single join key for left DataFrame
+	RightKey  string   // Single join key for right DataFrame
+	LeftKeys  []string // Multiple join keys for left DataFrame
+	RightKeys []string // Multiple join keys for right DataFrame
+}
+
 // New creates a new DataFrame from a slice of ISeries
 func New(series ...ISeries) *DataFrame {
 	columns := make(map[string]ISeries)
@@ -857,5 +876,411 @@ func (gb *GroupBy) createAggregationSeries(
 	}
 
 	// For other aggregations, return float64 series
+	return series.New(name, values, mem)
+}
+
+// Join performs a join operation between two DataFrames
+func (df *DataFrame) Join(right *DataFrame, options *JoinOptions) (*DataFrame, error) {
+	// Determine join keys
+	leftKeys, rightKeys := normalizeJoinKeys(options)
+
+	if len(leftKeys) != len(rightKeys) {
+		return nil, fmt.Errorf("number of left keys (%d) must match number of right keys (%d)",
+			len(leftKeys), len(rightKeys))
+	}
+
+	// Validate that join keys exist in both DataFrames
+	if err := validateJoinKeys(df, right, leftKeys, rightKeys); err != nil {
+		return nil, err
+	}
+
+	// Use parallel execution for large datasets
+	const parallelThreshold = 1000
+	useParallel := df.Len() >= parallelThreshold || right.Len() >= parallelThreshold
+
+	if useParallel {
+		return df.parallelJoin(right, leftKeys, rightKeys, options.Type)
+	}
+
+	return df.sequentialJoin(right, leftKeys, rightKeys, options.Type)
+}
+
+// normalizeJoinKeys extracts the actual keys to use for joining
+func normalizeJoinKeys(options *JoinOptions) ([]string, []string) {
+	if len(options.LeftKeys) > 0 && len(options.RightKeys) > 0 {
+		return options.LeftKeys, options.RightKeys
+	}
+	return []string{options.LeftKey}, []string{options.RightKey}
+}
+
+// validateJoinKeys ensures all join keys exist in both DataFrames
+func validateJoinKeys(left, right *DataFrame, leftKeys, rightKeys []string) error {
+	for _, key := range leftKeys {
+		if !left.HasColumn(key) {
+			return fmt.Errorf("left DataFrame missing join key: %s", key)
+		}
+	}
+
+	for _, key := range rightKeys {
+		if !right.HasColumn(key) {
+			return fmt.Errorf("right DataFrame missing join key: %s", key)
+		}
+	}
+
+	return nil
+}
+
+// sequentialJoin performs join operation using sequential hash-based algorithm
+func (df *DataFrame) sequentialJoin(
+	right *DataFrame, leftKeys, rightKeys []string, joinType JoinType,
+) (*DataFrame, error) {
+	mem := memory.NewGoAllocator()
+
+	// Build hash map from right DataFrame
+	rightHashMap := make(map[string][]int)
+	for i := 0; i < right.Len(); i++ {
+		key := buildJoinKey(right, rightKeys, i)
+		rightHashMap[key] = append(rightHashMap[key], i)
+	}
+
+	// Collect join results
+	var leftIndices, rightIndices []int
+
+	switch joinType {
+	case InnerJoin:
+		leftIndices, rightIndices = df.performInnerJoin(rightHashMap, leftKeys)
+	case LeftJoin:
+		leftIndices, rightIndices = df.performLeftJoin(rightHashMap, leftKeys)
+	case RightJoin:
+		leftIndices, rightIndices = df.performRightJoin(right, rightHashMap, leftKeys)
+	case FullOuterJoin:
+		leftIndices, rightIndices = df.performFullOuterJoin(right, rightHashMap, leftKeys)
+	default:
+		return nil, fmt.Errorf("unsupported join type: %v", joinType)
+	}
+
+	// Build result DataFrame
+	return df.buildJoinResult(right, leftIndices, rightIndices, mem)
+}
+
+// parallelJoin performs join operation using parallel hash-based algorithm
+func (df *DataFrame) parallelJoin(
+	right *DataFrame, leftKeys, rightKeys []string, joinType JoinType,
+) (*DataFrame, error) {
+	// For now, fall back to sequential join
+	// TODO: Implement true parallel join with worker pools
+	return df.sequentialJoin(right, leftKeys, rightKeys, joinType)
+}
+
+// buildJoinKey creates a composite key from multiple columns at given row index
+func buildJoinKey(df *DataFrame, keys []string, rowIndex int) string {
+	if len(keys) == 1 {
+		series, exists := df.Column(keys[0])
+		if !exists {
+			return ""
+		}
+		return getStringValue(series, rowIndex)
+	}
+
+	var keyParts []string
+	for _, key := range keys {
+		series, exists := df.Column(key)
+		if !exists {
+			keyParts = append(keyParts, "")
+		} else {
+			keyParts = append(keyParts, getStringValue(series, rowIndex))
+		}
+	}
+	return strings.Join(keyParts, "|")
+}
+
+// getStringValue extracts string representation of value at given index
+func getStringValue(series ISeries, index int) string {
+	if series == nil || index >= series.Len() {
+		return ""
+	}
+
+	arr := series.Array()
+	defer arr.Release()
+
+	switch typedArr := arr.(type) {
+	case *array.String:
+		return typedArr.Value(index)
+	case *array.Int64:
+		return fmt.Sprintf("%d", typedArr.Value(index))
+	case *array.Int32:
+		return fmt.Sprintf("%d", typedArr.Value(index))
+	case *array.Float64:
+		return fmt.Sprintf("%f", typedArr.Value(index))
+	case *array.Float32:
+		return fmt.Sprintf("%f", typedArr.Value(index))
+	case *array.Boolean:
+		return fmt.Sprintf("%t", typedArr.Value(index))
+	default:
+		return ""
+	}
+}
+
+// performInnerJoin returns matching indices for inner join
+func (df *DataFrame) performInnerJoin(rightHashMap map[string][]int, leftKeys []string) ([]int, []int) {
+	var leftIndices, rightIndices []int
+
+	for i := 0; i < df.Len(); i++ {
+		key := buildJoinKey(df, leftKeys, i)
+		if rightRows, exists := rightHashMap[key]; exists {
+			for _, rightIdx := range rightRows {
+				leftIndices = append(leftIndices, i)
+				rightIndices = append(rightIndices, rightIdx)
+			}
+		}
+	}
+
+	return leftIndices, rightIndices
+}
+
+// performLeftJoin returns indices for left join (all left rows, matched right rows)
+func (df *DataFrame) performLeftJoin(rightHashMap map[string][]int, leftKeys []string) ([]int, []int) {
+	var leftIndices, rightIndices []int
+
+	for i := 0; i < df.Len(); i++ {
+		key := buildJoinKey(df, leftKeys, i)
+		if rightRows, exists := rightHashMap[key]; exists {
+			for _, rightIdx := range rightRows {
+				leftIndices = append(leftIndices, i)
+				rightIndices = append(rightIndices, rightIdx)
+			}
+		} else {
+			leftIndices = append(leftIndices, i)
+			rightIndices = append(rightIndices, -1) // -1 indicates null/missing
+		}
+	}
+
+	return leftIndices, rightIndices
+}
+
+// performRightJoin returns indices for right join (matched left rows, all right rows)
+func (df *DataFrame) performRightJoin(
+	right *DataFrame, rightHashMap map[string][]int, leftKeys []string,
+) ([]int, []int) {
+	var leftIndices, rightIndices []int
+	matched := make(map[int]bool) // Track which right rows were matched
+
+	// First pass: find matches (same as inner join)
+	for i := 0; i < df.Len(); i++ {
+		key := buildJoinKey(df, leftKeys, i)
+		if rightRows, exists := rightHashMap[key]; exists {
+			for _, rightIdx := range rightRows {
+				leftIndices = append(leftIndices, i)
+				rightIndices = append(rightIndices, rightIdx)
+				matched[rightIdx] = true
+			}
+		}
+	}
+
+	// Second pass: add unmatched right rows
+	for i := 0; i < right.Len(); i++ {
+		if !matched[i] {
+			leftIndices = append(leftIndices, -1) // -1 indicates null/missing
+			rightIndices = append(rightIndices, i)
+		}
+	}
+
+	return leftIndices, rightIndices
+}
+
+// performFullOuterJoin returns indices for full outer join (all rows from both sides)
+func (df *DataFrame) performFullOuterJoin(
+	right *DataFrame, rightHashMap map[string][]int, leftKeys []string,
+) ([]int, []int) {
+	var leftIndices, rightIndices []int
+	matched := make(map[int]bool) // Track which right rows were matched
+
+	// First pass: process all left rows
+	for i := 0; i < df.Len(); i++ {
+		key := buildJoinKey(df, leftKeys, i)
+		if rightRows, exists := rightHashMap[key]; exists {
+			for _, rightIdx := range rightRows {
+				leftIndices = append(leftIndices, i)
+				rightIndices = append(rightIndices, rightIdx)
+				matched[rightIdx] = true
+			}
+		} else {
+			leftIndices = append(leftIndices, i)
+			rightIndices = append(rightIndices, -1) // -1 indicates null/missing
+		}
+	}
+
+	// Second pass: add unmatched right rows
+	for i := 0; i < right.Len(); i++ {
+		if !matched[i] {
+			leftIndices = append(leftIndices, -1) // -1 indicates null/missing
+			rightIndices = append(rightIndices, i)
+		}
+	}
+
+	return leftIndices, rightIndices
+}
+
+// buildJoinResult constructs the final DataFrame from join indices
+func (df *DataFrame) buildJoinResult(
+	right *DataFrame, leftIndices, rightIndices []int, mem memory.Allocator,
+) (*DataFrame, error) {
+	if len(leftIndices) != len(rightIndices) {
+		return nil, fmt.Errorf("left indices length (%d) must match right indices length (%d)",
+			len(leftIndices), len(rightIndices))
+	}
+
+	resultLength := len(leftIndices)
+	var resultSeries []ISeries
+
+	// Add columns from left DataFrame
+	for _, colName := range df.Columns() {
+		leftCol, exists := df.Column(colName)
+		if exists {
+			resultCol := df.buildJoinColumn(leftCol, leftIndices, resultLength, mem)
+			resultSeries = append(resultSeries, resultCol)
+		}
+	}
+
+	// Add columns from right DataFrame
+	for _, colName := range right.Columns() {
+		rightCol, exists := right.Column(colName)
+		if exists {
+			resultCol := df.buildJoinColumn(rightCol, rightIndices, resultLength, mem)
+			resultSeries = append(resultSeries, resultCol)
+		}
+	}
+
+	return New(resultSeries...), nil
+}
+
+// buildJoinColumn creates a new series for join result based on indices
+func (df *DataFrame) buildJoinColumn(
+	sourceSeries ISeries, indices []int, resultLength int, mem memory.Allocator,
+) ISeries {
+	if sourceSeries == nil {
+		return series.New("", []string{}, mem)
+	}
+
+	name := sourceSeries.Name()
+	sourceArr := sourceSeries.Array()
+	defer sourceArr.Release()
+
+	switch typedArr := sourceArr.(type) {
+	case *array.String:
+		return df.buildStringJoinColumn(name, typedArr, indices, resultLength, mem)
+	case *array.Int64:
+		return df.buildInt64JoinColumn(name, typedArr, indices, resultLength, mem)
+	case *array.Int32:
+		return df.buildInt32JoinColumn(name, typedArr, indices, resultLength, mem)
+	case *array.Float64:
+		return df.buildFloat64JoinColumn(name, typedArr, indices, resultLength, mem)
+	case *array.Float32:
+		return df.buildFloat32JoinColumn(name, typedArr, indices, resultLength, mem)
+	case *array.Boolean:
+		return df.buildBooleanJoinColumn(name, typedArr, indices, resultLength, mem)
+	default:
+		return df.buildDefaultJoinColumn(name, indices, resultLength, mem)
+	}
+}
+
+// buildStringJoinColumn creates string series for join result
+func (df *DataFrame) buildStringJoinColumn(
+	name string, arr *array.String, indices []int, resultLength int, mem memory.Allocator,
+) ISeries {
+	values := make([]string, resultLength)
+	for i, idx := range indices {
+		if idx >= 0 && idx < arr.Len() {
+			values[i] = arr.Value(idx)
+		} else {
+			values[i] = "" // Default for null values
+		}
+	}
+	return series.New(name, values, mem)
+}
+
+// buildInt64JoinColumn creates int64 series for join result
+func (df *DataFrame) buildInt64JoinColumn(
+	name string, arr *array.Int64, indices []int, resultLength int, mem memory.Allocator,
+) ISeries {
+	values := make([]int64, resultLength)
+	for i, idx := range indices {
+		if idx >= 0 && idx < arr.Len() {
+			values[i] = arr.Value(idx)
+		} else {
+			values[i] = 0 // Default for null values
+		}
+	}
+	return series.New(name, values, mem)
+}
+
+// buildInt32JoinColumn creates int32 series for join result
+func (df *DataFrame) buildInt32JoinColumn(
+	name string, arr *array.Int32, indices []int, resultLength int, mem memory.Allocator,
+) ISeries {
+	values := make([]int32, resultLength)
+	for i, idx := range indices {
+		if idx >= 0 && idx < arr.Len() {
+			values[i] = arr.Value(idx)
+		} else {
+			values[i] = 0 // Default for null values
+		}
+	}
+	return series.New(name, values, mem)
+}
+
+// buildFloat64JoinColumn creates float64 series for join result
+func (df *DataFrame) buildFloat64JoinColumn(
+	name string, arr *array.Float64, indices []int, resultLength int, mem memory.Allocator,
+) ISeries {
+	values := make([]float64, resultLength)
+	for i, idx := range indices {
+		if idx >= 0 && idx < arr.Len() {
+			values[i] = arr.Value(idx)
+		} else {
+			values[i] = 0.0 // Default for null values
+		}
+	}
+	return series.New(name, values, mem)
+}
+
+// buildFloat32JoinColumn creates float32 series for join result
+func (df *DataFrame) buildFloat32JoinColumn(
+	name string, arr *array.Float32, indices []int, resultLength int, mem memory.Allocator,
+) ISeries {
+	values := make([]float32, resultLength)
+	for i, idx := range indices {
+		if idx >= 0 && idx < arr.Len() {
+			values[i] = arr.Value(idx)
+		} else {
+			values[i] = 0.0 // Default for null values
+		}
+	}
+	return series.New(name, values, mem)
+}
+
+// buildBooleanJoinColumn creates boolean series for join result
+func (df *DataFrame) buildBooleanJoinColumn(
+	name string, arr *array.Boolean, indices []int, resultLength int, mem memory.Allocator,
+) ISeries {
+	values := make([]bool, resultLength)
+	for i, idx := range indices {
+		if idx >= 0 && idx < arr.Len() {
+			values[i] = arr.Value(idx)
+		} else {
+			values[i] = false // Default for null values
+		}
+	}
+	return series.New(name, values, mem)
+}
+
+// buildDefaultJoinColumn creates default string series for join result
+func (df *DataFrame) buildDefaultJoinColumn(
+	name string, indices []int, resultLength int, mem memory.Allocator,
+) ISeries {
+	values := make([]string, resultLength)
+	for i := range indices {
+		values[i] = ""
+	}
 	return series.New(name, values, mem)
 }

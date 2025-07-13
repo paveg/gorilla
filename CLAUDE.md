@@ -99,6 +99,36 @@ result, err := df.Lazy().
 - Integration tests in `dataframe/*_test.go` test end-to-end workflows
 - Benchmarks follow `BenchmarkXxx` naming with `-benchmem`
 
+### Test-Driven Development (TDD)
+**Always implement new features using TDD methodology:**
+
+1. **Red**: Write failing tests first that define the expected API and behavior
+2. **Green**: Implement minimal code to make tests pass
+3. **Refactor**: Clean up implementation while keeping tests green
+
+**TDD Benefits for DataFrame Operations:**
+- Ensures memory safety (tests catch Arrow array leaks)
+- Validates parallel execution correctness
+- Documents expected API through test examples
+- Prevents regression in complex data transformations
+
+**TDD Pattern for New Features:**
+```go
+// 1. Write failing test first
+func TestNewFeature(t *testing.T) {
+    df := createTestDataFrame()
+    defer df.Release()
+    
+    result := df.NewFeature(params)
+    defer result.Release()
+    
+    assert.Equal(t, expectedResult, result)
+}
+
+// 2. Implement minimal functionality
+// 3. Refactor with comprehensive error handling and optimization
+```
+
 ## Development Context
 
 ### Current Status
