@@ -15,6 +15,7 @@ const (
 	ExprUnary
 	ExprFunction
 	ExprAggregation
+	ExprCase
 )
 
 // Expr represents an expression that can be evaluated lazily
@@ -129,6 +130,43 @@ func (b *BinaryExpr) Right() Expr {
 	return b.right
 }
 
+// UnaryOp represents unary operations
+type UnaryOp int
+
+const (
+	UnaryNeg UnaryOp = iota
+	UnaryNot
+)
+
+// UnaryExpr represents a unary operation
+type UnaryExpr struct {
+	op      UnaryOp
+	operand Expr
+}
+
+func (u *UnaryExpr) Type() ExprType {
+	return ExprUnary
+}
+
+func (u *UnaryExpr) String() string {
+	var opStr string
+	switch u.op {
+	case UnaryNeg:
+		opStr = "-"
+	case UnaryNot:
+		opStr = "!"
+	}
+	return fmt.Sprintf("(%s%s)", opStr, u.operand.String())
+}
+
+func (u *UnaryExpr) Op() UnaryOp {
+	return u.op
+}
+
+func (u *UnaryExpr) Operand() Expr {
+	return u.operand
+}
+
 // Constructor functions
 
 // Col creates a column expression
@@ -225,6 +263,53 @@ func (b *BinaryExpr) Or(other Expr) *BinaryExpr {
 	return &BinaryExpr{left: b, op: OpOr, right: other}
 }
 
+// Math function methods for BinaryExpr
+
+// Abs creates an absolute value function expression
+func (b *BinaryExpr) Abs() *FunctionExpr {
+	return &FunctionExpr{name: "abs", args: []Expr{b}}
+}
+
+// Round creates a round function expression
+func (b *BinaryExpr) Round() *FunctionExpr {
+	return &FunctionExpr{name: "round", args: []Expr{b}}
+}
+
+// RoundTo creates a round function expression with precision
+func (b *BinaryExpr) RoundTo(precision Expr) *FunctionExpr {
+	return &FunctionExpr{name: "round", args: []Expr{b, precision}}
+}
+
+// Floor creates a floor function expression
+func (b *BinaryExpr) Floor() *FunctionExpr {
+	return &FunctionExpr{name: "floor", args: []Expr{b}}
+}
+
+// Ceil creates a ceil function expression
+func (b *BinaryExpr) Ceil() *FunctionExpr {
+	return &FunctionExpr{name: "ceil", args: []Expr{b}}
+}
+
+// Sqrt creates a square root function expression
+func (b *BinaryExpr) Sqrt() *FunctionExpr {
+	return &FunctionExpr{name: "sqrt", args: []Expr{b}}
+}
+
+// Log creates a natural logarithm function expression
+func (b *BinaryExpr) Log() *FunctionExpr {
+	return &FunctionExpr{name: "log", args: []Expr{b}}
+}
+
+// Sin creates a sine function expression
+func (b *BinaryExpr) Sin() *FunctionExpr {
+	return &FunctionExpr{name: "sin", args: []Expr{b}}
+}
+
+// Cos creates a cosine function expression
+func (b *BinaryExpr) Cos() *FunctionExpr {
+	return &FunctionExpr{name: "cos", args: []Expr{b}}
+}
+
 // AggregationType represents the type of aggregation function
 type AggregationType int
 
@@ -247,7 +332,24 @@ func (f *FunctionExpr) Type() ExprType {
 }
 
 func (f *FunctionExpr) String() string {
-	return fmt.Sprintf("func(%s)", f.name)
+	if len(f.args) == 0 {
+		return fmt.Sprintf("%s()", f.name)
+	}
+
+	argStrs := make([]string, len(f.args))
+	for i, arg := range f.args {
+		argStrs[i] = arg.String()
+	}
+
+	result := f.name + "("
+	for i, argStr := range argStrs {
+		if i > 0 {
+			result += ", "
+		}
+		result += argStr
+	}
+	result += ")"
+	return result
 }
 
 func (f *FunctionExpr) Name() string {
@@ -296,6 +398,62 @@ func (a *AggregationExpr) AggType() AggregationType {
 
 func (a *AggregationExpr) Alias() string {
 	return a.alias
+}
+
+// CaseWhen represents a condition and value pair in CASE expression
+type CaseWhen struct {
+	condition Expr
+	value     Expr
+}
+
+// CaseExpr represents a CASE expression with multiple WHEN clauses
+type CaseExpr struct {
+	whens     []CaseWhen
+	elseValue Expr
+}
+
+func (c *CaseExpr) Type() ExprType {
+	return ExprCase
+}
+
+func (c *CaseExpr) String() string {
+	result := "case"
+	for _, when := range c.whens {
+		result += fmt.Sprintf(" when %s then %s", when.condition.String(), when.value.String())
+	}
+	if c.elseValue != nil {
+		result += fmt.Sprintf(" else %s", c.elseValue.String())
+	}
+	result += " end"
+	return result
+}
+
+func (c *CaseExpr) Whens() []CaseWhen {
+	return c.whens
+}
+
+func (c *CaseExpr) ElseValue() Expr {
+	return c.elseValue
+}
+
+// When adds a condition-value pair to the case expression
+func (c *CaseExpr) When(condition, value Expr) *CaseExpr {
+	newWhens := make([]CaseWhen, len(c.whens)+1)
+	copy(newWhens, c.whens)
+	newWhens[len(c.whens)] = CaseWhen{condition: condition, value: value}
+
+	return &CaseExpr{
+		whens:     newWhens,
+		elseValue: c.elseValue,
+	}
+}
+
+// Else sets the default value for the case expression
+func (c *CaseExpr) Else(value Expr) *CaseExpr {
+	return &CaseExpr{
+		whens:     c.whens,
+		elseValue: value,
+	}
 }
 
 // Aggregation constructor functions
@@ -359,4 +517,267 @@ func (a *AggregationExpr) As(alias string) *AggregationExpr {
 		aggType: a.aggType,
 		alias:   alias,
 	}
+}
+
+// Enhanced Expression System - Unary Operations
+
+// Neg creates a negation (unary minus) expression
+func (c *ColumnExpr) Neg() *UnaryExpr {
+	return &UnaryExpr{op: UnaryNeg, operand: c}
+}
+
+// Not creates a logical NOT expression
+func (c *ColumnExpr) Not() *UnaryExpr {
+	return &UnaryExpr{op: UnaryNot, operand: c}
+}
+
+// Neg creates a negation expression for function expressions
+func (f *FunctionExpr) Neg() *UnaryExpr {
+	return &UnaryExpr{op: UnaryNeg, operand: f}
+}
+
+func (f *FunctionExpr) Not() *UnaryExpr {
+	return &UnaryExpr{op: UnaryNot, operand: f}
+}
+
+// Math Functions
+
+// Abs creates an absolute value function expression
+func (c *ColumnExpr) Abs() *FunctionExpr {
+	return &FunctionExpr{name: "abs", args: []Expr{c}}
+}
+
+// Round creates a round function expression
+func (c *ColumnExpr) Round() *FunctionExpr {
+	return &FunctionExpr{name: "round", args: []Expr{c}}
+}
+
+// RoundTo creates a round function expression with precision
+func (c *ColumnExpr) RoundTo(precision Expr) *FunctionExpr {
+	return &FunctionExpr{name: "round", args: []Expr{c, precision}}
+}
+
+// Floor creates a floor function expression
+func (c *ColumnExpr) Floor() *FunctionExpr {
+	return &FunctionExpr{name: "floor", args: []Expr{c}}
+}
+
+// Ceil creates a ceil function expression
+func (c *ColumnExpr) Ceil() *FunctionExpr {
+	return &FunctionExpr{name: "ceil", args: []Expr{c}}
+}
+
+// Sqrt creates a square root function expression
+func (c *ColumnExpr) Sqrt() *FunctionExpr {
+	return &FunctionExpr{name: "sqrt", args: []Expr{c}}
+}
+
+// Log creates a natural logarithm function expression
+func (c *ColumnExpr) Log() *FunctionExpr {
+	return &FunctionExpr{name: "log", args: []Expr{c}}
+}
+
+// Sin creates a sine function expression
+func (c *ColumnExpr) Sin() *FunctionExpr {
+	return &FunctionExpr{name: "sin", args: []Expr{c}}
+}
+
+// Cos creates a cosine function expression
+func (c *ColumnExpr) Cos() *FunctionExpr {
+	return &FunctionExpr{name: "cos", args: []Expr{c}}
+}
+
+// Abs creates an absolute value function expression
+func (f *FunctionExpr) Abs() *FunctionExpr {
+	return &FunctionExpr{name: "abs", args: []Expr{f}}
+}
+
+func (f *FunctionExpr) Round() *FunctionExpr {
+	return &FunctionExpr{name: "round", args: []Expr{f}}
+}
+
+func (f *FunctionExpr) RoundTo(precision Expr) *FunctionExpr {
+	return &FunctionExpr{name: "round", args: []Expr{f, precision}}
+}
+
+func (f *FunctionExpr) Floor() *FunctionExpr {
+	return &FunctionExpr{name: "floor", args: []Expr{f}}
+}
+
+func (f *FunctionExpr) Ceil() *FunctionExpr {
+	return &FunctionExpr{name: "ceil", args: []Expr{f}}
+}
+
+func (f *FunctionExpr) Sqrt() *FunctionExpr {
+	return &FunctionExpr{name: "sqrt", args: []Expr{f}}
+}
+
+func (f *FunctionExpr) Log() *FunctionExpr {
+	return &FunctionExpr{name: "log", args: []Expr{f}}
+}
+
+func (f *FunctionExpr) Sin() *FunctionExpr {
+	return &FunctionExpr{name: "sin", args: []Expr{f}}
+}
+
+func (f *FunctionExpr) Cos() *FunctionExpr {
+	return &FunctionExpr{name: "cos", args: []Expr{f}}
+}
+
+// String Functions
+
+// Upper creates an UPPER function expression
+func (c *ColumnExpr) Upper() *FunctionExpr {
+	return &FunctionExpr{name: "upper", args: []Expr{c}}
+}
+
+// Lower creates a LOWER function expression
+func (c *ColumnExpr) Lower() *FunctionExpr {
+	return &FunctionExpr{name: "lower", args: []Expr{c}}
+}
+
+// Length creates a LENGTH function expression
+func (c *ColumnExpr) Length() *FunctionExpr {
+	return &FunctionExpr{name: "length", args: []Expr{c}}
+}
+
+// Trim creates a TRIM function expression
+func (c *ColumnExpr) Trim() *FunctionExpr {
+	return &FunctionExpr{name: "trim", args: []Expr{c}}
+}
+
+// Substring creates a SUBSTRING function expression
+func (c *ColumnExpr) Substring(start, length Expr) *FunctionExpr {
+	return &FunctionExpr{name: "substring", args: []Expr{c, start, length}}
+}
+
+// Upper creates an uppercase function expression
+func (f *FunctionExpr) Upper() *FunctionExpr {
+	return &FunctionExpr{name: "upper", args: []Expr{f}}
+}
+
+func (f *FunctionExpr) Lower() *FunctionExpr {
+	return &FunctionExpr{name: "lower", args: []Expr{f}}
+}
+
+func (f *FunctionExpr) Length() *FunctionExpr {
+	return &FunctionExpr{name: "length", args: []Expr{f}}
+}
+
+func (f *FunctionExpr) Trim() *FunctionExpr {
+	return &FunctionExpr{name: "trim", args: []Expr{f}}
+}
+
+func (f *FunctionExpr) Substring(start, length Expr) *FunctionExpr {
+	return &FunctionExpr{name: "substring", args: []Expr{f, start, length}}
+}
+
+// Type Casting Functions
+
+// CastToString creates a cast to string function expression
+func (c *ColumnExpr) CastToString() *FunctionExpr {
+	return &FunctionExpr{name: "cast_string", args: []Expr{c}}
+}
+
+// CastToInt64 creates a cast to int64 function expression
+func (c *ColumnExpr) CastToInt64() *FunctionExpr {
+	return &FunctionExpr{name: "cast_int64", args: []Expr{c}}
+}
+
+// CastToFloat64 creates a cast to float64 function expression
+func (c *ColumnExpr) CastToFloat64() *FunctionExpr {
+	return &FunctionExpr{name: "cast_float64", args: []Expr{c}}
+}
+
+// CastToBool creates a cast to bool function expression
+func (c *ColumnExpr) CastToBool() *FunctionExpr {
+	return &FunctionExpr{name: "cast_bool", args: []Expr{c}}
+}
+
+// CastToString creates a string casting function expression
+func (f *FunctionExpr) CastToString() *FunctionExpr {
+	return &FunctionExpr{name: "cast_string", args: []Expr{f}}
+}
+
+func (f *FunctionExpr) CastToInt64() *FunctionExpr {
+	return &FunctionExpr{name: "cast_int64", args: []Expr{f}}
+}
+
+func (f *FunctionExpr) CastToFloat64() *FunctionExpr {
+	return &FunctionExpr{name: "cast_float64", args: []Expr{f}}
+}
+
+func (f *FunctionExpr) CastToBool() *FunctionExpr {
+	return &FunctionExpr{name: "cast_bool", args: []Expr{f}}
+}
+
+// Add creates an addition expression for function expressions
+func (f *FunctionExpr) Add(other Expr) *BinaryExpr {
+	return &BinaryExpr{left: f, op: OpAdd, right: other}
+}
+
+func (f *FunctionExpr) Sub(other Expr) *BinaryExpr {
+	return &BinaryExpr{left: f, op: OpSub, right: other}
+}
+
+func (f *FunctionExpr) Mul(other Expr) *BinaryExpr {
+	return &BinaryExpr{left: f, op: OpMul, right: other}
+}
+
+func (f *FunctionExpr) Div(other Expr) *BinaryExpr {
+	return &BinaryExpr{left: f, op: OpDiv, right: other}
+}
+
+func (f *FunctionExpr) Eq(other Expr) *BinaryExpr {
+	return &BinaryExpr{left: f, op: OpEq, right: other}
+}
+
+func (f *FunctionExpr) Ne(other Expr) *BinaryExpr {
+	return &BinaryExpr{left: f, op: OpNe, right: other}
+}
+
+func (f *FunctionExpr) Lt(other Expr) *BinaryExpr {
+	return &BinaryExpr{left: f, op: OpLt, right: other}
+}
+
+func (f *FunctionExpr) Le(other Expr) *BinaryExpr {
+	return &BinaryExpr{left: f, op: OpLe, right: other}
+}
+
+func (f *FunctionExpr) Gt(other Expr) *BinaryExpr {
+	return &BinaryExpr{left: f, op: OpGt, right: other}
+}
+
+func (f *FunctionExpr) Ge(other Expr) *BinaryExpr {
+	return &BinaryExpr{left: f, op: OpGe, right: other}
+}
+
+func (f *FunctionExpr) And(other Expr) *BinaryExpr {
+	return &BinaryExpr{left: f, op: OpAnd, right: other}
+}
+
+func (f *FunctionExpr) Or(other Expr) *BinaryExpr {
+	return &BinaryExpr{left: f, op: OpOr, right: other}
+}
+
+// Constructor Functions for Conditional Expressions
+
+// If creates an IF function expression
+func If(condition, thenValue, elseValue Expr) *FunctionExpr {
+	return &FunctionExpr{name: "if", args: []Expr{condition, thenValue, elseValue}}
+}
+
+// Coalesce creates a COALESCE function expression
+func Coalesce(exprs ...Expr) *FunctionExpr {
+	return &FunctionExpr{name: "coalesce", args: exprs}
+}
+
+// Concat creates a CONCAT function expression
+func Concat(exprs ...Expr) *FunctionExpr {
+	return &FunctionExpr{name: "concat", args: exprs}
+}
+
+// Case creates a new CASE expression
+func Case() *CaseExpr {
+	return &CaseExpr{whens: make([]CaseWhen, 0), elseValue: nil}
 }
