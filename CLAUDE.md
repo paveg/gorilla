@@ -138,12 +138,52 @@ func TestNewFeature(t *testing.T) {
 - ✅ Expression system with arithmetic/comparison operations
 
 ### Task Management
-All development tasks are tracked via **GitHub Issues** with priority labels:
-- **High Priority**: Core features needed for basic functionality
-- **Medium Priority**: Advanced features for comprehensive data analysis
-- **Low Priority**: Polish and developer experience improvements
+All development tasks are tracked via **GitHub Issues** with organized label system:
 
-Use `gh issue list --label="High"` to see current high-priority tasks.
+#### Label System
+Issues use a structured 3-tier labeling system for clear categorization:
+
+**Priority Labels (Required)**
+- `priority: critical` 🔴 - Critical issues requiring immediate attention (memory leaks, security, breaking bugs)
+- `priority: high` 🟠 - High priority features and improvements 
+- `priority: medium` 🟡 - Medium priority enhancements and optimizations
+- `priority: low` 🟢 - Low priority / nice-to-have features and polish
+
+**Area Labels (Required)**
+- `area: core` 🏗️ - Core DataFrame functionality and operations
+- `area: parallel` 🔄 - Parallel processing and concurrency features
+- `area: memory` 🧠 - Memory management and allocation optimizations
+- `area: api` 🔌 - Public API design and usability improvements
+- `area: testing` 🧪 - Tests, benchmarks, and quality assurance
+- `area: dev-experience` 👩‍💻 - Developer experience and tooling
+
+**Type Labels (Optional)**
+- `type: performance` ⚡ - Performance improvements and optimizations
+- `type: security` 🔒 - Memory safety and security enhancements
+- `type: breaking-change` 💥 - Breaking changes requiring major version bump
+
+#### Labeling Guidelines
+When creating or updating issues:
+
+1. **Always assign priority and area labels** - These are required for all issues
+2. **Use type labels** when the issue focuses on performance, security, or breaking changes
+3. **Multiple area labels** are allowed when an issue spans multiple areas (e.g., parallel + memory)
+4. **Consistent naming** - Use exact label names as defined above
+5. **Update labels** as issue scope or priority changes during development
+
+#### Common Label Combinations
+- Critical memory bug: `priority: critical`, `area: memory`, `type: security`
+- API improvement: `priority: medium`, `area: api`
+- Performance optimization: `priority: low`, `area: core`, `type: performance`
+- Parallel processing feature: `priority: high`, `area: parallel`, `area: core`
+
+#### Querying Issues
+Use GitHub CLI to find issues by labels:
+```bash
+gh issue list --label="priority: critical"           # Critical issues
+gh issue list --label="area: parallel"               # Parallel processing issues  
+gh issue list --label="priority: high,area: core"    # High priority core features
+```
 
 ### High Priority Features (from GitHub Issues)
 1. Query optimization engine (Issue #3: predicate pushdown, operation fusion)
