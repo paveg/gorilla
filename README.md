@@ -44,7 +44,7 @@ import (
     "fmt"
     "log"
 
-    "github.com/apache/arrow/go/v17/arrow/memory"
+    "github.com/apache/arrow-go/v18/arrow/memory"
     "github.com/paveg/gorilla/dataframe"
     "github.com/paveg/gorilla/expr"
     "github.com/paveg/gorilla/series"
