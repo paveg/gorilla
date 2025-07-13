@@ -48,6 +48,8 @@ func (e *Evaluator) EvaluateBoolean(expr Expr, columns map[string]arrow.Array) (
 		return e.evaluateLiteralBoolean(ex, columns)
 	case *BinaryExpr:
 		return e.evaluateBinaryBoolean(ex, columns)
+	case *InvalidExpr:
+		return nil, fmt.Errorf("invalid expression: %s", ex.Message())
 	default:
 		return nil, fmt.Errorf("unsupported expression type for boolean evaluation: %T", expr)
 	}
@@ -62,6 +64,8 @@ func (e *Evaluator) Evaluate(expr Expr, columns map[string]arrow.Array) (arrow.A
 		return e.evaluateLiteral(ex, columns)
 	case *BinaryExpr:
 		return e.evaluateBinary(ex, columns)
+	case *InvalidExpr:
+		return nil, fmt.Errorf("invalid expression: %s", ex.Message())
 	default:
 		return nil, fmt.Errorf("unsupported expression type: %T", expr)
 	}

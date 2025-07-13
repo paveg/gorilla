@@ -16,6 +16,7 @@ const (
 	ExprFunction
 	ExprAggregation
 	ExprCase
+	ExprInvalid
 )
 
 // Expr represents an expression that can be evaluated lazily
@@ -167,6 +168,23 @@ func (u *UnaryExpr) Operand() Expr {
 	return u.operand
 }
 
+// InvalidExpr represents an invalid expression with an error message
+type InvalidExpr struct {
+	message string
+}
+
+func (i *InvalidExpr) Type() ExprType {
+	return ExprInvalid
+}
+
+func (i *InvalidExpr) String() string {
+	return fmt.Sprintf("invalid(%s)", i.message)
+}
+
+func (i *InvalidExpr) Message() string {
+	return i.message
+}
+
 // Constructor functions
 
 // Col creates a column expression
@@ -177,6 +195,11 @@ func Col(name string) *ColumnExpr {
 // Lit creates a literal expression
 func Lit(value interface{}) *LiteralExpr {
 	return &LiteralExpr{value: value}
+}
+
+// Invalid creates an invalid expression with an error message
+func Invalid(message string) *InvalidExpr {
+	return &InvalidExpr{message: message}
 }
 
 // Binary operations on column expressions

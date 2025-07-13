@@ -18,7 +18,8 @@ import (
 )
 
 const (
-	nanosPerSecond = 1e9
+	nanosPerSecond      = 1e9
+	minChunkSizeForJoin = 100 // Minimum chunk size to avoid excessive overhead in parallel joins
 )
 
 // DataFrame represents a table of data with typed columns
@@ -277,9 +278,18 @@ func createSlicedSeriesFromArray(
 	}
 }
 
-// createSlicedStringSeries creates a string series slice
-func createSlicedStringSeries(name string, typedArr *array.String, start, length int, mem memory.Allocator) ISeries {
-	values := make([]string, length)
+// ArrowValueArray represents an Arrow array with value access
+type ArrowValueArray[T any] interface {
+	Len() int
+	IsNull(int) bool
+	Value(int) T
+}
+
+// createSlicedSeries creates a typed series slice using generics
+func createSlicedSeries[T any](
+	name string, typedArr ArrowValueArray[T], start, length int, mem memory.Allocator,
+) ISeries {
+	values := make([]T, length)
 	for i := 0; i < length; i++ {
 		srcIndex := start + i
 		if srcIndex < typedArr.Len() && !typedArr.IsNull(srcIndex) {
@@ -287,42 +297,26 @@ func createSlicedStringSeries(name string, typedArr *array.String, start, length
 		}
 	}
 	return series.New(name, values, mem)
+}
+
+// createSlicedStringSeries creates a string series slice
+func createSlicedStringSeries(name string, typedArr *array.String, start, length int, mem memory.Allocator) ISeries {
+	return createSlicedSeries(name, typedArr, start, length, mem)
 }
 
 // createSlicedInt64Series creates an int64 series slice
 func createSlicedInt64Series(name string, typedArr *array.Int64, start, length int, mem memory.Allocator) ISeries {
-	values := make([]int64, length)
-	for i := 0; i < length; i++ {
-		srcIndex := start + i
-		if srcIndex < typedArr.Len() && !typedArr.IsNull(srcIndex) {
-			values[i] = typedArr.Value(srcIndex)
-		}
-	}
-	return series.New(name, values, mem)
+	return createSlicedSeries(name, typedArr, start, length, mem)
 }
 
 // createSlicedFloat64Series creates a float64 series slice
 func createSlicedFloat64Series(name string, typedArr *array.Float64, start, length int, mem memory.Allocator) ISeries {
-	values := make([]float64, length)
-	for i := 0; i < length; i++ {
-		srcIndex := start + i
-		if srcIndex < typedArr.Len() && !typedArr.IsNull(srcIndex) {
-			values[i] = typedArr.Value(srcIndex)
-		}
-	}
-	return series.New(name, values, mem)
+	return createSlicedSeries(name, typedArr, start, length, mem)
 }
 
 // createSlicedBoolSeries creates a boolean series slice
 func createSlicedBoolSeries(name string, typedArr *array.Boolean, start, length int, mem memory.Allocator) ISeries {
-	values := make([]bool, length)
-	for i := 0; i < length; i++ {
-		srcIndex := start + i
-		if srcIndex < typedArr.Len() && !typedArr.IsNull(srcIndex) {
-			values[i] = typedArr.Value(srcIndex)
-		}
-	}
-	return series.New(name, values, mem)
+	return createSlicedSeries(name, typedArr, start, length, mem)
 }
 
 // createSlicedTimestampSeries creates a timestamp series slice
@@ -1034,9 +1028,86 @@ func (df *DataFrame) sequentialJoin(
 func (df *DataFrame) parallelJoin(
 	right *DataFrame, leftKeys, rightKeys []string, joinType JoinType,
 ) (*DataFrame, error) {
-	// For now, fall back to sequential join
-	// TODO: Implement true parallel join with worker pools
-	return df.sequentialJoin(right, leftKeys, rightKeys, joinType)
+	mem := memory.NewGoAllocator()
+
+	// Use sequential join for small datasets
+	const parallelThreshold = 1000
+	if right.Len() < parallelThreshold {
+		return df.sequentialJoin(right, leftKeys, rightKeys, joinType)
+	}
+
+	// Build hash map from right DataFrame using parallel processing
+	rightHashMap := df.buildParallelHashMap(right, rightKeys)
+
+	// Collect join results
+	var leftIndices, rightIndices []int
+
+	switch joinType {
+	case InnerJoin:
+		leftIndices, rightIndices = df.performInnerJoin(rightHashMap, leftKeys)
+	case LeftJoin:
+		leftIndices, rightIndices = df.performLeftJoin(rightHashMap, leftKeys)
+	case RightJoin:
+		leftIndices, rightIndices = df.performRightJoin(right, rightHashMap, leftKeys)
+	case FullOuterJoin:
+		leftIndices, rightIndices = df.performFullOuterJoin(right, rightHashMap, leftKeys)
+	default:
+		return nil, fmt.Errorf("unsupported join type: %v", joinType)
+	}
+
+	// Build result DataFrame
+	return df.buildJoinResult(right, leftIndices, rightIndices, mem)
+}
+
+// buildParallelHashMap builds a hash map from DataFrame using parallel processing
+func (df *DataFrame) buildParallelHashMap(right *DataFrame, rightKeys []string) map[string][]int {
+	// Create worker pool
+	wp := parallel.NewWorkerPool(0) // Use default CPU count
+	defer wp.Close()
+
+	// Determine chunk size based on CPU count and data size
+	numWorkers := runtime.NumCPU()
+	chunkSize := (right.Len() + numWorkers - 1) / numWorkers
+	if chunkSize < minChunkSizeForJoin {
+		chunkSize = minChunkSizeForJoin
+	}
+
+	// Create chunks of row indices to process
+	var chunks [][]int
+	for start := 0; start < right.Len(); start += chunkSize {
+		end := start + chunkSize
+		if end > right.Len() {
+			end = right.Len()
+		}
+		chunk := make([]int, end-start)
+		for i := start; i < end; i++ {
+			chunk[i-start] = i
+		}
+		chunks = append(chunks, chunk)
+	}
+
+	// Worker function to process a chunk and return partial hash map
+	worker := func(chunk []int) map[string][]int {
+		partialMap := make(map[string][]int)
+		for _, rowIndex := range chunk {
+			key := buildJoinKey(right, rightKeys, rowIndex)
+			partialMap[key] = append(partialMap[key], rowIndex)
+		}
+		return partialMap
+	}
+
+	// Process chunks in parallel
+	partialMaps := parallel.Process(wp, chunks, worker)
+
+	// Merge partial results into final hash map
+	finalMap := make(map[string][]int)
+	for _, partialMap := range partialMaps {
+		for key, indices := range partialMap {
+			finalMap[key] = append(finalMap[key], indices...)
+		}
+	}
+
+	return finalMap
 }
 
 // buildJoinKey creates a composite key from multiple columns at given row index
