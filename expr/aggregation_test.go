@@ -133,7 +133,7 @@ func TestFunctionExpr(t *testing.T) {
 		t.Errorf("Expected 2 args, got %d", len(funcExpr.Args()))
 	}
 
-	expectedStr := "func(test_func)"
+	expectedStr := "test_func(col(a), lit(42))"
 	if funcExpr.String() != expectedStr {
 		t.Errorf("Expected '%s', got '%s'", expectedStr, funcExpr.String())
 	}
