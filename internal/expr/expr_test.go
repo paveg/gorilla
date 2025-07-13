@@ -161,3 +161,40 @@ func TestExpressionTypes(t *testing.T) {
 		assert.NotEmpty(t, expr.String(), "Expression %d should have string representation", i)
 	}
 }
+
+func TestInvalidExpr(t *testing.T) {
+	t.Run("creation and basic properties", func(t *testing.T) {
+		message := "test error message"
+		invalidExpr := Invalid(message)
+
+		assert.Equal(t, ExprInvalid, invalidExpr.Type())
+		assert.Equal(t, message, invalidExpr.Message())
+		assert.Equal(t, "invalid(test error message)", invalidExpr.String())
+	})
+
+	t.Run("empty message", func(t *testing.T) {
+		invalidExpr := Invalid("")
+
+		assert.Equal(t, ExprInvalid, invalidExpr.Type())
+		assert.Equal(t, "", invalidExpr.Message())
+		assert.Equal(t, "invalid()", invalidExpr.String())
+	})
+
+	t.Run("complex error message", func(t *testing.T) {
+		message := "Operation 'Add' not supported on type *InvalidExpr"
+		invalidExpr := Invalid(message)
+
+		assert.Equal(t, ExprInvalid, invalidExpr.Type())
+		assert.Contains(t, invalidExpr.Message(), "Add")
+		assert.Contains(t, invalidExpr.Message(), "not supported")
+		assert.Contains(t, invalidExpr.String(), message)
+	})
+
+	t.Run("implements Expr interface", func(t *testing.T) {
+		var expr Expr = Invalid("test")
+
+		assert.NotNil(t, expr)
+		assert.Equal(t, ExprInvalid, expr.Type())
+		assert.NotEmpty(t, expr.String())
+	})
+}
