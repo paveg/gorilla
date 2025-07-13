@@ -8,9 +8,7 @@ import (
 	"time"
 
 	"github.com/apache/arrow/go/v17/arrow/memory"
-	"github.com/paveg/gorilla/dataframe"
-	"github.com/paveg/gorilla/expr"
-	"github.com/paveg/gorilla/series"
+	"github.com/paveg/gorilla"
 )
 
 const version = "0.1.0"
@@ -78,10 +76,10 @@ func runDemo() {
 	}
 
 	// Create Series
-	nameSeries := series.New("name", names, mem)
-	ageSeries := series.New("age", ages, mem)
-	salarySeries := series.New("salary", salaries, mem)
-	deptSeries := series.New("department", departments, mem)
+	nameSeries := gorilla.NewSeries("name", names, mem)
+	ageSeries := gorilla.NewSeries("age", ages, mem)
+	salarySeries := gorilla.NewSeries("salary", salaries, mem)
+	deptSeries := gorilla.NewSeries("department", departments, mem)
 
 	defer nameSeries.Release()
 	defer ageSeries.Release()
@@ -89,7 +87,7 @@ func runDemo() {
 	defer deptSeries.Release()
 
 	// Create DataFrame
-	df := dataframe.New(nameSeries, ageSeries, salarySeries, deptSeries)
+	df := gorilla.NewDataFrame(nameSeries, ageSeries, salarySeries, deptSeries)
 	defer df.Release()
 
 	fmt.Printf("Created DataFrame with %d rows and %d columns\n", df.Len(), df.Width())
@@ -103,8 +101,8 @@ func runDemo() {
 	fmt.Println("3. Select specific columns")
 
 	lazyDf := df.Lazy().
-		Filter(expr.Col("age").Gt(expr.Lit(int64(35)))).
-		WithColumn("bonus", expr.Col("salary").Mul(expr.Lit(0.1))).
+		Filter(gorilla.Col("age").Gt(gorilla.Lit(int64(35)))).
+		WithColumn("bonus", gorilla.Col("salary").Mul(gorilla.Lit(0.1))).
 		Select("name", "age", "salary", "bonus", "department")
 
 	fmt.Println("\nLazy operations defined:")
@@ -147,17 +145,17 @@ func runBenchmark() {
 		departments[i] = depts[i%len(depts)]
 	}
 
-	nameSeries := series.New("name", names, mem)
-	ageSeries := series.New("age", ages, mem)
-	salarySeries := series.New("salary", salaries, mem)
-	deptSeries := series.New("department", departments, mem)
+	nameSeries := gorilla.NewSeries("name", names, mem)
+	ageSeries := gorilla.NewSeries("age", ages, mem)
+	salarySeries := gorilla.NewSeries("salary", salaries, mem)
+	deptSeries := gorilla.NewSeries("department", departments, mem)
 	seriesCreationTime := time.Since(start)
 	fmt.Printf("Series Creation Time: %s\n", seriesCreationTime)
 
 	// --- Benchmark: DataFrame Creation ---
 	fmt.Printf("\nBenchmarking DataFrame creation for %d rows...\n", numRows)
 	start = time.Now()
-	df := dataframe.New(nameSeries, ageSeries, salarySeries, deptSeries)
+	df := gorilla.NewDataFrame(nameSeries, ageSeries, salarySeries, deptSeries)
 	dfCreationTime := time.Since(start)
 	fmt.Printf("DataFrame Creation Time: %s\n", dfCreationTime)
 
@@ -172,8 +170,8 @@ func runBenchmark() {
 	fmt.Printf("\nBenchmarking Lazy Evaluation (Filter, WithColumn, Select, Collect) for %d rows...\n", numRows)
 	start = time.Now()
 	lazyDf := df.Lazy().
-		Filter(expr.Col("age").Gt(expr.Lit(int64(35)))).
-		WithColumn("bonus", expr.Col("salary").Mul(expr.Lit(0.1))).
+		Filter(gorilla.Col("age").Gt(gorilla.Lit(int64(35)))).
+		WithColumn("bonus", gorilla.Col("salary").Mul(gorilla.Lit(0.1))).
 		Select("name", "age", "salary", "bonus", "department")
 
 	result, err := lazyDf.Collect()
