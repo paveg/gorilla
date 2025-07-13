@@ -4,9 +4,7 @@ import (
 	"fmt"
 
 	"github.com/apache/arrow/go/v17/arrow/memory"
-	"github.com/paveg/gorilla/dataframe"
-	"github.com/paveg/gorilla/expr"
-	"github.com/paveg/gorilla/series"
+	"github.com/paveg/gorilla"
 )
 
 func main() {
@@ -44,11 +42,11 @@ func main() {
 	}
 
 	// Create DataFrame
-	df := dataframe.New(
-		series.New("region", regions, mem),
-		series.New("product", products, mem),
-		series.New("quantity", quantities, mem),
-		series.New("price", prices, mem),
+	df := gorilla.NewDataFrame(
+		gorilla.NewSeries("region", regions, mem),
+		gorilla.NewSeries("product", products, mem),
+		gorilla.NewSeries("quantity", quantities, mem),
+		gorilla.NewSeries("price", prices, mem),
 	)
 
 	fmt.Println("Original Sales Data:")
@@ -58,8 +56,8 @@ func main() {
 	// Example 1: Group by region and sum quantities
 	fmt.Println("=== Example 1: Sales by Region ===")
 	regionSales := df.GroupBy("region").Agg(
-		expr.Sum(expr.Col("quantity")).As("total_quantity"),
-		expr.Count(expr.Col("product")).As("num_products"),
+		gorilla.Sum(gorilla.Col("quantity")).As("total_quantity"),
+		gorilla.Count(gorilla.Col("product")).As("num_products"),
 	)
 	fmt.Println(regionSales.String())
 	fmt.Println()
@@ -67,9 +65,9 @@ func main() {
 	// Example 2: Group by product and calculate statistics
 	fmt.Println("=== Example 2: Product Statistics ===")
 	productStats := df.GroupBy("product").Agg(
-		expr.Sum(expr.Col("quantity")).As("total_sold"),
-		expr.Mean(expr.Col("quantity")).As("avg_quantity"),
-		expr.Count(expr.Col("region")).As("regions_sold"),
+		gorilla.Sum(gorilla.Col("quantity")).As("total_sold"),
+		gorilla.Mean(gorilla.Col("quantity")).As("avg_quantity"),
+		gorilla.Count(gorilla.Col("region")).As("regions_sold"),
 	)
 	fmt.Println(productStats.String())
 	fmt.Println()
@@ -77,8 +75,8 @@ func main() {
 	// Example 3: Group by multiple columns
 	fmt.Println("=== Example 3: Region-Product Breakdown ===")
 	regionProductStats := df.GroupBy("region", "product").Agg(
-		expr.Sum(expr.Col("quantity")).As("total_quantity"),
-		expr.Max(expr.Col("price")).As("unit_price"),
+		gorilla.Sum(gorilla.Col("quantity")).As("total_quantity"),
+		gorilla.Max(gorilla.Col("price")).As("unit_price"),
 	)
 	fmt.Println(regionProductStats.String())
 	fmt.Println()
@@ -87,11 +85,11 @@ func main() {
 	fmt.Println("=== Example 4: Lazy GroupBy with Filtering ===")
 	// Filter high-value products (price > 100) then group by region
 	highValueSales, err := df.Lazy().
-		Filter(expr.Col("price").Gt(expr.Lit(100.0))).
+		Filter(gorilla.Col("price").Gt(gorilla.Lit(100.0))).
 		GroupBy("region").
 		Agg(
-			expr.Sum(expr.Col("quantity")).As("high_value_quantity"),
-			expr.Mean(expr.Col("price")).As("avg_price"),
+			gorilla.Sum(gorilla.Col("quantity")).As("high_value_quantity"),
+			gorilla.Mean(gorilla.Col("price")).As("avg_price"),
 		).
 		Collect()
 

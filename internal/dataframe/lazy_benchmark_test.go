@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/apache/arrow/go/v17/arrow/memory"
-	"github.com/paveg/gorilla/expr"
-	"github.com/paveg/gorilla/series"
+	"github.com/paveg/gorilla/internal/expr"
+	"github.com/paveg/gorilla/internal/series"
 )
 
 // BenchmarkLazyFrameSequentialVsParallel compares performance of sequential vs parallel execution

@@ -5,8 +5,8 @@ import (
 
 	"github.com/apache/arrow/go/v17/arrow/array"
 	"github.com/apache/arrow/go/v17/arrow/memory"
-	"github.com/paveg/gorilla/expr"
-	"github.com/paveg/gorilla/series"
+	"github.com/paveg/gorilla/internal/expr"
+	"github.com/paveg/gorilla/internal/series"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
