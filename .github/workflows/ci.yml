@@ -101,9 +101,9 @@ jobs:
         GOARCH: ${{ matrix.goarch }}
       run: |
         if [ "$GOOS" = "windows" ]; then
-          go build -o basic_usage-${{ matrix.goos }}-${{ matrix.goarch }}.exe ./examples/basic_usage.go
+          go build -o usage-${{ matrix.goos }}-${{ matrix.goarch }}.exe ./examples/usage.go
         else
-          go build -o basic_usage-${{ matrix.goos }}-${{ matrix.goarch }} ./examples/basic_usage.go
+          go build -o usage-${{ matrix.goos }}-${{ matrix.goarch }} ./examples/usage.go
         fi
 
   benchmark:
@@ -143,6 +143,6 @@ jobs:
         go build -o gorilla-cli ./cmd/gorilla-cli/
         timeout 30s ./gorilla-cli -demo || true
 
-    - name: Test basic usage example
+    - name: Test usage example
       run: |
-        timeout 30s go run ./examples/basic_usage.go
+        timeout 30s go run ./examples/usage.go

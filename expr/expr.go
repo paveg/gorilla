@@ -14,6 +14,7 @@ const (
 	ExprBinary
 	ExprUnary
 	ExprFunction
+	ExprAggregation
 )
 
 // Expr represents an expression that can be evaluated lazily
@@ -222,4 +223,140 @@ func (b *BinaryExpr) And(other Expr) *BinaryExpr {
 // Or creates a logical OR expression
 func (b *BinaryExpr) Or(other Expr) *BinaryExpr {
 	return &BinaryExpr{left: b, op: OpOr, right: other}
+}
+
+// AggregationType represents the type of aggregation function
+type AggregationType int
+
+const (
+	AggSum AggregationType = iota
+	AggCount
+	AggMean
+	AggMin
+	AggMax
+)
+
+// FunctionExpr represents a function call expression
+type FunctionExpr struct {
+	name string
+	args []Expr
+}
+
+func (f *FunctionExpr) Type() ExprType {
+	return ExprFunction
+}
+
+func (f *FunctionExpr) String() string {
+	return fmt.Sprintf("func(%s)", f.name)
+}
+
+func (f *FunctionExpr) Name() string {
+	return f.name
+}
+
+func (f *FunctionExpr) Args() []Expr {
+	return f.args
+}
+
+// AggregationExpr represents an aggregation function over a column
+type AggregationExpr struct {
+	column  Expr
+	aggType AggregationType
+	alias   string
+}
+
+func (a *AggregationExpr) Type() ExprType {
+	return ExprAggregation
+}
+
+func (a *AggregationExpr) String() string {
+	var aggName string
+	switch a.aggType {
+	case AggSum:
+		aggName = "sum"
+	case AggCount:
+		aggName = "count"
+	case AggMean:
+		aggName = "mean"
+	case AggMin:
+		aggName = "min"
+	case AggMax:
+		aggName = "max"
+	}
+	return fmt.Sprintf("%s(%s)", aggName, a.column.String())
+}
+
+func (a *AggregationExpr) Column() Expr {
+	return a.column
+}
+
+func (a *AggregationExpr) AggType() AggregationType {
+	return a.aggType
+}
+
+func (a *AggregationExpr) Alias() string {
+	return a.alias
+}
+
+// Aggregation constructor functions
+
+// Sum creates a sum aggregation expression
+func Sum(column Expr) *AggregationExpr {
+	return &AggregationExpr{column: column, aggType: AggSum}
+}
+
+// Count creates a count aggregation expression
+func Count(column Expr) *AggregationExpr {
+	return &AggregationExpr{column: column, aggType: AggCount}
+}
+
+// Mean creates a mean aggregation expression
+func Mean(column Expr) *AggregationExpr {
+	return &AggregationExpr{column: column, aggType: AggMean}
+}
+
+// Min creates a min aggregation expression
+func Min(column Expr) *AggregationExpr {
+	return &AggregationExpr{column: column, aggType: AggMin}
+}
+
+// Max creates a max aggregation expression
+func Max(column Expr) *AggregationExpr {
+	return &AggregationExpr{column: column, aggType: AggMax}
+}
+
+// Aggregation methods on column expressions
+
+// Sum creates a sum aggregation of this column
+func (c *ColumnExpr) Sum() *AggregationExpr {
+	return Sum(c)
+}
+
+// Count creates a count aggregation of this column
+func (c *ColumnExpr) Count() *AggregationExpr {
+	return Count(c)
+}
+
+// Mean creates a mean aggregation of this column
+func (c *ColumnExpr) Mean() *AggregationExpr {
+	return Mean(c)
+}
+
+// Min creates a min aggregation of this column
+func (c *ColumnExpr) Min() *AggregationExpr {
+	return Min(c)
+}
+
+// Max creates a max aggregation of this column
+func (c *ColumnExpr) Max() *AggregationExpr {
+	return Max(c)
+}
+
+// As sets an alias for the aggregation expression
+func (a *AggregationExpr) As(alias string) *AggregationExpr {
+	return &AggregationExpr{
+		column:  a.column,
+		aggType: a.aggType,
+		alias:   alias,
+	}
 }

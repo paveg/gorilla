@@ -4,12 +4,12 @@
 
 ### Parallel Execution Engine
 
-- TODO: Implement parallel LazyFrame.Collect() using worker pool
-  - Split DataFrame into row-based chunks
-  - Apply operation pipeline to each chunk concurrently
-  - Concatenate results efficiently
-- TODO: Add DataFrame chunking utilities for parallel processing
-- TODO: Implement result concatenation for filtered/transformed chunks
+- ~~TODO: Implement parallel LazyFrame.Collect() using worker pool~~ ✅ COMPLETED
+  - ~~Split DataFrame into row-based chunks~~ ✅ DONE
+  - ~~Apply operation pipeline to each chunk concurrently~~ ✅ DONE  
+  - ~~Concatenate results efficiently~~ ✅ DONE
+- ~~TODO: Add DataFrame chunking utilities for parallel processing~~ ✅ COMPLETED
+- ~~TODO: Implement result concatenation for filtered/transformed chunks~~ ✅ COMPLETED
 
 ## High Priority
 
