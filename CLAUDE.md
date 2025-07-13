@@ -159,6 +159,25 @@ Use `gh issue list --label="High"` to see current high-priority tasks.
 - New aggregation functions need both eager and lazy variants
 - Comprehensive test coverage including edge cases and benchmarks
 
+## Information Accuracy Requirements
+
+**CRITICAL: Always verify information from official sources before making any changes.**
+
+### Documentation and License References
+- **Dependencies**: Always check official documentation, GitHub repositories, and license files before adding or modifying dependency information
+- **API Usage**: Consult official documentation for correct API signatures, parameter types, and usage patterns
+- **Version Information**: Verify exact version numbers from go.mod, package.json, or equivalent dependency files
+- **License Information**: Check official LICENSE, NOTICE, and THIRDPARTYNOTICE files from source repositories
+- **Configuration**: Reference official documentation for configuration options and default values
+
+### Verification Process
+1. **Primary Sources**: Official project websites, GitHub repositories, and documentation
+2. **Package Managers**: go.mod, package.json, requirements.txt for exact versions
+3. **License Files**: LICENSE, NOTICE, COPYING files from official repositories
+4. **Cross-Reference**: Multiple sources when information seems inconsistent
+
+**Never assume or interpolate information. When uncertain, explicitly state the need to verify information.**
+
 ## Common Pitfalls
 
 1. **Memory Leaks**: Forgetting `Release()` calls on Arrow arrays
@@ -166,3 +185,4 @@ Use `gh issue list --label="High"` to see current high-priority tasks.
 3. **Type Mismatches**: Not handling all supported Series types in new operations
 4. **Threshold Logic**: Hardcoded parallelization thresholds should use constants
 5. **Error Handling**: Arrow operations can fail and need proper error propagation
+6. **Information Accuracy**: Making assumptions about dependencies, licenses, or APIs without verification
