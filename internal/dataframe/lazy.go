@@ -571,21 +571,36 @@ func (lf *LazyFrame) Collect() (*DataFrame, error) {
 		return lf.source, nil
 	}
 
+	// Create execution plan from operations
+	plan := CreateExecutionPlan(lf.source, lf.operations)
+
+	// Apply query optimization
+	optimizer := NewQueryOptimizer()
+	optimizedPlan := optimizer.Optimize(plan)
+
+	// Use optimized operations (create a temporary LazyFrame copy)
+	optimizedOperations := optimizedPlan.operations
+
 	// Use parallel execution for larger datasets
 	const minRowsForParallel = 1000
 	if lf.source.Len() >= minRowsForParallel && lf.pool != nil {
-		return lf.collectParallel()
+		return lf.collectParallelWithOps(optimizedOperations)
 	}
 
 	// Fall back to sequential execution for small datasets
-	return lf.collectSequential()
+	return lf.collectSequentialWithOps(optimizedOperations)
 }
 
 // collectSequential applies operations sequentially (original implementation)
 func (lf *LazyFrame) collectSequential() (*DataFrame, error) {
+	return lf.collectSequentialWithOps(lf.operations)
+}
+
+// collectSequentialWithOps applies operations sequentially with provided operations
+func (lf *LazyFrame) collectSequentialWithOps(operations []LazyOperation) (*DataFrame, error) {
 	current := lf.source
 
-	for _, op := range lf.operations {
+	for _, op := range operations {
 		result, err := op.Apply(current)
 		if err != nil {
 			return nil, err
@@ -669,6 +684,11 @@ func (lf *LazyFrame) createIndependentSeries(s ISeries, start, end int, mem memo
 // Key insight: Arrow arrays are thread-safe for reads, but we need independent chunks
 // and must avoid aggressive Release() calls that invalidate shared references
 func (lf *LazyFrame) collectParallel() (*DataFrame, error) {
+	return lf.collectParallelWithOps(lf.operations)
+}
+
+// collectParallelWithOps implements parallel execution with provided operations
+func (lf *LazyFrame) collectParallelWithOps(operations []LazyOperation) (*DataFrame, error) {
 	// Calculate optimal chunk size based on data size and worker count
 	chunkSize := lf.calculateChunkSize()
 	totalRows := lf.source.Len()
@@ -694,7 +714,7 @@ func (lf *LazyFrame) collectParallel() (*DataFrame, error) {
 
 		result := chunk
 		// Apply all operations to this chunk
-		for _, op := range lf.operations {
+		for _, op := range operations {
 			nextResult, err := op.Apply(result)
 			if err != nil {
 				// Return empty DataFrame on error
