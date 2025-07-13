@@ -2,6 +2,7 @@ package gorilla
 
 import (
 	"runtime"
+	"sync"
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
@@ -9,6 +10,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// maxMemGrowth is the threshold for acceptable memory growth in tests
+const maxMemGrowth = uint64(1024 * 1024) // 1MB threshold
 
 // TestMemoryManager tests the memory management utilities
 func TestMemoryManager(t *testing.T) {
@@ -50,6 +54,40 @@ func TestMemoryManager(t *testing.T) {
 			manager.ReleaseAll()
 			manager.ReleaseAll()
 		})
+	})
+
+	t.Run("concurrent access", func(t *testing.T) {
+		mem := memory.NewGoAllocator()
+		manager := NewMemoryManager(mem)
+
+		var wg sync.WaitGroup
+		const numGoroutines = 10
+		const resourcesPerGoroutine = 5
+
+		// Launch multiple goroutines to test concurrent access
+		wg.Add(numGoroutines)
+		for i := 0; i < numGoroutines; i++ {
+			go func(goroutineID int) {
+				defer wg.Done()
+				for j := 0; j < resourcesPerGoroutine; j++ {
+					s := series.New("test", []int64{int64(goroutineID), int64(j)}, mem)
+					manager.Track(s)
+				}
+			}(i)
+		}
+
+		wg.Wait()
+
+		// Should have tracked all resources
+		expectedCount := numGoroutines * resourcesPerGoroutine
+		assert.Equal(t, expectedCount, manager.Count())
+
+		// ReleaseAll should work without issues
+		require.NotPanics(t, func() {
+			manager.ReleaseAll()
+		})
+
+		assert.Equal(t, 0, manager.Count())
 	})
 }
 
@@ -103,6 +141,46 @@ func TestWithSeries(t *testing.T) {
 	})
 }
 
+// TestWithMemoryManager tests the scoped memory management helper
+func TestWithMemoryManager(t *testing.T) {
+	t.Run("automatically releases tracked resources", func(t *testing.T) {
+		mem := memory.NewGoAllocator()
+
+		err := WithMemoryManager(mem, func(manager *MemoryManager) error {
+			// Create and track multiple resources
+			s1 := series.New("test1", []int64{1, 2, 3}, mem)
+			s2 := series.New("test2", []string{"a", "b", "c"}, mem)
+			df := NewDataFrame(s1, s2)
+
+			manager.Track(s1)
+			manager.Track(s2)
+			manager.Track(df)
+
+			// Verify resources are tracked
+			assert.Equal(t, 3, manager.Count())
+			return nil
+		})
+
+		require.NoError(t, err)
+		// All resources should have been automatically released
+		// We can't directly test this, but no panics indicate success
+	})
+
+	t.Run("propagates function error", func(t *testing.T) {
+		mem := memory.NewGoAllocator()
+		expectedErr := assert.AnError
+
+		err := WithMemoryManager(mem, func(manager *MemoryManager) error {
+			s1 := series.New("test", []int64{1, 2}, mem)
+			manager.Track(s1)
+			return expectedErr
+		})
+
+		assert.Equal(t, expectedErr, err)
+		// Resources should still be released even when function returns error
+	})
+}
+
 // TestMemoryLeakDetection tests for potential memory leaks
 func TestMemoryLeakDetection(t *testing.T) {
 	if testing.Short() {
@@ -147,6 +225,6 @@ func TestMemoryLeakDetection(t *testing.T) {
 		// Memory growth should be minimal (less than 1MB for this test)
 		memGrowth := memAfter.Alloc - memBefore.Alloc
 		t.Logf("Memory growth: %d bytes", memGrowth)
-		assert.LessOrEqual(t, memGrowth, uint64(1024*1024))
+		assert.LessOrEqual(t, memGrowth, maxMemGrowth)
 	})
 }

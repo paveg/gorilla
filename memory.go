@@ -1,6 +1,8 @@
 package gorilla
 
 import (
+	"sync"
+
 	"github.com/apache/arrow-go/v18/arrow/memory"
 )
 
@@ -10,9 +12,11 @@ type Releasable interface {
 }
 
 // MemoryManager helps track and release multiple resources automatically
+// It is safe for concurrent use from multiple goroutines.
 type MemoryManager struct {
 	allocator memory.Allocator
 	resources []Releasable
+	mu        sync.Mutex // Mutex to synchronize access to resources
 }
 
 // NewMemoryManager creates a new memory manager with the given allocator
@@ -26,17 +30,24 @@ func NewMemoryManager(allocator memory.Allocator) *MemoryManager {
 // Track adds a resource to be managed and automatically released
 func (m *MemoryManager) Track(resource Releasable) {
 	if resource != nil {
+		m.mu.Lock()
 		m.resources = append(m.resources, resource)
+		m.mu.Unlock()
 	}
 }
 
 // Count returns the number of tracked resources
 func (m *MemoryManager) Count() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	return len(m.resources)
 }
 
 // ReleaseAll releases all tracked resources and clears the tracking list
 func (m *MemoryManager) ReleaseAll() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	for _, resource := range m.resources {
 		if resource != nil {
 			resource.Release()
