@@ -215,6 +215,173 @@ func TestChainedOperations(t *testing.T) {
 	})
 }
 
+func TestFunctionExprChaining(t *testing.T) {
+	col := Col("test_col")
+
+	t.Run("Function to Function chaining", func(t *testing.T) {
+		// col.Abs().Round() - math function chaining
+		chainedExpr := col.Abs().Round()
+		assert.Equal(t, ExprFunction, chainedExpr.Type())
+		assert.Equal(t, "round", chainedExpr.Name())
+		
+		// Verify the argument is the abs function
+		args := chainedExpr.Args()
+		assert.Len(t, args, 1)
+		absFunc := args[0]
+		assert.Equal(t, ExprFunction, absFunc.Type())
+		assert.Equal(t, "abs", absFunc.(*FunctionExpr).Name())
+		
+		// Verify the abs function's argument is the original column
+		absArgs := absFunc.(*FunctionExpr).Args()
+		assert.Len(t, absArgs, 1)
+		assert.Equal(t, col, absArgs[0])
+		
+		// Check the full string representation
+		assert.Equal(t, "round(abs(col(test_col)))", chainedExpr.String())
+	})
+
+	t.Run("String function to String function chaining", func(t *testing.T) {
+		// col.Upper().Length() - string function chaining
+		textCol := Col("text_col")
+		chainedExpr := textCol.Upper().Length()
+		assert.Equal(t, ExprFunction, chainedExpr.Type())
+		assert.Equal(t, "length", chainedExpr.Name())
+		
+		// Verify the argument is the upper function
+		args := chainedExpr.Args()
+		assert.Len(t, args, 1)
+		upperFunc := args[0]
+		assert.Equal(t, ExprFunction, upperFunc.Type())
+		assert.Equal(t, "upper", upperFunc.(*FunctionExpr).Name())
+		
+		// Verify the upper function's argument is the original column
+		upperArgs := upperFunc.(*FunctionExpr).Args()
+		assert.Len(t, upperArgs, 1)
+		assert.Equal(t, textCol, upperArgs[0])
+		
+		// Check the full string representation
+		assert.Equal(t, "length(upper(col(text_col)))", chainedExpr.String())
+	})
+
+	t.Run("Function to Binary chaining", func(t *testing.T) {
+		// col.Round().Add(Lit(5)) - function to binary operation chaining
+		chainedExpr := col.Round().Add(Lit(5))
+		assert.Equal(t, ExprBinary, chainedExpr.Type())
+		assert.Equal(t, OpAdd, chainedExpr.Op())
+		
+		// Verify the left operand is the round function
+		left := chainedExpr.Left()
+		assert.Equal(t, ExprFunction, left.Type())
+		assert.Equal(t, "round", left.(*FunctionExpr).Name())
+		
+		// Verify the round function's argument is the original column
+		roundArgs := left.(*FunctionExpr).Args()
+		assert.Len(t, roundArgs, 1)
+		assert.Equal(t, col, roundArgs[0])
+		
+		// Verify the right operand is the literal
+		right := chainedExpr.Right()
+		assert.Equal(t, ExprLiteral, right.Type())
+		assert.Equal(t, Lit(5), right)
+		
+		// Check the full string representation
+		assert.Equal(t, "(round(col(test_col)) + lit(5))", chainedExpr.String())
+	})
+
+	t.Run("Complex Function chaining", func(t *testing.T) {
+		// More complex chaining: col.Abs().Round().CastToString().Length()
+		chainedExpr := col.Abs().Round().CastToString().Length()
+		assert.Equal(t, ExprFunction, chainedExpr.Type())
+		assert.Equal(t, "length", chainedExpr.Name())
+		
+		// Verify the chain: length(cast_string(round(abs(col))))
+		args := chainedExpr.Args()
+		assert.Len(t, args, 1)
+		
+		castFunc := args[0]
+		assert.Equal(t, ExprFunction, castFunc.Type())
+		assert.Equal(t, "cast_string", castFunc.(*FunctionExpr).Name())
+		
+		castArgs := castFunc.(*FunctionExpr).Args()
+		assert.Len(t, castArgs, 1)
+		
+		roundFunc := castArgs[0]
+		assert.Equal(t, ExprFunction, roundFunc.Type())
+		assert.Equal(t, "round", roundFunc.(*FunctionExpr).Name())
+		
+		roundArgs := roundFunc.(*FunctionExpr).Args()
+		assert.Len(t, roundArgs, 1)
+		
+		absFunc := roundArgs[0]
+		assert.Equal(t, ExprFunction, absFunc.Type())
+		assert.Equal(t, "abs", absFunc.(*FunctionExpr).Name())
+		
+		absArgs := absFunc.(*FunctionExpr).Args()
+		assert.Len(t, absArgs, 1)
+		assert.Equal(t, col, absArgs[0])
+		
+		// Check the full string representation
+		assert.Equal(t, "length(cast_string(round(abs(col(test_col)))))", chainedExpr.String())
+	})
+
+	t.Run("Math function chaining with parameters", func(t *testing.T) {
+		// col.RoundTo(Lit(2)).Sqrt() - function with parameter chained with another function
+		chainedExpr := col.RoundTo(Lit(2)).Sqrt()
+		assert.Equal(t, ExprFunction, chainedExpr.Type())
+		assert.Equal(t, "sqrt", chainedExpr.Name())
+		
+		// Verify the argument is the round function with precision
+		args := chainedExpr.Args()
+		assert.Len(t, args, 1)
+		roundFunc := args[0]
+		assert.Equal(t, ExprFunction, roundFunc.Type())
+		assert.Equal(t, "round", roundFunc.(*FunctionExpr).Name())
+		
+		// Verify the round function has both column and precision arguments
+		roundArgs := roundFunc.(*FunctionExpr).Args()
+		assert.Len(t, roundArgs, 2)
+		assert.Equal(t, col, roundArgs[0])
+		assert.Equal(t, Lit(2), roundArgs[1])
+		
+		// Check the full string representation
+		assert.Equal(t, "sqrt(round(col(test_col), lit(2)))", chainedExpr.String())
+	})
+
+	t.Run("String function chaining with complex operations", func(t *testing.T) {
+		// col.Trim().Upper().Substring(Lit(0), Lit(3)) - multiple string functions chained
+		textCol := Col("text_col")
+		chainedExpr := textCol.Trim().Upper().Substring(Lit(0), Lit(3))
+		assert.Equal(t, ExprFunction, chainedExpr.Type())
+		assert.Equal(t, "substring", chainedExpr.Name())
+		
+		// Verify the substring function arguments
+		args := chainedExpr.Args()
+		assert.Len(t, args, 3) // column, start, length
+		
+		upperFunc := args[0]
+		assert.Equal(t, ExprFunction, upperFunc.Type())
+		assert.Equal(t, "upper", upperFunc.(*FunctionExpr).Name())
+		
+		upperArgs := upperFunc.(*FunctionExpr).Args()
+		assert.Len(t, upperArgs, 1)
+		
+		trimFunc := upperArgs[0]
+		assert.Equal(t, ExprFunction, trimFunc.Type())
+		assert.Equal(t, "trim", trimFunc.(*FunctionExpr).Name())
+		
+		trimArgs := trimFunc.(*FunctionExpr).Args()
+		assert.Len(t, trimArgs, 1)
+		assert.Equal(t, textCol, trimArgs[0])
+		
+		// Verify other arguments
+		assert.Equal(t, Lit(0), args[1])
+		assert.Equal(t, Lit(3), args[2])
+		
+		// Check the full string representation
+		assert.Equal(t, "substring(upper(trim(col(text_col))), lit(0), lit(3))", chainedExpr.String())
+	})
+}
+
 func TestTypeCasting(t *testing.T) {
 	col := Col("mixed_col")
 

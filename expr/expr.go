@@ -409,7 +409,7 @@ type CaseWhen struct {
 // CaseExpr represents a CASE expression with multiple WHEN clauses
 type CaseExpr struct {
 	whens []CaseWhen
-	else_ Expr
+	elseValue Expr
 }
 
 func (c *CaseExpr) Type() ExprType {
@@ -421,8 +421,8 @@ func (c *CaseExpr) String() string {
 	for _, when := range c.whens {
 		result += fmt.Sprintf(" when %s then %s", when.condition.String(), when.value.String())
 	}
-	if c.else_ != nil {
-		result += fmt.Sprintf(" else %s", c.else_.String())
+	if c.elseValue != nil {
+		result += fmt.Sprintf(" else %s", c.elseValue.String())
 	}
 	result += " end"
 	return result
@@ -440,7 +440,7 @@ func (c *CaseExpr) When(condition, value Expr) *CaseExpr {
 
 	return &CaseExpr{
 		whens: newWhens,
-		else_: c.else_,
+		elseValue: c.elseValue,
 	}
 }
 
@@ -448,7 +448,7 @@ func (c *CaseExpr) When(condition, value Expr) *CaseExpr {
 func (c *CaseExpr) Else(value Expr) *CaseExpr {
 	return &CaseExpr{
 		whens: c.whens,
-		else_: value,
+		elseValue: value,
 	}
 }
 
@@ -775,5 +775,5 @@ func Concat(exprs ...Expr) *FunctionExpr {
 
 // Case creates a new CASE expression
 func Case() *CaseExpr {
-	return &CaseExpr{whens: make([]CaseWhen, 0), else_: nil}
+	return &CaseExpr{whens: make([]CaseWhen, 0), elseValue: nil}
 }
