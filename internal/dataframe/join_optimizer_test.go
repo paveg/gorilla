@@ -158,7 +158,6 @@ func TestBroadcastJoin(t *testing.T) {
 }
 
 func TestMergeJoin(t *testing.T) {
-	t.Skip("Merge join has a bug with the last element - will be fixed in follow-up")
 	mem := memory.NewGoAllocator()
 
 	t.Run("Inner merge join on sorted data", func(t *testing.T) {
@@ -382,8 +381,6 @@ func TestOptimizedJoin_Integration(t *testing.T) {
 	})
 
 	t.Run("Pre-sorted merge join optimization", func(t *testing.T) {
-		t.Skip("Merge join has a bug - will be fixed in follow-up")
-
 		// Create pre-sorted DataFrames
 		leftIDs := []int64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 		rightIDs := []int64{2, 4, 6, 8, 10}

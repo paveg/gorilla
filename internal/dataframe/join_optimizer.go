@@ -333,10 +333,17 @@ func (df *DataFrame) mergeJoin(
 	leftIdx, rightIdx := 0, 0
 
 	for leftIdx < leftSorted.Len() && rightIdx < rightSorted.Len() {
-		leftKey := buildJoinKey(leftSorted, leftKeys, leftIdx)
-		rightKey := buildJoinKey(rightSorted, rightKeys, rightIdx)
-
-		cmp := compareKeys(leftKey, rightKey)
+		// Use typed comparison for single column joins
+		var cmp int
+		if len(leftKeys) == 1 && len(rightKeys) == 1 {
+			leftCol, _ := leftSorted.Column(leftKeys[0])
+			rightCol, _ := rightSorted.Column(rightKeys[0])
+			cmp = compareTypedValues(leftCol, leftIdx, rightCol, rightIdx)
+		} else {
+			leftKey := buildJoinKey(leftSorted, leftKeys, leftIdx)
+			rightKey := buildJoinKey(rightSorted, rightKeys, rightIdx)
+			cmp = compareKeys(leftKey, rightKey)
+		}
 
 		switch {
 		case cmp == 0:
@@ -344,14 +351,31 @@ func (df *DataFrame) mergeJoin(
 			leftStart := leftIdx
 			rightStart := rightIdx
 
-			// Find end of matching left rows
-			for leftIdx < leftSorted.Len() && buildJoinKey(leftSorted, leftKeys, leftIdx) == leftKey {
-				leftIdx++
+			// Store the current key for comparison
+			currentKey := buildJoinKey(leftSorted, leftKeys, leftStart)
+
+			// Find end of matching left rows - use typed comparison for single column
+			if len(leftKeys) == 1 {
+				leftCol, _ := leftSorted.Column(leftKeys[0])
+				for leftIdx < leftSorted.Len() && compareTypedValues(leftCol, leftStart, leftCol, leftIdx) == 0 {
+					leftIdx++
+				}
+			} else {
+				for leftIdx < leftSorted.Len() && buildJoinKey(leftSorted, leftKeys, leftIdx) == currentKey {
+					leftIdx++
+				}
 			}
 
-			// Find end of matching right rows
-			for rightIdx < rightSorted.Len() && buildJoinKey(rightSorted, rightKeys, rightIdx) == rightKey {
-				rightIdx++
+			// Find end of matching right rows - use typed comparison for single column
+			if len(rightKeys) == 1 {
+				rightCol, _ := rightSorted.Column(rightKeys[0])
+				for rightIdx < rightSorted.Len() && compareTypedValues(rightCol, rightStart, rightCol, rightIdx) == 0 {
+					rightIdx++
+				}
+			} else {
+				for rightIdx < rightSorted.Len() && buildJoinKey(rightSorted, rightKeys, rightIdx) == currentKey {
+					rightIdx++
+				}
 			}
 
 			// Create cartesian product of matching rows
@@ -410,6 +434,78 @@ func compareKeys(key1, key2 string) int {
 		return 1
 	}
 	return 0
+}
+
+// compareTypedValues compares values from series at given indices
+func compareTypedValues(leftSeries ISeries, leftIdx int, rightSeries ISeries, rightIdx int) int {
+	leftArr := leftSeries.Array()
+	defer leftArr.Release()
+	rightArr := rightSeries.Array()
+	defer rightArr.Release()
+
+	// Handle same type comparisons efficiently
+	switch leftTyped := leftArr.(type) {
+	case *array.Int64:
+		if rightTyped, ok := rightArr.(*array.Int64); ok {
+			left := leftTyped.Value(leftIdx)
+			right := rightTyped.Value(rightIdx)
+			if left < right {
+				return -1
+			} else if left > right {
+				return 1
+			}
+			return 0
+		}
+	case *array.Int32:
+		if rightTyped, ok := rightArr.(*array.Int32); ok {
+			left := leftTyped.Value(leftIdx)
+			right := rightTyped.Value(rightIdx)
+			if left < right {
+				return -1
+			} else if left > right {
+				return 1
+			}
+			return 0
+		}
+	case *array.Float64:
+		if rightTyped, ok := rightArr.(*array.Float64); ok {
+			left := leftTyped.Value(leftIdx)
+			right := rightTyped.Value(rightIdx)
+			if left < right {
+				return -1
+			} else if left > right {
+				return 1
+			}
+			return 0
+		}
+	case *array.Float32:
+		if rightTyped, ok := rightArr.(*array.Float32); ok {
+			left := leftTyped.Value(leftIdx)
+			right := rightTyped.Value(rightIdx)
+			if left < right {
+				return -1
+			} else if left > right {
+				return 1
+			}
+			return 0
+		}
+	case *array.String:
+		if rightTyped, ok := rightArr.(*array.String); ok {
+			left := leftTyped.Value(leftIdx)
+			right := rightTyped.Value(rightIdx)
+			if left < right {
+				return -1
+			} else if left > right {
+				return 1
+			}
+			return 0
+		}
+	}
+
+	// Fallback to string comparison
+	leftKey := getStringValue(leftSeries, leftIdx)
+	rightKey := getStringValue(rightSeries, rightIdx)
+	return compareKeys(leftKey, rightKey)
 }
 
 // OptimizedHashMap uses xxhash for better performance
