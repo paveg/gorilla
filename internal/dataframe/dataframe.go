@@ -205,7 +205,7 @@ func (df *DataFrame) Sort(column string, ascending bool) (*DataFrame, error) {
 // SortBy returns a new DataFrame sorted by multiple columns
 func (df *DataFrame) SortBy(columns []string, ascending []bool) (*DataFrame, error) {
 	// Validate input arrays have the same length
-	if err := validation.ValidateLength(len(columns), len(ascending), "SortBy", 
+	if err := validation.ValidateLength(len(columns), len(ascending), "SortBy",
 		"columns and ascending arrays"); err != nil {
 		return nil, err
 	}
