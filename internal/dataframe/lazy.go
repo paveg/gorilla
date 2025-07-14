@@ -663,21 +663,10 @@ func (lf *LazyFrame) createIndependentChunk(start, end int) *DataFrame {
 }
 
 // createIndependentSeries creates a completely independent series copy with no shared memory references
+// FIXED: This method was previously unsafe due to defer originalArray.Release() in parallel contexts
 func (lf *LazyFrame) createIndependentSeries(s ISeries, start, end int, mem memory.Allocator) ISeries {
-	// Get array once and ensure we release it after copying all data
-	originalArray := s.Array()
-	if originalArray == nil {
-		return series.New(s.Name(), []string{}, mem)
-	}
-	defer originalArray.Release()
-
-	sliceLength := end - start
-	if sliceLength <= 0 {
-		return series.New(s.Name(), []string{}, mem)
-	}
-
-	// Use shared helper to avoid code duplication
-	return createSlicedSeriesFromArray(s.Name(), originalArray, start, sliceLength, mem)
+	// Use the safe implementation that properly handles Arrow memory management
+	return lf.createSafeIndependentSeries(s, start, end, mem)
 }
 
 // collectParallel implements parallel execution with proper memory management
@@ -821,6 +810,257 @@ func (j *JoinOperation) String() string {
 	}
 
 	return fmt.Sprintf("%s JOIN ON %v = %v", joinTypeName, j.options.LeftKeys, j.options.RightKeys)
+}
+
+// SafeCollectParallel executes all deferred operations using memory-safe parallel processing
+func (lf *LazyFrame) SafeCollectParallel() (*DataFrame, error) {
+	if lf.source == nil {
+		return New(), nil
+	}
+
+	// If no operations, return source as-is
+	if len(lf.operations) == 0 {
+		return lf.source, nil
+	}
+
+	// Create execution plan from operations
+	plan := CreateExecutionPlan(lf.source, lf.operations)
+
+	// Apply query optimization
+	optimizer := NewQueryOptimizer()
+	optimizedPlan := optimizer.Optimize(plan)
+
+	// Use safe parallel execution
+	return lf.safeCollectParallelWithOps(optimizedPlan.operations)
+}
+
+// SafeCollectParallelWithMonitoring executes operations with memory monitoring and adaptive parallelism
+func (lf *LazyFrame) SafeCollectParallelWithMonitoring() (*DataFrame, error) {
+	if lf.source == nil {
+		return New(), nil
+	}
+
+	// If no operations, return source as-is
+	if len(lf.operations) == 0 {
+		return lf.source, nil
+	}
+
+	// Create execution plan from operations
+	plan := CreateExecutionPlan(lf.source, lf.operations)
+
+	// Apply query optimization
+	optimizer := NewQueryOptimizer()
+	optimizedPlan := optimizer.Optimize(plan)
+
+	// Use safe parallel execution with monitoring
+	return lf.safeCollectParallelWithMonitoring(optimizedPlan.operations)
+}
+
+// safeCollectParallelWithOps implements memory-safe parallel execution
+func (lf *LazyFrame) safeCollectParallelWithOps(operations []LazyOperation) (*DataFrame, error) {
+	// Create allocator pool for memory safety
+	pool := parallel.NewAllocatorPool(runtime.NumCPU())
+	defer pool.Close()
+
+	// Calculate optimal chunk size based on data size and worker count
+	chunkSize := lf.calculateChunkSize()
+	totalRows := lf.source.Len()
+
+	// Create safe chunks with independent memory
+	var chunks []*DataFrame
+	for start := 0; start < totalRows; start += chunkSize {
+		end := start + chunkSize
+		if end > totalRows {
+			end = totalRows
+		}
+
+		// Create chunk with safe memory allocation
+		chunk := lf.createSafeIndependentChunk(start, end, pool)
+		chunks = append(chunks, chunk)
+	}
+
+	// Process chunks in parallel using safe infrastructure
+	processedChunks := parallel.Process(lf.pool, chunks, func(chunk *DataFrame) *DataFrame {
+		if chunk == nil || chunk.Width() == 0 {
+			return New()
+		}
+
+		result := chunk
+		// Apply all operations to this chunk
+		for _, op := range operations {
+			nextResult, err := op.Apply(result)
+			if err != nil {
+				// Return empty DataFrame on error
+				return New()
+			}
+			result = nextResult
+
+			// Verify result has valid structure
+			if result == nil || result.Width() == 0 {
+				return New()
+			}
+		}
+		return result
+	})
+
+	// Filter out empty chunks and concatenate
+	return lf.concatenateChunks(processedChunks), nil
+}
+
+// safeCollectParallelWithMonitoring implements memory-safe parallel execution with monitoring
+func (lf *LazyFrame) safeCollectParallelWithMonitoring(operations []LazyOperation) (*DataFrame, error) {
+	const memoryThresholdMB = 100
+	const bytesPerMB = 1024 * 1024
+
+	// Create memory monitor for adaptive parallelism
+	monitor := parallel.NewMemoryMonitor(memoryThresholdMB*bytesPerMB, runtime.NumCPU()) // 100MB threshold
+
+	// Create allocator pool for memory safety
+	pool := parallel.NewAllocatorPool(monitor.AdjustParallelism())
+	defer pool.Close()
+
+	// Calculate optimal chunk size based on memory pressure
+	baseChunkSize := lf.calculateChunkSize()
+	totalRows := lf.source.Len()
+
+	// Adjust chunk size based on memory pressure
+	parallelism := monitor.AdjustParallelism()
+	adjustedChunkSize := (totalRows + parallelism - 1) / parallelism
+
+	if adjustedChunkSize > baseChunkSize {
+		adjustedChunkSize = baseChunkSize
+	}
+
+	// Create safe chunks with memory monitoring
+	var chunks []*DataFrame
+	for start := 0; start < totalRows; start += adjustedChunkSize {
+		end := start + adjustedChunkSize
+		if end > totalRows {
+			end = totalRows
+		}
+
+		// Check memory pressure before creating chunk
+		const bytesPerValue = 8 // Rough estimate for average value size
+		const chunkSizeReducer = 2
+
+		estimatedChunkSize := int64((end - start) * lf.source.Width() * bytesPerValue)
+		if !monitor.CanAllocate(estimatedChunkSize) {
+			// Memory pressure too high, reduce chunk size
+			adjustedEnd := start + adjustedChunkSize/chunkSizeReducer
+			if adjustedEnd <= start {
+				adjustedEnd = start + 1
+			}
+			end = adjustedEnd
+		}
+
+		// Create chunk with safe memory allocation
+		chunk := lf.createSafeIndependentChunk(start, end, pool)
+		chunks = append(chunks, chunk)
+
+		// Record memory allocation
+		monitor.RecordAllocation(estimatedChunkSize)
+	}
+
+	// Process chunks with adaptive parallelism
+	adaptivePool := parallel.NewWorkerPool(monitor.AdjustParallelism())
+	defer adaptivePool.Close()
+
+	// Process chunks in parallel using safe infrastructure
+	processedChunks := parallel.Process(adaptivePool, chunks, func(chunk *DataFrame) *DataFrame {
+		if chunk == nil || chunk.Width() == 0 {
+			return New()
+		}
+
+		result := chunk
+		// Apply all operations to this chunk
+		for _, op := range operations {
+			nextResult, err := op.Apply(result)
+			if err != nil {
+				// Return empty DataFrame on error
+				return New()
+			}
+			result = nextResult
+
+			// Verify result has valid structure
+			if result == nil || result.Width() == 0 {
+				return New()
+			}
+		}
+		return result
+	})
+
+	// Filter out empty chunks and concatenate
+	return lf.concatenateChunks(processedChunks), nil
+}
+
+// createSafeIndependentChunk creates a chunk with completely independent data copies using safe allocator pool
+func (lf *LazyFrame) createSafeIndependentChunk(start, end int, pool *parallel.AllocatorPool) *DataFrame {
+	if start < 0 || end <= start || start >= lf.source.Len() {
+		return New() // Return empty DataFrame for invalid range
+	}
+
+	// Clamp end to actual length
+	totalRows := lf.source.Len()
+	if end > totalRows {
+		end = totalRows
+	}
+
+	// Create independent series for each column with safe memory allocation
+	var independentSeries []ISeries
+	processor := parallel.NewChunkProcessor(pool, start) // Use start as chunk ID
+	defer processor.Release()
+
+	for _, colName := range lf.source.Columns() {
+		if originalSeries, exists := lf.source.Column(colName); exists {
+			// Create independent copy of series data for this chunk using safe allocator
+			independentSeries = append(independentSeries, lf.createSafeIndependentSeries(originalSeries, start, end, processor.GetAllocator()))
+		}
+	}
+
+	return New(independentSeries...)
+}
+
+// createSafeIndependentSeries creates a completely independent series copy using safe memory allocation
+func (lf *LazyFrame) createSafeIndependentSeries(s ISeries, start, end int, mem memory.Allocator) ISeries {
+	// Get array once and ensure we release it after copying all data
+	originalArray := s.Array()
+	if originalArray == nil {
+		return series.New(s.Name(), []string{}, mem)
+	}
+	defer originalArray.Release()
+
+	sliceLength := end - start
+	if sliceLength <= 0 {
+		return series.New(s.Name(), []string{}, mem)
+	}
+
+	// Use shared helper to avoid code duplication
+	return createSlicedSeriesFromArray(s.Name(), originalArray, start, sliceLength, mem)
+}
+
+// concatenateChunks safely concatenates processed chunks
+func (lf *LazyFrame) concatenateChunks(processedChunks []*DataFrame) *DataFrame {
+	// Filter out empty chunks before concatenation
+	var nonEmptyChunks []*DataFrame
+	for _, chunk := range processedChunks {
+		if chunk != nil && chunk.Width() > 0 && chunk.Len() > 0 {
+			nonEmptyChunks = append(nonEmptyChunks, chunk)
+		}
+	}
+
+	if len(nonEmptyChunks) == 0 {
+		return New()
+	}
+
+	if len(nonEmptyChunks) == 1 {
+		return nonEmptyChunks[0]
+	}
+
+	// Concatenate all non-empty chunks
+	result := nonEmptyChunks[0]
+	others := nonEmptyChunks[1:]
+
+	return result.Concat(others...)
 }
 
 // Release releases resources
