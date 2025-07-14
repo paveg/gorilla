@@ -1,4 +1,68 @@
-// Package gorilla provides a high-performance, concurrent DataFrame library.
+// Package gorilla provides a high-performance, in-memory DataFrame library for Go.
+//
+// Gorilla is built on Apache Arrow and provides fast, efficient data manipulation
+// with lazy evaluation and automatic parallelization. It offers a clear, intuitive
+// API for filtering, selecting, transforming, and analyzing tabular data.
+//
+// # Core Concepts
+//
+// DataFrame: A 2-dimensional table of data with named columns (Series).
+// Series: A 1-dimensional array of homogeneous data representing a single column.
+// LazyFrame: Deferred computation that builds an optimized query plan.
+// Expression: Type-safe operations for filtering, transforming, and aggregating data.
+//
+// # Memory Management
+//
+// Gorilla uses Apache Arrow's memory management. Always call Release() on DataFrames
+// and Series to prevent memory leaks. The recommended pattern is:
+//
+//	df := gorilla.NewDataFrame(series1, series2)
+//	defer df.Release() // Essential for proper cleanup
+//
+// # Basic Usage
+//
+//	package main
+//
+//	import (
+//		"fmt"
+//		"github.com/apache/arrow-go/v18/arrow/memory"
+//		"github.com/paveg/gorilla"
+//	)
+//
+//	func main() {
+//		mem := memory.NewGoAllocator()
+//
+//		// Create Series (columns)
+//		names := gorilla.NewSeries("name", []string{"Alice", "Bob", "Charlie"}, mem)
+//		ages := gorilla.NewSeries("age", []int64{25, 30, 35}, mem)
+//		defer names.Release()
+//		defer ages.Release()
+//
+//		// Create DataFrame
+//		df := gorilla.NewDataFrame(names, ages)
+//		defer df.Release()
+//
+//		// Lazy evaluation with method chaining
+//		result, err := df.Lazy().
+//			Filter(gorilla.Col("age").Gt(gorilla.Lit(int64(30)))).
+//			Select("name").
+//			Collect()
+//		if err != nil {
+//			panic(err)
+//		}
+//		defer result.Release()
+//
+//		fmt.Println(result)
+//	}
+//
+// # Performance Features
+//
+// - Zero-copy operations using Apache Arrow columnar format
+// - Automatic parallelization for DataFrames with 1000+ rows
+// - Lazy evaluation with query optimization
+// - Efficient join algorithms with automatic strategy selection
+// - Memory-efficient aggregations and transformations
+//
 // This package is the sole public API for the library.
 package gorilla
 
@@ -12,24 +76,94 @@ import (
 	"github.com/paveg/gorilla/internal/series"
 )
 
-// ISeries provides a type-erased interface for Series of any type
+// ISeries provides a type-erased interface for Series of any supported type.
+//
+// ISeries allows different typed Series to be used together in DataFrames
+// and operations. It wraps Apache Arrow arrays and provides common operations
+// for all Series types.
+//
+// Supported data types: string, int64, int32, float64, float32, bool
+//
+// Memory management: Series implement the Release() method and must be
+// released to prevent memory leaks:
+//
+//	series := gorilla.NewSeries("name", []string{"Alice", "Bob"}, mem)
+//	defer series.Release()
+//
+// The interface provides:
+//   - Name() - column name for use in DataFrames
+//   - Len() - number of elements in the Series
+//   - DataType() - Apache Arrow data type information
+//   - IsNull(index) - null value checking
+//   - String() - human-readable representation
+//   - Array() - access to underlying Arrow array
+//   - Release() - memory cleanup
 type ISeries interface {
-	Name() string
-	Len() int
-	DataType() arrow.DataType
-	IsNull(index int) bool
-	String() string
-	Array() arrow.Array
-	Release()
+	Name() string             // Returns the name of the Series
+	Len() int                 // Returns the number of elements
+	DataType() arrow.DataType // Returns the Apache Arrow data type
+	IsNull(index int) bool    // Checks if the value at index is null
+	String() string           // Returns a string representation
+	Array() arrow.Array       // Returns the underlying Arrow array
+	Release()                 // Releases memory resources
 }
 
-// DataFrame is the public type for a DataFrame.
-// It wraps the internal dataframe.DataFrame to hide implementation details.
+// DataFrame represents a 2-dimensional table of data with named columns.
+//
+// A DataFrame is composed of multiple Series (columns) and provides operations
+// for filtering, selecting, transforming, joining, and aggregating data.
+// It supports both eager and lazy evaluation patterns.
+//
+// Key features:
+//   - Zero-copy operations using Apache Arrow columnar format
+//   - Automatic parallelization for large datasets (1000+ rows)
+//   - Type-safe operations through the Expression system
+//   - Memory-efficient storage and computation
+//
+// Memory management: DataFrames must be released to prevent memory leaks:
+//
+//	df := gorilla.NewDataFrame(series1, series2)
+//	defer df.Release()
+//
+// Operations can be performed eagerly or using lazy evaluation:
+//
+//	// Eager: operations execute immediately
+//	filtered := df.Filter(gorilla.Col("age").Gt(gorilla.Lit(30)))
+//
+//	// Lazy: operations build a query plan, execute on Collect()
+//	result, err := df.Lazy().
+//		Filter(gorilla.Col("age").Gt(gorilla.Lit(30))).
+//		Select("name", "age").
+//		Collect()
 type DataFrame struct {
 	df *dataframe.DataFrame
 }
 
-// LazyFrame is the public type for lazy evaluation.
+// LazyFrame provides deferred computation with query optimization.
+//
+// LazyFrame builds an Abstract Syntax Tree (AST) of operations without
+// executing them immediately. This allows for query optimization, operation
+// fusion, and efficient memory usage. Operations are only executed when
+// Collect() is called.
+//
+// Benefits of lazy evaluation:
+//   - Query optimization (predicate pushdown, operation fusion)
+//   - Memory efficiency (only final results allocated)
+//   - Parallel execution planning
+//   - Operation chaining with method syntax
+//
+// Example:
+//
+//	lazyResult := df.Lazy().
+//		Filter(gorilla.Col("age").Gt(gorilla.Lit(25))).
+//		WithColumn("bonus", gorilla.Col("salary").Mul(gorilla.Lit(0.1))).
+//		GroupBy("department").
+//		Agg(gorilla.Sum(gorilla.Col("salary")).As("total_salary")).
+//		Select("department", "total_salary")
+//
+//	// Execute the entire plan efficiently
+//	result, err := lazyResult.Collect()
+//	defer result.Release()
 type LazyFrame struct {
 	lf *dataframe.LazyFrame
 }
@@ -44,7 +178,32 @@ type GroupBy struct {
 	gb *dataframe.GroupBy
 }
 
-// Expression is the public type for defining operations.
+// Expression represents a type-safe operation that can be applied to DataFrame columns.
+//
+// Expressions are the building blocks for DataFrame operations like filtering,
+// transformations, and aggregations. They provide a fluent, chainable API
+// for constructing complex data operations.
+//
+// Expressions are created using factory functions:
+//   - Col("name") - references a column
+//   - Lit(value) - represents a literal value
+//   - Sum(expr) - aggregation functions
+//
+// Expressions support method chaining for operations:
+//   - Arithmetic: Add(), Sub(), Mul(), Div()
+//   - Comparisons: Eq(), Ne(), Gt(), Ge(), Lt(), Le()
+//   - Logical: And(), Or(), Not()
+//   - String operations: StartsWith(), EndsWith(), Contains()
+//
+// Example:
+//
+//	// Complex expression with chaining
+//	expr := gorilla.Col("salary").
+//		Mul(gorilla.Lit(1.1)).  // 10% raise
+//		Gt(gorilla.Lit(50000)). // Filter high earners
+//		And(gorilla.Col("active").Eq(gorilla.Lit(true)))
+//
+//	result, err := df.Lazy().Filter(expr).Collect()
 type Expression struct {
 	expr expr.Expr
 }
@@ -73,7 +232,29 @@ type JoinOptions struct {
 	RightKeys []string // Multiple join keys for right DataFrame
 }
 
-// NewDataFrame creates a new DataFrame from ISeries.
+// NewDataFrame creates a new DataFrame from one or more Series.
+//
+// A DataFrame is a 2-dimensional table with named columns. Each Series becomes
+// a column in the DataFrame. All Series must have the same length.
+//
+// Memory management: The returned DataFrame must be released by calling Release()
+// to prevent memory leaks. Use defer for automatic cleanup:
+//
+//	df := gorilla.NewDataFrame(series1, series2)
+//	defer df.Release()
+//
+// Example:
+//
+//	mem := memory.NewGoAllocator()
+//	names := gorilla.NewSeries("name", []string{"Alice", "Bob"}, mem)
+//	ages := gorilla.NewSeries("age", []int64{25, 30}, mem)
+//	defer names.Release()
+//	defer ages.Release()
+//
+//	df := gorilla.NewDataFrame(names, ages)
+//	defer df.Release()
+//
+//	fmt.Println(df) // Displays the DataFrame
 func NewDataFrame(series ...ISeries) *DataFrame {
 	// Convert ISeries to dataframe.ISeries
 	internalSeries := make([]dataframe.ISeries, len(series))
@@ -83,7 +264,38 @@ func NewDataFrame(series ...ISeries) *DataFrame {
 	return &DataFrame{df: dataframe.New(internalSeries...)}
 }
 
-// NewSeries creates a new typed Series from values.
+// NewSeries creates a new typed Series from a slice of values.
+//
+// A Series is a 1-dimensional array of homogeneous data that represents a single
+// column in a DataFrame. The type parameter T determines the data type of the Series.
+//
+// Supported types: string, int64, int32, float64, float32, bool
+//
+// Parameters:
+//   - name: The name of the Series (becomes the column name in a DataFrame)
+//   - values: Slice of values to populate the Series
+//   - mem: Apache Arrow memory allocator for managing the underlying storage
+//
+// Memory management: The returned Series must be released by calling Release()
+// to prevent memory leaks. Use defer for automatic cleanup:
+//
+//	series := gorilla.NewSeries("age", []int64{25, 30, 35}, mem)
+//	defer series.Release()
+//
+// Example:
+//
+//	mem := memory.NewGoAllocator()
+//
+//	// Create different types of Series
+//	names := gorilla.NewSeries("name", []string{"Alice", "Bob", "Charlie"}, mem)
+//	ages := gorilla.NewSeries("age", []int64{25, 30, 35}, mem)
+//	scores := gorilla.NewSeries("score", []float64{95.5, 87.2, 92.1}, mem)
+//	active := gorilla.NewSeries("active", []bool{true, false, true}, mem)
+//
+//	defer names.Release()
+//	defer ages.Release()
+//	defer scores.Release()
+//	defer active.Release()
 func NewSeries[T any](name string, values []T, mem memory.Allocator) ISeries {
 	return series.New(name, values, mem)
 }
@@ -305,12 +517,47 @@ func (gb *GroupBy) Agg(aggregations ...*AggregationExpression) *DataFrame {
 
 // Expression factory functions
 
-// Col returns an Expression representing a column reference.
+// Col creates an Expression that references a column by name.
+//
+// This is the primary way to reference columns in filters, selections, and
+// other DataFrame operations. The column name must exist in the DataFrame
+// when the expression is evaluated.
+//
+// Example:
+//
+//	// Reference the "age" column
+//	ageCol := gorilla.Col("age")
+//
+//	// Use in filters and operations
+//	result, err := df.Lazy().
+//		Filter(gorilla.Col("age").Gt(gorilla.Lit(30))).
+//		Select(gorilla.Col("name"), gorilla.Col("age")).
+//		Collect()
 func Col(name string) Expression {
 	return Expression{expr: expr.Col(name)}
 }
 
-// Lit returns an Expression representing a literal value.
+// Lit creates an Expression that represents a literal (constant) value.
+//
+// This is used to create expressions with constant values for comparisons,
+// arithmetic operations, and other transformations. The value type should
+// match the expected operation type.
+//
+// Supported types: string, int64, int32, float64, float32, bool
+//
+// Example:
+//
+//	// Literal values for comparisons
+//	age30 := gorilla.Lit(int64(30))
+//	name := gorilla.Lit("Alice")
+//	score := gorilla.Lit(95.5)
+//	active := gorilla.Lit(true)
+//
+//	// Use in operations
+//	result, err := df.Lazy().
+//		Filter(gorilla.Col("age").Gt(gorilla.Lit(int64(25)))).
+//		WithColumn("bonus", gorilla.Col("salary").Mul(gorilla.Lit(0.1))).
+//		Collect()
 func Lit(value interface{}) Expression {
 	return Expression{expr: expr.Lit(value)}
 }
