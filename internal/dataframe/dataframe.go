@@ -1689,3 +1689,15 @@ func (df *DataFrame) mergeSortedChunks(chunks []chunkResult, columns []string, a
 
 	return result
 }
+
+// SafeCollectParallel performs memory-safe parallel collection using the new infrastructure
+func (df *DataFrame) SafeCollectParallel() (*DataFrame, error) {
+	// Use the existing lazy frame collection but with safe infrastructure
+	return df.Lazy().SafeCollectParallel()
+}
+
+// SafeCollectParallelWithMonitoring performs memory-safe parallel collection with memory monitoring
+func (df *DataFrame) SafeCollectParallelWithMonitoring() (*DataFrame, error) {
+	// Use the existing lazy frame collection but with safe infrastructure and monitoring
+	return df.Lazy().SafeCollectParallelWithMonitoring()
+}
