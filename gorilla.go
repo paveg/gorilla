@@ -67,8 +67,6 @@
 package gorilla
 
 import (
-	"fmt"
-
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/paveg/gorilla/internal/dataframe"
@@ -178,40 +176,31 @@ type GroupBy struct {
 	gb *dataframe.GroupBy
 }
 
-// Expression represents a type-safe operation that can be applied to DataFrame columns.
+// Expression Types
 //
-// Expressions are the building blocks for DataFrame operations like filtering,
-// transformations, and aggregations. They provide a fluent, chainable API
-// for constructing complex data operations.
+// The gorilla library now exposes expression types directly from the internal expr package
+// for optimal performance. This eliminates wrapper overhead and type assertion costs.
 //
-// Expressions are created using factory functions:
-//   - Col("name") - references a column
-//   - Lit(value) - represents a literal value
-//   - Sum(expr) - aggregation functions
+// Available expression types:
+//   - *expr.ColumnExpr - Column references (created by Col function)
+//   - *expr.LiteralExpr - Literal values (created by Lit function)
+//   - *expr.BinaryExpr - Binary operations (created by method chaining)
+//   - *expr.AggregationExpr - Aggregation operations (created by Sum, Count, etc.)
+//   - *expr.FunctionExpr - Function calls (created by If, Coalesce, etc.)
+//   - *expr.CaseExpr - Case expressions (created by Case function)
 //
-// Expressions support method chaining for operations:
-//   - Arithmetic: Add(), Sub(), Mul(), Div()
-//   - Comparisons: Eq(), Ne(), Gt(), Ge(), Lt(), Le()
-//   - Logical: And(), Or(), Not()
-//   - String operations: StartsWith(), EndsWith(), Contains()
+// All expression types implement the expr.Expr interface and support method chaining
+// for building complex operations without wrapper overhead.
 //
 // Example:
 //
-//	// Complex expression with chaining
-//	expr := gorilla.Col("salary").
-//		Mul(gorilla.Lit(1.1)).  // 10% raise
-//		Gt(gorilla.Lit(50000)). // Filter high earners
-//		And(gorilla.Col("active").Eq(gorilla.Lit(true)))
+//	// Complex expression with chaining (all concrete types)
+//	col := gorilla.Col("salary")        // returns *expr.ColumnExpr
+//	expr1 := col.Mul(gorilla.Lit(1.1))  // returns *expr.BinaryExpr
+//	expr2 := expr1.Gt(gorilla.Lit(50000)) // returns *expr.BinaryExpr
+//	final := expr2.And(gorilla.Col("active").Eq(gorilla.Lit(true))) // returns *expr.BinaryExpr
 //
-//	result, err := df.Lazy().Filter(expr).Collect()
-type Expression struct {
-	expr expr.Expr
-}
-
-// AggregationExpression is the public type for aggregation operations.
-type AggregationExpression struct {
-	aggr *expr.AggregationExpr
-}
+//	result, err := df.Lazy().Filter(final).Collect()
 
 // JoinType represents the type of join operation
 type JoinType int
@@ -408,8 +397,10 @@ func (d *DataFrame) Lazy() *LazyFrame {
 // LazyFrame methods
 
 // Filter adds a filter operation to the LazyFrame.
-func (lf *LazyFrame) Filter(predicate Expression) *LazyFrame {
-	return &LazyFrame{lf: lf.lf.Filter(predicate.expr)}
+//
+// The predicate can be any expression that implements expr.Expr interface.
+func (lf *LazyFrame) Filter(predicate expr.Expr) *LazyFrame {
+	return &LazyFrame{lf: lf.lf.Filter(predicate)}
 }
 
 // Select adds a select operation to the LazyFrame.
@@ -418,8 +409,10 @@ func (lf *LazyFrame) Select(columns ...string) *LazyFrame {
 }
 
 // WithColumn adds a new column to the LazyFrame.
-func (lf *LazyFrame) WithColumn(name string, expr Expression) *LazyFrame {
-	return &LazyFrame{lf: lf.lf.WithColumn(name, expr.expr)}
+//
+// The expression can be any expression that implements expr.Expr interface.
+func (lf *LazyFrame) WithColumn(name string, expression expr.Expr) *LazyFrame {
+	return &LazyFrame{lf: lf.lf.WithColumn(name, expression)}
 }
 
 // Sort adds a sort operation to the LazyFrame.
@@ -471,12 +464,10 @@ func (lf *LazyFrame) Release() {
 // LazyGroupBy methods
 
 // Agg adds aggregation operations to the LazyGroupBy.
-func (lgb *LazyGroupBy) Agg(aggregations ...*AggregationExpression) *LazyFrame {
-	internalAggs := make([]*expr.AggregationExpr, len(aggregations))
-	for i, agg := range aggregations {
-		internalAggs[i] = agg.aggr
-	}
-	return &LazyFrame{lf: lgb.lgb.Agg(internalAggs...)}
+//
+// Takes aggregation expressions directly without wrapper overhead.
+func (lgb *LazyGroupBy) Agg(aggregations ...*expr.AggregationExpr) *LazyFrame {
+	return &LazyFrame{lf: lgb.lgb.Agg(aggregations...)}
 }
 
 // Sum adds a sum aggregation for the specified column.
@@ -507,21 +498,21 @@ func (lgb *LazyGroupBy) Max(column string) *LazyFrame {
 // GroupBy methods
 
 // Agg performs aggregation operations on the GroupBy.
-func (gb *GroupBy) Agg(aggregations ...*AggregationExpression) *DataFrame {
-	internalAggs := make([]*expr.AggregationExpr, len(aggregations))
-	for i, agg := range aggregations {
-		internalAggs[i] = agg.aggr
-	}
-	return &DataFrame{df: gb.gb.Agg(internalAggs...)}
+//
+// Takes aggregation expressions directly without wrapper overhead.
+func (gb *GroupBy) Agg(aggregations ...*expr.AggregationExpr) *DataFrame {
+	return &DataFrame{df: gb.gb.Agg(aggregations...)}
 }
 
 // Expression factory functions
 
-// Col creates an Expression that references a column by name.
+// Col creates a column expression that references a column by name.
 //
 // This is the primary way to reference columns in filters, selections, and
 // other DataFrame operations. The column name must exist in the DataFrame
 // when the expression is evaluated.
+//
+// Returns a concrete *expr.ColumnExpr for optimal performance and type safety.
 //
 // Example:
 //
@@ -533,17 +524,19 @@ func (gb *GroupBy) Agg(aggregations ...*AggregationExpression) *DataFrame {
 //		Filter(gorilla.Col("age").Gt(gorilla.Lit(30))).
 //		Select(gorilla.Col("name"), gorilla.Col("age")).
 //		Collect()
-func Col(name string) Expression {
-	return Expression{expr: expr.Col(name)}
+func Col(name string) *expr.ColumnExpr {
+	return expr.Col(name)
 }
 
-// Lit creates an Expression that represents a literal (constant) value.
+// Lit creates a literal expression that represents a constant value.
 //
 // This is used to create expressions with constant values for comparisons,
 // arithmetic operations, and other transformations. The value type should
 // match the expected operation type.
 //
 // Supported types: string, int64, int32, float64, float32, bool
+//
+// Returns a concrete *expr.LiteralExpr for optimal performance and type safety.
 //
 // Example:
 //
@@ -558,175 +551,81 @@ func Col(name string) Expression {
 //		Filter(gorilla.Col("age").Gt(gorilla.Lit(int64(25)))).
 //		WithColumn("bonus", gorilla.Col("salary").Mul(gorilla.Lit(0.1))).
 //		Collect()
-func Lit(value interface{}) Expression {
-	return Expression{expr: expr.Lit(value)}
+func Lit(value interface{}) *expr.LiteralExpr {
+	return expr.Lit(value)
 }
 
 // Sum returns an aggregation expression for sum.
-func Sum(column Expression) *AggregationExpression {
-	return &AggregationExpression{aggr: expr.Sum(column.expr)}
+//
+// Returns a concrete *expr.AggregationExpr for optimal performance and type safety.
+func Sum(column expr.Expr) *expr.AggregationExpr {
+	return expr.Sum(column)
 }
 
 // Count returns an aggregation expression for count.
-func Count(column Expression) *AggregationExpression {
-	return &AggregationExpression{aggr: expr.Count(column.expr)}
+//
+// Returns a concrete *expr.AggregationExpr for optimal performance and type safety.
+func Count(column expr.Expr) *expr.AggregationExpr {
+	return expr.Count(column)
 }
 
 // Mean returns an aggregation expression for mean.
-func Mean(column Expression) *AggregationExpression {
-	return &AggregationExpression{aggr: expr.Mean(column.expr)}
+//
+// Returns a concrete *expr.AggregationExpr for optimal performance and type safety.
+func Mean(column expr.Expr) *expr.AggregationExpr {
+	return expr.Mean(column)
 }
 
 // Min returns an aggregation expression for min.
-func Min(column Expression) *AggregationExpression {
-	return &AggregationExpression{aggr: expr.Min(column.expr)}
+//
+// Returns a concrete *expr.AggregationExpr for optimal performance and type safety.
+func Min(column expr.Expr) *expr.AggregationExpr {
+	return expr.Min(column)
 }
 
 // Max returns an aggregation expression for max.
-func Max(column Expression) *AggregationExpression {
-	return &AggregationExpression{aggr: expr.Max(column.expr)}
+//
+// Returns a concrete *expr.AggregationExpr for optimal performance and type safety.
+func Max(column expr.Expr) *expr.AggregationExpr {
+	return expr.Max(column)
 }
 
 // If returns a conditional expression.
-func If(condition, thenValue, elseValue Expression) Expression {
-	return Expression{expr: expr.If(condition.expr, thenValue.expr, elseValue.expr)}
+//
+// Returns a concrete *expr.FunctionExpr for optimal performance and type safety.
+func If(condition, thenValue, elseValue expr.Expr) *expr.FunctionExpr {
+	return expr.If(condition, thenValue, elseValue)
 }
 
 // Coalesce returns the first non-null expression.
-func Coalesce(exprs ...Expression) Expression {
-	internalExprs := make([]expr.Expr, len(exprs))
-	for i, e := range exprs {
-		internalExprs[i] = e.expr
-	}
-	return Expression{expr: expr.Coalesce(internalExprs...)}
+//
+// Returns a concrete *expr.FunctionExpr for optimal performance and type safety.
+func Coalesce(exprs ...expr.Expr) *expr.FunctionExpr {
+	return expr.Coalesce(exprs...)
 }
 
 // Concat concatenates string expressions.
-func Concat(exprs ...Expression) Expression {
-	internalExprs := make([]expr.Expr, len(exprs))
-	for i, e := range exprs {
-		internalExprs[i] = e.expr
-	}
-	return Expression{expr: expr.Concat(internalExprs...)}
+//
+// Returns a concrete *expr.FunctionExpr for optimal performance and type safety.
+func Concat(exprs ...expr.Expr) *expr.FunctionExpr {
+	return expr.Concat(exprs...)
 }
 
 // Case starts a case expression.
-func Case() Expression {
-	return Expression{expr: expr.Case()}
+//
+// Returns a concrete *expr.CaseExpr for optimal performance and type safety.
+func Case() *expr.CaseExpr {
+	return expr.Case()
 }
 
-// Expression methods for chaining
-// These handle different expression types appropriately
-
-// Eq returns an equality comparison expression.
-// Comparison operations are supported by ColumnExpr only, others should use factory functions.
-func (e Expression) Eq(other Expression) Expression {
-	if colExpr, ok := e.expr.(*expr.ColumnExpr); ok {
-		return Expression{expr: colExpr.Eq(other.expr)}
-	}
-	return Expression{expr: expr.Invalid(fmt.Sprintf("Eq operation only supported on column expressions, got %T", e.expr))}
-}
-
-func (e Expression) Ne(other Expression) Expression {
-	if colExpr, ok := e.expr.(*expr.ColumnExpr); ok {
-		return Expression{expr: colExpr.Ne(other.expr)}
-	}
-	return Expression{expr: expr.Invalid(fmt.Sprintf("Ne operation only supported on column expressions, got %T", e.expr))}
-}
-
-func (e Expression) Lt(other Expression) Expression {
-	if colExpr, ok := e.expr.(*expr.ColumnExpr); ok {
-		return Expression{expr: colExpr.Lt(other.expr)}
-	}
-	return Expression{expr: expr.Invalid(fmt.Sprintf("Lt operation only supported on column expressions, got %T", e.expr))}
-}
-
-func (e Expression) Le(other Expression) Expression {
-	if colExpr, ok := e.expr.(*expr.ColumnExpr); ok {
-		return Expression{expr: colExpr.Le(other.expr)}
-	}
-	return Expression{expr: expr.Invalid(fmt.Sprintf("Le operation only supported on column expressions, got %T", e.expr))}
-}
-
-func (e Expression) Gt(other Expression) Expression {
-	if colExpr, ok := e.expr.(*expr.ColumnExpr); ok {
-		return Expression{expr: colExpr.Gt(other.expr)}
-	}
-	return Expression{expr: expr.Invalid(fmt.Sprintf("Gt operation only supported on column expressions, got %T", e.expr))}
-}
-
-func (e Expression) Ge(other Expression) Expression {
-	if colExpr, ok := e.expr.(*expr.ColumnExpr); ok {
-		return Expression{expr: colExpr.Ge(other.expr)}
-	}
-	return Expression{expr: expr.Invalid(fmt.Sprintf("Ge operation only supported on column expressions, got %T", e.expr))}
-}
-
-// Add returns an addition expression.
-// Arithmetic operations are supported by ColumnExpr and BinaryExpr.
-func (e Expression) Add(other Expression) Expression {
-	switch exprType := e.expr.(type) {
-	case *expr.ColumnExpr:
-		return Expression{expr: exprType.Add(other.expr)}
-	case *expr.BinaryExpr:
-		return Expression{expr: exprType.Add(other.expr)}
-	default:
-		return Expression{expr: expr.Invalid(fmt.Sprintf("Add unsupported on %T", e.expr))}
-	}
-}
-
-func (e Expression) Sub(other Expression) Expression {
-	switch exprType := e.expr.(type) {
-	case *expr.ColumnExpr:
-		return Expression{expr: exprType.Sub(other.expr)}
-	case *expr.BinaryExpr:
-		return Expression{expr: exprType.Sub(other.expr)}
-	default:
-		return Expression{expr: expr.Invalid(fmt.Sprintf("Sub unsupported on %T", e.expr))}
-	}
-}
-
-func (e Expression) Mul(other Expression) Expression {
-	switch exprType := e.expr.(type) {
-	case *expr.ColumnExpr:
-		return Expression{expr: exprType.Mul(other.expr)}
-	case *expr.BinaryExpr:
-		return Expression{expr: exprType.Mul(other.expr)}
-	default:
-		return Expression{expr: expr.Invalid(fmt.Sprintf("Mul unsupported on %T", e.expr))}
-	}
-}
-
-func (e Expression) Div(other Expression) Expression {
-	switch exprType := e.expr.(type) {
-	case *expr.ColumnExpr:
-		return Expression{expr: exprType.Div(other.expr)}
-	case *expr.BinaryExpr:
-		return Expression{expr: exprType.Div(other.expr)}
-	default:
-		return Expression{expr: expr.Invalid(fmt.Sprintf("Div unsupported on %T", e.expr))}
-	}
-}
-
-// And returns a logical AND expression.
-// Logical operations are supported by BinaryExpr only.
-func (e Expression) And(other Expression) Expression {
-	if binExpr, ok := e.expr.(*expr.BinaryExpr); ok {
-		return Expression{expr: binExpr.And(other.expr)}
-	}
-	return Expression{expr: expr.Invalid(fmt.Sprintf("And unsupported on %T", e.expr))}
-}
-
-func (e Expression) Or(other Expression) Expression {
-	if binExpr, ok := e.expr.(*expr.BinaryExpr); ok {
-		return Expression{expr: binExpr.Or(other.expr)}
-	}
-	return Expression{expr: expr.Invalid(fmt.Sprintf("Or operation only supported on binary expressions, got %T", e.expr))}
-}
-
-// AggregationExpression methods
-
-// As returns an aggregation expression with an alias.
-func (a *AggregationExpression) As(alias string) *AggregationExpression {
-	return &AggregationExpression{aggr: a.aggr.As(alias)}
-}
+// Expression methods are now available directly on the concrete expression types
+// returned by the factory functions (Col, Lit, etc.). This eliminates wrapper
+// overhead and type assertion costs.
+//
+// For example:
+//   - Col("age") returns *expr.ColumnExpr with methods like Gt(), Eq(), Add(), etc.
+//   - Lit(30) returns *expr.LiteralExpr
+//   - col.Gt(lit) returns *expr.BinaryExpr with methods like And(), Or(), etc.
+//   - Sum(col) returns *expr.AggregationExpr with methods like As(), etc.
+//
+// All expression types implement the expr.Expr interface for use in DataFrame operations.

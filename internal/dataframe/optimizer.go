@@ -193,14 +193,12 @@ func (r *PredicatePushdownRule) Apply(plan *ExecutionPlan) *ExecutionPlan {
 			// Collect filters to push down
 			pendingFilters = append(pendingFilters, o)
 		case *SelectOperation:
-			// Push applicable filters before select
+			// Push ALL filters before select (filters need to be applied before columns are removed)
 			for _, filter := range pendingFilters {
-				if r.canPushThroughSelect(filter, o) {
-					optimized = append(optimized, filter)
-				}
+				optimized = append(optimized, filter)
 			}
-			// Clear pending filters that were pushed
-			pendingFilters = r.removePushedFilters(pendingFilters, o)
+			// Clear all pending filters since they've been pushed before the select
+			pendingFilters = make([]*FilterOperation, 0)
 			optimized = append(optimized, op)
 		default:
 			// For other operations, decide what to do with pending filters
@@ -278,20 +276,12 @@ func (r *PredicatePushdownRule) canPushThroughOperation(filter *FilterOperation,
 	case *GroupByOperation:
 		// Cannot push filters through aggregations
 		return false
+	case *SelectOperation:
+		// Filter can be pushed through select if all its dependencies are in the select
+		return r.canPushThroughSelect(filter, o)
 	default:
 		return true
 	}
-}
-
-// removePushedFilters removes filters that were successfully pushed
-func (r *PredicatePushdownRule) removePushedFilters(filters []*FilterOperation, op LazyOperation) []*FilterOperation {
-	remaining := make([]*FilterOperation, 0)
-	for _, filter := range filters {
-		if !r.canPushThroughOperation(filter, op) {
-			remaining = append(remaining, filter)
-		}
-	}
-	return remaining
 }
 
 // FilterFusionRule combines multiple filter operations into a single operation
