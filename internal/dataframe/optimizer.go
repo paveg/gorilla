@@ -34,6 +34,7 @@ type PlanMetadata struct {
 func NewQueryOptimizer() *QueryOptimizer {
 	return &QueryOptimizer{
 		rules: []OptimizationRule{
+			&ConstantFoldingRule{}, // Apply constant folding first
 			&PredicatePushdownRule{},
 			&FilterFusionRule{},
 			&ProjectionPushdownRule{},
@@ -540,4 +541,560 @@ func (r *OperationFusionRule) Apply(plan *ExecutionPlan) *ExecutionPlan {
 		operations: optimized,
 		metadata:   plan.metadata,
 	}
+}
+
+// ConstantFoldingRule evaluates constant expressions at planning time
+type ConstantFoldingRule struct{}
+
+func (r *ConstantFoldingRule) Name() string {
+	return "ConstantFolding"
+}
+
+func (r *ConstantFoldingRule) Apply(plan *ExecutionPlan) *ExecutionPlan {
+	if len(plan.operations) == 0 {
+		return plan
+	}
+
+	optimized := make([]LazyOperation, 0, len(plan.operations))
+
+	for _, op := range plan.operations {
+		optimizedOp := r.optimizeOperation(op)
+		optimized = append(optimized, optimizedOp)
+	}
+
+	return &ExecutionPlan{
+		source:     plan.source,
+		operations: optimized,
+		metadata:   plan.metadata,
+	}
+}
+
+// optimizeOperation applies constant folding to a single operation
+func (r *ConstantFoldingRule) optimizeOperation(op LazyOperation) LazyOperation {
+	switch o := op.(type) {
+	case *FilterOperation:
+		optimizedPredicate := r.foldConstants(o.predicate)
+		return &FilterOperation{predicate: optimizedPredicate}
+	case *WithColumnOperation:
+		optimizedExpr := r.foldConstants(o.expr)
+		return &WithColumnOperation{name: o.name, expr: optimizedExpr}
+	default:
+		return op // No optimization needed for other operations
+	}
+}
+
+// BinaryExprInterface defines the interface for binary expressions
+type BinaryExprInterface interface {
+	expr.Expr
+	Left() expr.Expr
+	Op() expr.BinaryOp
+	Right() expr.Expr
+}
+
+// UnaryExprInterface defines the interface for unary expressions
+type UnaryExprInterface interface {
+	expr.Expr
+	Op() expr.UnaryOp
+	Operand() expr.Expr
+}
+
+// FunctionExprInterface defines the interface for function expressions
+type FunctionExprInterface interface {
+	expr.Expr
+	Name() string
+	Args() []expr.Expr
+}
+
+// foldBinaryExpr handles constant folding for binary expressions
+func (r *ConstantFoldingRule) foldBinaryExpr(exprType BinaryExprInterface) expr.Expr {
+	// Recursively fold constants in left and right operands
+	leftFolded := r.foldConstants(exprType.Left())
+	rightFolded := r.foldConstants(exprType.Right())
+
+	// If both operands are literals, evaluate the expression
+	if result := r.tryEvaluateLiterals(leftFolded, rightFolded, exprType.Op()); result != nil {
+		return result
+	}
+
+	// Try to create a new expression with folded operands
+	if result := r.tryCreateColumnExpression(leftFolded, rightFolded, exprType.Op()); result != nil {
+		return result
+	}
+
+	// If we can't create a new expression, return the original
+	return exprType
+}
+
+// tryEvaluateLiterals attempts to evaluate two literal expressions
+func (r *ConstantFoldingRule) tryEvaluateLiterals(left, right expr.Expr, op expr.BinaryOp) expr.Expr {
+	leftLit, leftIsLit := left.(*expr.LiteralExpr)
+	rightLit, rightIsLit := right.(*expr.LiteralExpr)
+
+	if leftIsLit && rightIsLit {
+		return r.evaluateBinaryLiterals(leftLit, op, rightLit)
+	}
+	return nil
+}
+
+// tryCreateColumnExpression attempts to create a new column expression with folded operands
+func (r *ConstantFoldingRule) tryCreateColumnExpression(left, right expr.Expr, op expr.BinaryOp) expr.Expr {
+	leftCol, ok := left.(*expr.ColumnExpr)
+	if !ok {
+		return nil
+	}
+
+	return r.createColumnBinaryExpr(leftCol, right, op)
+}
+
+// createColumnBinaryExpr creates a binary expression with a column as the left operand
+func (r *ConstantFoldingRule) createColumnBinaryExpr(
+	leftCol *expr.ColumnExpr, right expr.Expr, op expr.BinaryOp) expr.Expr {
+	switch op {
+	case expr.OpAdd:
+		return leftCol.Add(right)
+	case expr.OpSub:
+		return leftCol.Sub(right)
+	case expr.OpMul:
+		return leftCol.Mul(right)
+	case expr.OpDiv:
+		return leftCol.Div(right)
+	case expr.OpEq:
+		return leftCol.Eq(right)
+	case expr.OpNe:
+		return leftCol.Ne(right)
+	case expr.OpLt:
+		return leftCol.Lt(right)
+	case expr.OpLe:
+		return leftCol.Le(right)
+	case expr.OpGt:
+		return leftCol.Gt(right)
+	case expr.OpGe:
+		return leftCol.Ge(right)
+	case expr.OpAnd, expr.OpOr:
+		// Logical operations not supported on column expressions in current API
+		return nil
+	default:
+		return nil
+	}
+}
+
+// foldConstants recursively evaluates constant subexpressions
+func (r *ConstantFoldingRule) foldConstants(e expr.Expr) expr.Expr {
+	switch exprType := e.(type) {
+	case *expr.BinaryExpr:
+		return r.foldBinaryExpr(exprType)
+	case BinaryExprInterface:
+		return r.foldBinaryExpr(exprType)
+	case *expr.UnaryExpr:
+		return r.foldUnaryExpr(exprType)
+	case UnaryExprInterface:
+		return r.foldUnaryExpr(exprType)
+	case *expr.FunctionExpr:
+		return r.foldFunctionExpr(exprType)
+	case FunctionExprInterface:
+		return r.foldFunctionExpr(exprType)
+	default:
+		// Return unchanged for column references, literals, and other expressions
+		return e
+	}
+}
+
+// foldUnaryExpr handles constant folding for unary expressions
+func (r *ConstantFoldingRule) foldUnaryExpr(exprType UnaryExprInterface) expr.Expr {
+	// Recursively fold constants in operand
+	operandFolded := r.foldConstants(exprType.Operand())
+
+	// If operand is a literal, evaluate the expression
+	if operandLit, isLit := operandFolded.(*expr.LiteralExpr); isLit {
+		result := r.evaluateUnaryLiteral(exprType.Op(), operandLit)
+		if result != nil {
+			return result
+		}
+	}
+
+	// Return new unary expression with folded operand
+	// Since we can't access private fields, use the original if not foldable
+	if operandCol, ok := operandFolded.(*expr.ColumnExpr); ok {
+		switch exprType.Op() {
+		case expr.UnaryNeg:
+			return operandCol.Neg()
+		case expr.UnaryNot:
+			return operandCol.Not()
+		}
+	}
+	// If we can't create a new expression, return the original
+	return exprType
+}
+
+// foldFunctionExpr handles constant folding for function expressions
+func (r *ConstantFoldingRule) foldFunctionExpr(exprType FunctionExprInterface) expr.Expr {
+	// Recursively fold constants in function arguments
+	argsFolded := make([]expr.Expr, len(exprType.Args()))
+	allArgsAreLiterals := true
+
+	for i, arg := range exprType.Args() {
+		argsFolded[i] = r.foldConstants(arg)
+		if _, isLit := argsFolded[i].(*expr.LiteralExpr); !isLit {
+			allArgsAreLiterals = false
+		}
+	}
+
+	// If all arguments are literals, try to evaluate the function
+	if allArgsAreLiterals && len(argsFolded) > 0 {
+		result := r.evaluateFunctionLiterals(exprType.Name(), argsFolded)
+		if result != nil {
+			return result
+		}
+	}
+
+	// Return new function expression with folded arguments
+	// Since we can't access private fields directly, use constructor functions
+	switch exprType.Name() {
+	case "abs":
+		if len(argsFolded) == 1 {
+			if col, ok := argsFolded[0].(*expr.ColumnExpr); ok {
+				return col.Abs()
+			}
+		}
+	case "round":
+		if len(argsFolded) == 1 {
+			if col, ok := argsFolded[0].(*expr.ColumnExpr); ok {
+				return col.Round()
+			}
+		}
+		// Add more function cases as needed
+	}
+	// If we can't create a new expression, return the original
+	return exprType
+}
+
+// evaluateBinaryLiterals performs constant evaluation for binary operations on literals
+func (r *ConstantFoldingRule) evaluateBinaryLiterals(
+	left *expr.LiteralExpr, op expr.BinaryOp, right *expr.LiteralExpr) *expr.LiteralExpr {
+	leftVal := left.Value()
+	rightVal := right.Value()
+
+	// Handle different operation types
+	switch {
+	case r.isArithmeticOp(op):
+		return r.evaluateArithmeticOp(leftVal, rightVal, op)
+	case r.isComparisonOp(op):
+		return r.evaluateComparisonOp(leftVal, rightVal, op)
+	case r.isLogicalOp(op):
+		return r.evaluateLogicalOp(leftVal, rightVal, op)
+	}
+
+	return nil // Cannot evaluate this operation
+}
+
+// isArithmeticOp checks if the operation is arithmetic
+func (r *ConstantFoldingRule) isArithmeticOp(op expr.BinaryOp) bool {
+	return op == expr.OpAdd || op == expr.OpSub || op == expr.OpMul || op == expr.OpDiv
+}
+
+// isComparisonOp checks if the operation is comparison
+func (r *ConstantFoldingRule) isComparisonOp(op expr.BinaryOp) bool {
+	return op == expr.OpEq || op == expr.OpNe || op == expr.OpLt || op == expr.OpLe || op == expr.OpGt || op == expr.OpGe
+}
+
+// isLogicalOp checks if the operation is logical
+func (r *ConstantFoldingRule) isLogicalOp(op expr.BinaryOp) bool {
+	return op == expr.OpAnd || op == expr.OpOr
+}
+
+// evaluateArithmeticOp handles arithmetic operations
+func (r *ConstantFoldingRule) evaluateArithmeticOp(leftVal, rightVal interface{}, op expr.BinaryOp) *expr.LiteralExpr {
+	switch op {
+	case expr.OpAdd:
+		return r.evaluateArithmetic(leftVal, rightVal, func(a, b int64) int64 { return a + b },
+			func(a, b float64) float64 { return a + b })
+	case expr.OpSub:
+		return r.evaluateArithmetic(leftVal, rightVal, func(a, b int64) int64 { return a - b },
+			func(a, b float64) float64 { return a - b })
+	case expr.OpMul:
+		return r.evaluateArithmetic(leftVal, rightVal, func(a, b int64) int64 { return a * b },
+			func(a, b float64) float64 { return a * b })
+	case expr.OpDiv:
+		return r.evaluateArithmetic(leftVal, rightVal, func(a, b int64) int64 {
+			if b == 0 {
+				return 0 // Avoid division by zero, return 0
+			}
+			return a / b
+		}, func(a, b float64) float64 {
+			if b == 0.0 {
+				return 0.0 // Avoid division by zero, return 0
+			}
+			return a / b
+		})
+	case expr.OpEq, expr.OpNe, expr.OpLt, expr.OpLe, expr.OpGt, expr.OpGe, expr.OpAnd, expr.OpOr:
+		// These operations are handled by other functions
+		return nil
+	default:
+		return nil
+	}
+}
+
+// evaluateComparisonOp handles comparison operations
+func (r *ConstantFoldingRule) evaluateComparisonOp(leftVal, rightVal interface{}, op expr.BinaryOp) *expr.LiteralExpr {
+	cmpResult := r.compareValues(leftVal, rightVal)
+	switch op {
+	case expr.OpEq:
+		return expr.Lit(cmpResult == 0)
+	case expr.OpNe:
+		return expr.Lit(cmpResult != 0)
+	case expr.OpLt:
+		return expr.Lit(cmpResult < 0)
+	case expr.OpLe:
+		return expr.Lit(cmpResult <= 0)
+	case expr.OpGt:
+		return expr.Lit(cmpResult > 0)
+	case expr.OpGe:
+		return expr.Lit(cmpResult >= 0)
+	case expr.OpAdd, expr.OpSub, expr.OpMul, expr.OpDiv, expr.OpAnd, expr.OpOr:
+		// These operations are handled by other functions
+		return nil
+	default:
+		return nil
+	}
+}
+
+// evaluateLogicalOp handles logical operations
+func (r *ConstantFoldingRule) evaluateLogicalOp(leftVal, rightVal interface{}, op expr.BinaryOp) *expr.LiteralExpr {
+	leftBool, leftOk := leftVal.(bool)
+	rightBool, rightOk := rightVal.(bool)
+
+	if !leftOk || !rightOk {
+		return nil
+	}
+
+	switch op {
+	case expr.OpAnd:
+		return expr.Lit(leftBool && rightBool)
+	case expr.OpOr:
+		return expr.Lit(leftBool || rightBool)
+	case expr.OpAdd, expr.OpSub, expr.OpMul, expr.OpDiv, expr.OpEq, expr.OpNe, expr.OpLt, expr.OpLe, expr.OpGt, expr.OpGe:
+		// These operations are handled by other functions
+		return nil
+	default:
+		return nil
+	}
+}
+
+// evaluateArithmetic handles arithmetic operations with type coercion
+func (r *ConstantFoldingRule) evaluateArithmetic(leftVal, rightVal interface{},
+	intOp func(int64, int64) int64, floatOp func(float64, float64) float64) *expr.LiteralExpr {
+	// If either operand is float, use float operation
+	_, leftIsFloat := leftVal.(float64)
+	_, rightIsFloat := rightVal.(float64)
+
+	if leftIsFloat || rightIsFloat {
+		// Convert both to float64 and use float operation
+		if leftFloatVal, leftOk := r.convertToFloat64(leftVal); leftOk {
+			if rightFloatVal, rightOk := r.convertToFloat64(rightVal); rightOk {
+				return expr.Lit(floatOp(leftFloatVal, rightFloatVal))
+			}
+		}
+	}
+
+	// If both are integers, use integer operation
+	if leftInt, leftOk := r.convertToInt64(leftVal); leftOk {
+		if rightInt, rightOk := r.convertToInt64(rightVal); rightOk {
+			return expr.Lit(intOp(leftInt, rightInt))
+		}
+	}
+
+	return nil // Cannot perform arithmetic
+}
+
+// evaluateUnaryLiteral performs constant evaluation for unary operations on literals
+func (r *ConstantFoldingRule) evaluateUnaryLiteral(op expr.UnaryOp, operand *expr.LiteralExpr) *expr.LiteralExpr {
+	val := operand.Value()
+
+	switch op {
+	case expr.UnaryNeg:
+		// Negation
+		if intVal, ok := r.convertToInt64(val); ok {
+			return expr.Lit(-intVal)
+		}
+		if floatVal, ok := r.convertToFloat64(val); ok {
+			return expr.Lit(-floatVal)
+		}
+	case expr.UnaryNot:
+		// Logical NOT
+		if boolVal, ok := val.(bool); ok {
+			return expr.Lit(!boolVal)
+		}
+	}
+
+	return nil // Cannot evaluate this operation
+}
+
+// evaluateFunctionLiterals performs constant evaluation for functions with literal arguments
+func (r *ConstantFoldingRule) evaluateFunctionLiterals(funcName string, args []expr.Expr) *expr.LiteralExpr {
+	// Extract literal values
+	values := make([]interface{}, len(args))
+	for i, arg := range args {
+		if lit, ok := arg.(*expr.LiteralExpr); ok {
+			values[i] = lit.Value()
+		} else {
+			return nil // Not all arguments are literals
+		}
+	}
+
+	// Evaluate specific functions
+	switch funcName {
+	case "abs":
+		if len(values) == 1 {
+			if intVal, ok := r.convertToInt64(values[0]); ok {
+				if intVal < 0 {
+					return expr.Lit(-intVal)
+				}
+				return expr.Lit(intVal)
+			}
+			if floatVal, ok := r.convertToFloat64(values[0]); ok {
+				if floatVal < 0 {
+					return expr.Lit(-floatVal)
+				}
+				return expr.Lit(floatVal)
+			}
+		}
+	case "round":
+		if len(values) == 1 {
+			if floatVal, ok := r.convertToFloat64(values[0]); ok {
+				const roundingOffset = 0.5
+				return expr.Lit(float64(int64(floatVal + roundingOffset)))
+			}
+		}
+		// Additional functions can be added here as needed
+	}
+
+	return nil // Cannot evaluate this function
+}
+
+// compareValues compares two values and returns -1, 0, or 1
+func (r *ConstantFoldingRule) compareValues(left, right interface{}) int {
+	// Try different types of comparison
+	if result, ok := r.compareNumeric(left, right); ok {
+		return result
+	}
+	if result, ok := r.compareString(left, right); ok {
+		return result
+	}
+	if result, ok := r.compareBool(left, right); ok {
+		return result
+	}
+	return 0 // Cannot compare, consider equal
+}
+
+// compareNumeric compares numeric values
+func (r *ConstantFoldingRule) compareNumeric(left, right interface{}) (int, bool) {
+	// Try integer comparison first
+	if leftInt, leftOk := r.convertToInt64(left); leftOk {
+		if rightInt, rightOk := r.convertToInt64(right); rightOk {
+			return r.compareInt64(leftInt, rightInt), true
+		}
+	}
+
+	// Try float comparison
+	if leftFloat, leftOk := r.convertToFloat64(left); leftOk {
+		if rightFloat, rightOk := r.convertToFloat64(right); rightOk {
+			return r.compareFloat64(leftFloat, rightFloat), true
+		}
+	}
+
+	return 0, false
+}
+
+// compareString compares string values
+func (r *ConstantFoldingRule) compareString(left, right interface{}) (int, bool) {
+	leftStr, leftOk := left.(string)
+	rightStr, rightOk := right.(string)
+
+	if !leftOk || !rightOk {
+		return 0, false
+	}
+
+	if leftStr < rightStr {
+		return -1, true
+	} else if leftStr > rightStr {
+		return 1, true
+	}
+	return 0, true
+}
+
+// compareBool compares boolean values
+func (r *ConstantFoldingRule) compareBool(left, right interface{}) (int, bool) {
+	leftBool, leftOk := left.(bool)
+	rightBool, rightOk := right.(bool)
+
+	if !leftOk || !rightOk {
+		return 0, false
+	}
+
+	if !leftBool && rightBool {
+		return -1, true
+	} else if leftBool && !rightBool {
+		return 1, true
+	}
+	return 0, true
+}
+
+// compareInt64 compares two int64 values
+func (r *ConstantFoldingRule) compareInt64(left, right int64) int {
+	if left < right {
+		return -1
+	} else if left > right {
+		return 1
+	}
+	return 0
+}
+
+// compareFloat64 compares two float64 values
+func (r *ConstantFoldingRule) compareFloat64(left, right float64) int {
+	if left < right {
+		return -1
+	} else if left > right {
+		return 1
+	}
+	return 0
+}
+
+// convertToInt64 attempts to convert a value to int64
+func (r *ConstantFoldingRule) convertToInt64(val interface{}) (int64, bool) {
+	switch v := val.(type) {
+	case int64:
+		return v, true
+	case int32:
+		return int64(v), true
+	case int:
+		return int64(v), true
+	case float64:
+		// Only convert if it's a whole number
+		if v == float64(int64(v)) {
+			return int64(v), true
+		}
+	case float32:
+		// Only convert if it's a whole number
+		if v == float32(int64(v)) {
+			return int64(v), true
+		}
+	}
+	return 0, false
+}
+
+// convertToFloat64 attempts to convert a value to float64
+func (r *ConstantFoldingRule) convertToFloat64(val interface{}) (float64, bool) {
+	switch v := val.(type) {
+	case float64:
+		return v, true
+	case float32:
+		return float64(v), true
+	case int64:
+		return float64(v), true
+	case int32:
+		return float64(v), true
+	case int:
+		return float64(v), true
+	}
+	return 0, false
 }
