@@ -173,9 +173,50 @@ func TestChunkProcessor(t *testing.T) {
 // TestSafeDataFrameCopy tests thread-safe DataFrame copying
 func TestSafeDataFrameCopy(t *testing.T) {
 	t.Run("concurrent access to safe copy", func(t *testing.T) {
-		// This test will need actual DataFrame implementation
-		// For now, we test the concept with a mock
-		t.Skip("Will be implemented with actual DataFrame integration")
+		// Test with mock data until full DataFrame integration
+		mockData := "test_dataframe_data"
+		safeDF := NewSafeDataFrame(mockData)
+		
+		const numGoroutines = 5
+		var wg sync.WaitGroup
+		errors := make(chan error, numGoroutines)
+		
+		for i := 0; i < numGoroutines; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				
+				// Test concurrent Clone calls
+				cloned, err := safeDF.Clone(nil)
+				if err != nil {
+					errors <- err
+					return
+				}
+				
+				// Verify cloned data
+				if cloned != mockData {
+					errors <- assert.AnError
+				}
+			}()
+		}
+		
+		wg.Wait()
+		close(errors)
+		
+		// Check for any errors
+		for err := range errors {
+			t.Errorf("Concurrent Clone error: %v", err)
+		}
+	})
+	
+	t.Run("safe data frame creation and basic operations", func(t *testing.T) {
+		testData := "sample_data"
+		safeDF := NewSafeDataFrame(testData)
+		
+		// Test basic Clone operation
+		cloned, err := safeDF.Clone(nil)
+		require.NoError(t, err)
+		assert.Equal(t, testData, cloned)
 	})
 }
 
