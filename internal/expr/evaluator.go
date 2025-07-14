@@ -125,6 +125,14 @@ func (e *Evaluator) evaluateLiteral(expr *LiteralExpr, columns map[string]arrow.
 			builder.Append(val)
 		}
 		return builder.NewArray(), nil
+	case int:
+		// Handle platform-dependent int type by converting to int64
+		builder := array.NewInt64Builder(e.mem)
+		defer builder.Release()
+		for i := 0; i < length; i++ {
+			builder.Append(int64(val))
+		}
+		return builder.NewArray(), nil
 	case float32:
 		builder := array.NewFloat32Builder(e.mem)
 		defer builder.Release()
