@@ -879,8 +879,12 @@ func (lf *LazyFrame) safeCollectParallelWithOps(operations []LazyOperation) (*Da
 		chunks = append(chunks, chunk)
 	}
 
+	// Create worker pool for parallel processing
+	workerPool := parallel.NewWorkerPool(runtime.NumCPU())
+	defer workerPool.Close()
+
 	// Process chunks in parallel using safe infrastructure
-	processedChunks := parallel.Process(lf.pool, chunks, func(chunk *DataFrame) *DataFrame {
+	processedChunks := parallel.Process(workerPool, chunks, func(chunk *DataFrame) *DataFrame {
 		if chunk == nil || chunk.Width() == 0 {
 			return New()
 		}
@@ -1027,15 +1031,17 @@ func (lf *LazyFrame) createSafeIndependentSeries(s ISeries, start, end int, mem 
 	if originalArray == nil {
 		return series.New(s.Name(), []string{}, mem)
 	}
-	defer originalArray.Release()
 
 	sliceLength := end - start
 	if sliceLength <= 0 {
+		originalArray.Release()
 		return series.New(s.Name(), []string{}, mem)
 	}
 
 	// Use shared helper to avoid code duplication
-	return createSlicedSeriesFromArray(s.Name(), originalArray, start, sliceLength, mem)
+	result := createSlicedSeriesFromArray(s.Name(), originalArray, start, sliceLength, mem)
+	originalArray.Release()
+	return result
 }
 
 // concatenateChunks safely concatenates processed chunks

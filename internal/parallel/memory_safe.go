@@ -43,7 +43,12 @@ func (p *AllocatorPool) Get() memory.Allocator {
 	p.mu.RUnlock()
 
 	atomic.AddInt64(&p.active, 1)
-	return p.pool.Get().(memory.Allocator)
+	alloc, ok := p.pool.Get().(memory.Allocator)
+	if !ok {
+		// If type assertion fails, create a new allocator
+		return memory.NewGoAllocator()
+	}
+	return alloc
 }
 
 // Put returns an allocator to the pool for reuse
