@@ -406,7 +406,7 @@ type SortOperation struct {
 }
 
 func (s *SortOperation) Apply(df *DataFrame) (*DataFrame, error) {
-	return df.SortBy(s.columns, s.ascending), nil
+	return df.SortBy(s.columns, s.ascending)
 }
 
 func (s *SortOperation) String() string {

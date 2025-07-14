@@ -6,6 +6,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/paveg/gorilla/internal/series"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDataFrame_Sort_SingleColumn(t *testing.T) {
@@ -18,7 +19,8 @@ func TestDataFrame_Sort_SingleColumn(t *testing.T) {
 	defer df.Release()
 
 	// Test ascending sort by names
-	result := df.Sort("names", true)
+	result, err := df.Sort("names", true)
+	require.NoError(t, err)
 	defer result.Release()
 
 	// Should be sorted: Alice, Bob, Charlie
@@ -45,7 +47,8 @@ func TestDataFrame_Sort_SingleColumn_Descending(t *testing.T) {
 	defer df.Release()
 
 	// Test descending sort
-	result := df.Sort("values", false)
+	result, err := df.Sort("values", false)
+	require.NoError(t, err)
 	defer result.Release()
 
 	// Should be sorted: 30, 20, 10
@@ -66,7 +69,8 @@ func TestDataFrame_SortBy_MultiColumn(t *testing.T) {
 	defer df.Release()
 
 	// Sort by department ASC, then salary DESC
-	result := df.SortBy([]string{"department", "salary"}, []bool{true, false})
+	result, err := df.SortBy([]string{"department", "salary"}, []bool{true, false})
+	require.NoError(t, err)
 	defer result.Release()
 
 	// Expected order: HR(60000), HR(50000), IT(80000), IT(70000)
@@ -118,11 +122,10 @@ func TestSort_ErrorCases(t *testing.T) {
 	df := New(valuesSeries)
 	defer df.Release()
 
-	// Test sorting by non-existent column - should panic/error
-	assert.Panics(t, func() {
-		result := df.Sort("nonexistent", true)
-		defer result.Release()
-	})
+	// Test sorting by non-existent column - should return error
+	result, err := df.Sort("nonexistent", true)
+	require.Error(t, err) // Expect error for nonexistent column
+	assert.Nil(t, result)
 }
 
 func BenchmarkDataFrame_Sort_Sequential(b *testing.B) {
@@ -141,7 +144,10 @@ func BenchmarkDataFrame_Sort_Sequential(b *testing.B) {
 		df := New(valuesSeries)
 		b.StartTimer()
 
-		result := df.Sort("values", true)
+		result, err := df.Sort("values", true)
+		if err != nil {
+			b.Fatal(err)
+		}
 		result.Release()
 		df.Release()
 	}
@@ -163,7 +169,10 @@ func BenchmarkDataFrame_Sort_Parallel(b *testing.B) {
 		df := New(valuesSeries)
 		b.StartTimer()
 
-		result := df.Sort("values", true)
+		result, err := df.Sort("values", true)
+		if err != nil {
+			b.Fatal(err)
+		}
 		result.Release()
 		df.Release()
 	}

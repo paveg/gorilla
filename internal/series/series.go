@@ -9,6 +9,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/paveg/gorilla/internal/errors"
 )
 
 const (
@@ -93,6 +94,78 @@ func New[T any](name string, values []T, mem memory.Allocator) *Series[T] {
 	}
 }
 
+// NewSafe creates a new Series from a slice of values with error handling
+// This is the preferred method for production code as it returns errors instead of panicking
+func NewSafe[T any](name string, values []T, mem memory.Allocator) (*Series[T], error) {
+	if mem == nil {
+		mem = memory.NewGoAllocator()
+	}
+
+	var arr arrow.Array
+
+	// Use type switching to create appropriate Arrow array
+	switch v := any(values).(type) {
+	case []string:
+		builder := array.NewStringBuilder(mem)
+		defer builder.Release()
+		for _, val := range v {
+			builder.Append(val)
+		}
+		arr = builder.NewArray()
+	case []int64:
+		builder := array.NewInt64Builder(mem)
+		defer builder.Release()
+		for _, val := range v {
+			builder.Append(val)
+		}
+		arr = builder.NewArray()
+	case []int32:
+		builder := array.NewInt32Builder(mem)
+		defer builder.Release()
+		for _, val := range v {
+			builder.Append(val)
+		}
+		arr = builder.NewArray()
+	case []float64:
+		builder := array.NewFloat64Builder(mem)
+		defer builder.Release()
+		for _, val := range v {
+			builder.Append(val)
+		}
+		arr = builder.NewArray()
+	case []float32:
+		builder := array.NewFloat32Builder(mem)
+		defer builder.Release()
+		for _, val := range v {
+			builder.Append(val)
+		}
+		arr = builder.NewArray()
+	case []bool:
+		builder := array.NewBooleanBuilder(mem)
+		defer builder.Release()
+		for _, val := range v {
+			builder.Append(val)
+		}
+		arr = builder.NewArray()
+	case []time.Time:
+		builder := array.NewTimestampBuilder(mem, &arrow.TimestampType{Unit: arrow.Nanosecond})
+		defer builder.Release()
+		for _, val := range v {
+			// Convert time.Time to nanoseconds since Unix epoch (in UTC)
+			timestamp := arrow.Timestamp(val.UTC().UnixNano())
+			builder.Append(timestamp)
+		}
+		arr = builder.NewArray()
+	default:
+		return nil, errors.NewUnsupportedTypeError("series creation", fmt.Sprintf("%T", values))
+	}
+
+	return &Series[T]{
+		name:  name,
+		array: arr,
+	}, nil
+}
+
 // Name returns the column name
 func (s *Series[T]) Name() string {
 	return s.name
@@ -165,6 +238,71 @@ func (s *Series[T]) Values() []T {
 	}
 
 	return result
+}
+
+// ValuesSafe returns the data as a Go slice with error handling
+// This is the preferred method for production code as it returns errors instead of panicking
+func (s *Series[T]) ValuesSafe() ([]T, error) {
+	result := make([]T, s.array.Len())
+
+	switch arr := s.array.(type) {
+	case *array.String:
+		if any(result).([]string) != nil {
+			values := any(result).([]string)
+			for i := 0; i < arr.Len(); i++ {
+				values[i] = arr.Value(i)
+			}
+		}
+	case *array.Int64:
+		if any(result).([]int64) != nil {
+			values := any(result).([]int64)
+			for i := 0; i < arr.Len(); i++ {
+				values[i] = arr.Value(i)
+			}
+		}
+	case *array.Int32:
+		if any(result).([]int32) != nil {
+			values := any(result).([]int32)
+			for i := 0; i < arr.Len(); i++ {
+				values[i] = arr.Value(i)
+			}
+		}
+	case *array.Float64:
+		if any(result).([]float64) != nil {
+			values := any(result).([]float64)
+			for i := 0; i < arr.Len(); i++ {
+				values[i] = arr.Value(i)
+			}
+		}
+	case *array.Float32:
+		if any(result).([]float32) != nil {
+			values := any(result).([]float32)
+			for i := 0; i < arr.Len(); i++ {
+				values[i] = arr.Value(i)
+			}
+		}
+	case *array.Boolean:
+		if any(result).([]bool) != nil {
+			values := any(result).([]bool)
+			for i := 0; i < arr.Len(); i++ {
+				values[i] = arr.Value(i)
+			}
+		}
+	case *array.Timestamp:
+		if any(result).([]time.Time) != nil {
+			values := any(result).([]time.Time)
+			for i := 0; i < arr.Len(); i++ {
+				// Convert Arrow timestamp (nanoseconds since Unix epoch) back to time.Time in UTC
+				timestamp := arr.Value(i)
+				nanos := int64(timestamp)
+				values[i] = time.Unix(nanos/nanosPerSecond, nanos%nanosPerSecond).UTC()
+			}
+		}
+	default:
+		return nil, errors.NewUnsupportedTypeError("values extraction", fmt.Sprintf("%T", arr))
+	}
+
+	return result, nil
 }
 
 // Value returns the value at the given index
