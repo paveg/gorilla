@@ -41,59 +41,57 @@ Here is a quick example to demonstrate the basic usage of Gorilla.
 package main
 
 import (
-    "fmt"
-    "log"
+	"fmt"
+	"log"
 
-    "github.com/apache/arrow-go/v18/arrow/memory"
-    "github.com/paveg/gorilla/dataframe"
-    "github.com/paveg/gorilla/expr"
-    "github.com/paveg/gorilla/series"
+	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/paveg/gorilla"
 )
 
 func main() {
-    // Gorilla uses Apache Arrow for memory management.
-    // Always start by creating an allocator.
-    mem := memory.NewGoAllocator()
+	// Gorilla uses Apache Arrow for memory management.
+	// Always start by creating an allocator.
+	mem := memory.NewGoAllocator()
 
-    // 1. Create some Series (columns)
-    names := []string{"Alice", "Bob", "Charlie", "Diana", "Eve"}
-    ages := []int64{25, 30, 35, 28, 32}
-    salaries := []float64{50000.0, 60000.0, 75000.0, 55000.0, 65000.0}
-    nameSeries := series.New("name", names, mem)
-    ageSeries := series.New("age", ages, mem)
-    salarySeries := series.New("salary", salaries, mem)
+	// 1. Create some Series (columns)
+	names := []string{"Alice", "Bob", "Charlie", "Diana", "Eve"}
+	ages := []int64{25, 30, 35, 28, 32}
+	salaries := []float64{50000.0, 60000.0, 75000.0, 55000.0, 65000.0}
+	nameSeries := gorilla.NewSeries("name", names, mem)
+	ageSeries := gorilla.NewSeries("age", ages, mem)
+	salarySeries := gorilla.NewSeries("salary", salaries, mem)
 
-    // Remember to release the memory when you're done.
-    defer nameSeries.Release()
-    defer ageSeries.Release()
-    defer salarySeries.Release()
+	// Remember to release the memory when you're done.
+	defer nameSeries.Release()
+	defer ageSeries.Release()
+	defer salarySeries.Release()
 
-    // 2. Create a DataFrame from the Series
-    df := dataframe.New(nameSeries, ageSeries, salarySeries)
-    defer df.Release()
+	// 2. Create a DataFrame from the Series
+	df := gorilla.NewDataFrame(nameSeries, ageSeries, salarySeries)
+	defer df.Release()
 
-    fmt.Println("Original DataFrame:")
-    fmt.Println(df)
+	fmt.Println("Original DataFrame:")
+	fmt.Println(df)
 
-    // 3. Use Lazy Evaluation for powerful transformations
-    lazyDf := df.Lazy().
-        // Filter for rows where age is greater than 30
-        Filter(expr.Col("age").Gt(expr.Lit(int64(30)))).
-        // Add a new column 'bonus'
-        WithColumn("bonus", expr.Col("salary").Mul(expr.Lit(0.1))).}
-        // Select the columns we want in the final result
-        Select("name", "age", "bonus")
+	// 3. Use Lazy Evaluation for powerful transformations
+	lazyDf := df.Lazy().
+		// Filter for rows where age is greater than 30
+		Filter(gorilla.Col("age").Gt(gorilla.Lit(int64(30)))).
+		// Add a new column 'bonus'
+		WithColumn("bonus", gorilla.Col("salary").Mul(gorilla.Lit(0.1))).
+		// Select the columns we want in the final result
+		Select("name", "age", "bonus")
 
-    // 4. Execute the plan and collect the results
-    result, err := lazyDf.Collect()
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer result.Release()
-    defer lazyDf.Release()
+	// 4. Execute the plan and collect the results
+	result, err := lazyDf.Collect()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer result.Release()
+	defer lazyDf.Release()
 
-    fmt.Println("\nResult after lazy evaluation:")
-    fmt.Println(result)
+	fmt.Println("Result after lazy evaluation:")
+	fmt.Println(result)
 }
 ```
 
