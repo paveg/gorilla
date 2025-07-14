@@ -15,6 +15,7 @@ import (
 	"github.com/paveg/gorilla/internal/expr"
 	"github.com/paveg/gorilla/internal/parallel"
 	"github.com/paveg/gorilla/internal/series"
+	"github.com/paveg/gorilla/internal/validation"
 )
 
 const (
@@ -193,30 +194,31 @@ func (df *DataFrame) Slice(start, end int) *DataFrame {
 }
 
 // Sort returns a new DataFrame sorted by the specified column
-func (df *DataFrame) Sort(column string, ascending bool) *DataFrame {
-	if !df.HasColumn(column) {
-		panic(fmt.Sprintf("column %s does not exist", column))
+func (df *DataFrame) Sort(column string, ascending bool) (*DataFrame, error) {
+	if err := validation.ValidateColumns(df, "Sort", column); err != nil {
+		return nil, err
 	}
 
 	return df.SortBy([]string{column}, []bool{ascending})
 }
 
 // SortBy returns a new DataFrame sorted by multiple columns
-func (df *DataFrame) SortBy(columns []string, ascending []bool) *DataFrame {
-	if len(columns) != len(ascending) {
-		panic("columns and ascending arrays must have same length")
+func (df *DataFrame) SortBy(columns []string, ascending []bool) (*DataFrame, error) {
+	// Validate input arrays have the same length
+	if err := validation.ValidateLength(len(columns), len(ascending), "SortBy",
+		"columns and ascending arrays"); err != nil {
+		return nil, err
 	}
 
-	for _, column := range columns {
-		if !df.HasColumn(column) {
-			panic(fmt.Sprintf("column %s does not exist", column))
-		}
+	// Validate all columns exist
+	if err := validation.ValidateColumns(df, "SortBy", columns...); err != nil {
+		return nil, err
 	}
 
 	// Get all row indices
 	rowCount := df.Len()
 	if rowCount == 0 {
-		return New() // Return empty DataFrame
+		return New(), nil // Return empty DataFrame
 	}
 
 	// Create sorted indices using parallel or sequential approach
@@ -230,7 +232,7 @@ func (df *DataFrame) SortBy(columns []string, ascending []bool) *DataFrame {
 	}
 
 	// Build new DataFrame with sorted data
-	return df.buildSortedDataFrame(sortedIndices)
+	return df.buildSortedDataFrame(sortedIndices), nil
 }
 
 // sliceSeries creates a new series containing elements from start to end

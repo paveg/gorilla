@@ -136,13 +136,21 @@ func (d *DataFrame) Slice(start, end int) *DataFrame {
 }
 
 // Sort returns a new DataFrame sorted by the specified column.
-func (d *DataFrame) Sort(column string, ascending bool) *DataFrame {
-	return &DataFrame{df: d.df.Sort(column, ascending)}
+func (d *DataFrame) Sort(column string, ascending bool) (*DataFrame, error) {
+	result, err := d.df.Sort(column, ascending)
+	if err != nil {
+		return nil, err
+	}
+	return &DataFrame{df: result}, nil
 }
 
 // SortBy returns a new DataFrame sorted by multiple columns.
-func (d *DataFrame) SortBy(columns []string, ascending []bool) *DataFrame {
-	return &DataFrame{df: d.df.SortBy(columns, ascending)}
+func (d *DataFrame) SortBy(columns []string, ascending []bool) (*DataFrame, error) {
+	result, err := d.df.SortBy(columns, ascending)
+	if err != nil {
+		return nil, err
+	}
+	return &DataFrame{df: result}, nil
 }
 
 // Concat concatenates this DataFrame with others.
