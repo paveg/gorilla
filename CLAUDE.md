@@ -47,10 +47,58 @@ Arrow Arrays  Column Map  Operation AST  Worker Chunks  Final DF
 ## Critical Implementation Details
 
 ### Memory Management
-- Every Arrow array creation requires a memory allocator
-- Use `memory.NewGoAllocator()` for new allocators
+
+**Primary Pattern: Use `defer` for Resource Cleanup**
+
+Gorilla strongly recommends the `defer` pattern for most memory management scenarios. This approach provides:
+- **Better readability** - Resource lifecycle is explicit at allocation point
+- **Leak prevention** - Harder to forget releases when co-located with allocation
+- **Go idioms** - `defer` is the canonical Go pattern for resource cleanup
+- **Easier debugging** - Clear tracking of which resources aren't being released
+
+#### ✅ Preferred: Defer Pattern
+
+```go
+// Always prefer this pattern
+func processData() error {
+    mem := memory.NewGoAllocator()
+    
+    // Create and immediately defer cleanup
+    df := dataframe.New(series1, series2)
+    defer df.Release() // Clear ownership and lifecycle
+    
+    result, err := df.Lazy().Filter(...).Collect()
+    if err != nil {
+        return err
+    }
+    defer result.Release() // Always clean up results
+    
+    // Use result...
+    return nil
+}
+```
+
+#### 📋 Alternative: MemoryManager for Complex Scenarios
+
+Use `MemoryManager` only for scenarios with many short-lived resources:
+
+```go
+// Use for bulk operations with many temporary resources
+err := WithMemoryManager(mem, func(manager *MemoryManager) error {
+    for i := 0; i < 1000; i++ {
+        temp := createTempDataFrame(i)
+        manager.Track(temp) // Bulk cleanup at end
+    }
+    return processLargeDataset()
+})
+// All tracked resources automatically released
+```
+
+#### Core Rules
+- Every Arrow array creation requires a memory allocator: `memory.NewGoAllocator()`
 - Always call `Release()` on DataFrames, Series, and arrays
 - Parallel operations create independent data copies to avoid race conditions
+- Prefer `defer resource.Release()` over bulk management patterns
 
 ### Expression System
 The expression system uses an AST pattern with these key types:
@@ -95,9 +143,25 @@ result, err := df.Lazy().
 ### Testing Patterns
 - Use `testify/assert` for assertions
 - Create test DataFrames with `series.FromSlice()`
-- Always call `defer df.Release()` in tests
+- **Always use `defer resource.Release()` pattern in tests** - this prevents resource leaks and makes test cleanup explicit
 - Integration tests in `dataframe/*_test.go` test end-to-end workflows
 - Benchmarks follow `BenchmarkXxx` naming with `-benchmem`
+
+#### Memory Safety in Tests
+```go
+func TestDataFrameOperation(t *testing.T) {
+    mem := memory.NewGoAllocator()
+    
+    // Create test data and immediately defer cleanup
+    df := createTestDataFrame(mem)
+    defer df.Release() // ← Essential for preventing test memory leaks
+    
+    result, err := df.SomeOperation()
+    require.NoError(t, err)
+    defer result.Release() // ← Clean up operation results
+    
+    assert.Equal(t, expectedValue, result.SomeProperty())
+}
 
 ### Test-Driven Development (TDD)
 **Always implement new features using TDD methodology:**
@@ -221,8 +285,23 @@ gh issue list --label="priority: high,area: core"    # High priority core featur
 ## Common Pitfalls
 
 1. **Memory Leaks**: Forgetting `Release()` calls on Arrow arrays
+   - **Fix**: Use `defer resource.Release()` immediately after creation
+   - **Bad**: Creating resources without immediate defer statements
+   - **Good**: `df := dataframe.New(...); defer df.Release()`
+
 2. **Race Conditions**: Sharing Arrow arrays across goroutines without copying
+   - **Fix**: Parallel operations create independent data copies automatically
+   
 3. **Type Mismatches**: Not handling all supported Series types in new operations
+   - **Fix**: Use type switches and handle all supported types (string, int64, float64, bool)
+
 4. **Threshold Logic**: Hardcoded parallelization thresholds should use constants
+   - **Fix**: Define thresholds as constants at package level
+
 5. **Error Handling**: Arrow operations can fail and need proper error propagation
-6. **Information Accuracy**: Making assumptions about dependencies, licenses, or APIs without verification
+   - **Fix**: Always check errors from operations and use defer for cleanup in error paths
+
+6. **Bulk vs Individual Memory Management**: Using MemoryManager when defer is more appropriate
+   - **Fix**: Prefer `defer` for most cases, use MemoryManager only for many short-lived resources
+
+7. **Information Accuracy**: Making assumptions about dependencies, licenses, or APIs without verification

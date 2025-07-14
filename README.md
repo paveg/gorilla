@@ -33,6 +33,38 @@ To add Gorilla to your project, use `go get`:
 go get github.com/paveg/gorilla
 ```
 
+### Memory Management
+
+Gorilla is built on Apache Arrow, which requires explicit memory management. **We strongly recommend using the `defer` pattern** for most use cases as it provides better readability and prevents memory leaks.
+
+#### ✅ Recommended: Defer Pattern
+
+```go
+// Create resources and immediately defer their cleanup
+mem := memory.NewGoAllocator()
+df := gorilla.NewDataFrame(series1, series2)
+defer df.Release() // ← Clear resource lifecycle
+
+result, err := df.Lazy().Filter(...).Collect()
+defer result.Release() // ← Always clean up results
+```
+
+#### 📋 When to Use MemoryManager
+
+For complex scenarios with many short-lived resources, you can use `MemoryManager`:
+
+```go
+err := gorilla.WithMemoryManager(mem, func(manager *gorilla.MemoryManager) error {
+    // Create multiple temporary resources
+    for i := 0; i < 100; i++ {
+        temp := createTempDataFrame(i)
+        manager.Track(temp) // Bulk cleanup at end
+    }
+    return processData()
+})
+// All tracked resources automatically released
+```
+
 ### Quick Example
 
 Here is a quick example to demonstrate the basic usage of Gorilla.
