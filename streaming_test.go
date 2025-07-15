@@ -42,7 +42,7 @@ func (mcr *MockChunkReader) ReadChunk() (*DataFrame, error) {
 }
 
 func (mcr *MockChunkReader) HasNext() bool {
-	return !mcr.closed && mcr.index < len(mcr.chunks)
+	return mcr.index < len(mcr.chunks)
 }
 
 func (mcr *MockChunkReader) Close() error {

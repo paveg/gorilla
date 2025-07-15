@@ -3,6 +3,7 @@ package gorilla
 import (
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -250,12 +251,12 @@ func TestMemoryUsageMonitor(t *testing.T) {
 	})
 
 	t.Run("triggers spill callback when threshold exceeded", func(t *testing.T) {
-		spillCalled := false
+		var spillCalled int32
 		monitor := NewMemoryUsageMonitor(1000) // 1KB threshold
 		defer monitor.StopMonitoring()
 
 		monitor.SetSpillCallback(func() error {
-			spillCalled = true
+			atomic.AddInt32(&spillCalled, 1)
 			return nil
 		})
 
@@ -264,7 +265,7 @@ func TestMemoryUsageMonitor(t *testing.T) {
 
 		// Wait a bit for the callback to be called
 		time.Sleep(100 * time.Millisecond)
-		assert.True(t, spillCalled)
+		assert.Equal(t, int32(1), atomic.LoadInt32(&spillCalled))
 		assert.Equal(t, int64(1), monitor.SpillCount())
 	})
 
