@@ -172,33 +172,9 @@ func (pool *AdvancedWorkerPool) Process(items []interface{}, worker func(interfa
 			result: results,
 		}
 
-		// Try to distribute work to worker queues first if work stealing is enabled
-		distributed := false
-		if pool.workStealingEnabled && len(pool.stealingQueues) > 0 {
-			// Use round-robin distribution to worker queues
-			targetWorker := i % len(pool.stealingQueues)
-			if targetWorker < len(pool.stealingQueues) && pool.stealingQueues[targetWorker] != nil {
-				pool.stealingQueues[targetWorker].pushLocal(workItem)
-				distributed = true
-			}
-		}
-
-		// If not distributed to worker queue, use global queue
-		if !distributed {
-			select {
-			case pool.workQueue <- workItem:
-			case <-pool.ctx.Done():
-				close(results)
-				return nil
-			default:
-				// Handle backpressure
-				if pool.config.BackpressurePolicy == BackpressureBlock {
-					pool.workQueue <- workItem
-				} else {
-					// Drop or spill to disk (simplified for now)
-					continue
-				}
-			}
+		if !pool.distributeWorkItem(workItem, i) {
+			close(results)
+			return nil
 		}
 	}
 
@@ -256,24 +232,8 @@ func (pool *AdvancedWorkerPool) ProcessWithPriority(tasks []PriorityTask, worker
 			result: item.Result,
 		}
 
-		// Try to distribute priority work to worker queues first if work stealing is enabled
-		distributed := false
-		if pool.workStealingEnabled && len(pool.stealingQueues) > 0 {
-			// Use round-robin distribution to worker queues
-			targetWorker := item.Index % len(pool.stealingQueues)
-			if targetWorker < len(pool.stealingQueues) && pool.stealingQueues[targetWorker] != nil {
-				pool.stealingQueues[targetWorker].pushLocal(workItem)
-				distributed = true
-			}
-		}
-
-		// If not distributed to worker queue, use global queue
-		if !distributed {
-			select {
-			case pool.workQueue <- workItem:
-			case <-pool.ctx.Done():
-				return nil
-			}
+		if !pool.distributeWorkItem(workItem, item.Index) {
+			return nil
 		}
 	}
 
@@ -289,6 +249,38 @@ func (pool *AdvancedWorkerPool) ProcessWithPriority(tasks []PriorityTask, worker
 	}
 
 	return resultSlice
+}
+
+// distributeWorkItem distributes a work item to worker queues or global queue
+func (pool *AdvancedWorkerPool) distributeWorkItem(item workItem, index int) bool {
+	// Try to distribute work to worker queues first if work stealing is enabled
+	distributed := false
+	if pool.workStealingEnabled && len(pool.stealingQueues) > 0 {
+		// Use round-robin distribution to worker queues
+		targetWorker := index % len(pool.stealingQueues)
+		if targetWorker < len(pool.stealingQueues) && pool.stealingQueues[targetWorker] != nil {
+			pool.stealingQueues[targetWorker].pushLocal(item)
+			distributed = true
+		}
+	}
+
+	// If not distributed to worker queue, use global queue
+	if !distributed {
+		select {
+		case pool.workQueue <- item:
+		case <-pool.ctx.Done():
+			return false
+		default:
+			// Handle backpressure
+			if pool.config.BackpressurePolicy == BackpressureBlock {
+				pool.workQueue <- item
+			} else {
+				// Drop or spill to disk (simplified for now)
+				return true // Continue processing other items
+			}
+		}
+	}
+	return true
 }
 
 // checkAndScale checks if the worker pool needs to scale up or down
