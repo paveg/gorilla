@@ -8,6 +8,16 @@ import (
 	"time"
 )
 
+// Package-level constants for consistent usage across debug functionality
+const (
+	// AvgBytesPerCell is the estimated average bytes per DataFrame cell
+	AvgBytesPerCell = 8
+	// ParallelThreshold is the minimum number of rows to trigger parallel execution
+	ParallelThreshold = 1000
+	// FilterSelectivity is the default assumed selectivity for filter operations
+	FilterSelectivity = 0.5
+)
+
 // DebugConfig configures debug mode settings
 type DebugConfig struct {
 	Enabled           bool         `json:"enabled"`
@@ -189,8 +199,7 @@ func (qa *QueryAnalyzer) captureStats(df *DataFrame) DataFrameStats {
 
 	// Estimate memory usage
 	// This is a simplified estimation - in practice would need more accurate calculation
-	const avgBytesPerValue = 8
-	stats.Memory = int64(stats.Rows * stats.Columns * avgBytesPerValue) // Assume 8 bytes per value average
+	stats.Memory = int64(stats.Rows * stats.Columns * AvgBytesPerCell) // Assume 8 bytes per value average
 
 	return stats
 }
@@ -258,10 +267,9 @@ func (qa *QueryAnalyzer) generateSuggestions() []string {
 	suggestions := make([]string, 0)
 
 	// Check for operations that could benefit from parallelization
-	const parallelizationThreshold = 1000
 	for i := range qa.operations {
 		op := &qa.operations[i]
-		if !op.Parallel && op.Input.Rows > parallelizationThreshold {
+		if !op.Parallel && op.Input.Rows > ParallelThreshold {
 			suggestions = append(suggestions,
 				fmt.Sprintf("Consider parallelizing %s operation (processing %d rows)",
 					op.Operation, op.Input.Rows))

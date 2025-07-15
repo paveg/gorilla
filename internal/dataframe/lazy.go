@@ -1100,8 +1100,7 @@ func (lf *LazyFrame) ExplainAnalyze() (DebugExecutionPlan, error) {
 }
 
 // buildExecutionPlan builds an execution plan from the operations
-func (lf *LazyFrame) buildExecutionPlan(_ bool) DebugExecutionPlan {
-	const avgBytesPerCell = 8
+func (lf *LazyFrame) buildExecutionPlan(enableProfiling bool) DebugExecutionPlan {
 	plan := DebugExecutionPlan{
 		RootNode: &PlanNode{
 			ID:          "root",
@@ -1110,23 +1109,28 @@ func (lf *LazyFrame) buildExecutionPlan(_ bool) DebugExecutionPlan {
 			Cost: PlanCost{
 				Estimated: EstimatedCost{
 					Rows:   int64(lf.source.Len()),
-					Memory: int64(lf.source.Len() * lf.source.Width() * avgBytesPerCell), // Rough estimate
+					Memory: int64(lf.source.Len() * lf.source.Width() * AvgBytesPerCell), // Rough estimate
 				},
 			},
 			Properties: make(map[string]string),
 		},
 		Estimated: PlanStats{
 			TotalRows:   int64(lf.source.Len()),
-			TotalMemory: int64(lf.source.Len() * lf.source.Width() * avgBytesPerCell),
+			TotalMemory: int64(lf.source.Len() * lf.source.Width() * AvgBytesPerCell),
 		},
 		Metadata: DebugPlanMetadata{
 			CreatedAt: time.Now(),
 		},
 	}
 
+	// Add profiling metadata if enabled
+	if enableProfiling {
+		plan.RootNode.Properties["profiling"] = "enabled"
+		plan.Metadata.OptimizedAt = time.Now()
+	}
+
 	// Check if operations warrant parallel execution
-	const parallelThreshold = 1000
-	if lf.source.Len() >= parallelThreshold {
+	if lf.source.Len() >= ParallelThreshold {
 		plan.RootNode.Properties["parallel"] = "true"
 		plan.RootNode.Properties["worker_count"] = fmt.Sprintf("%d", runtime.NumCPU())
 		plan.Estimated.ParallelOps = 1
@@ -1144,16 +1148,15 @@ func (lf *LazyFrame) buildExecutionPlan(_ bool) DebugExecutionPlan {
 			Cost: PlanCost{
 				Estimated: EstimatedCost{
 					Rows:   estimatedRows,
-					Memory: estimatedRows * int64(lf.source.Width()) * avgBytesPerCell,
+					Memory: estimatedRows * int64(lf.source.Width()) * AvgBytesPerCell,
 				},
 			},
 			Properties: make(map[string]string),
 		}
 
-		// Estimate selectivity for filters
+		// Estimate selectivity for filters using configurable selectivity
 		if _, isFilter := op.(*FilterOperation); isFilter {
-			const filterSelectivity = 0.5 // Assume 50% selectivity
-			estimatedRows = int64(float64(estimatedRows) * filterSelectivity)
+			estimatedRows = int64(float64(estimatedRows) * FilterSelectivity)
 		}
 
 		current.Children = append(current.Children, node)
@@ -1168,7 +1171,7 @@ func (lf *LazyFrame) buildExecutionPlan(_ bool) DebugExecutionPlan {
 		Cost: PlanCost{
 			Estimated: EstimatedCost{
 				Rows:   int64(lf.source.Len()),
-				Memory: int64(lf.source.Len() * lf.source.Width() * avgBytesPerCell),
+				Memory: int64(lf.source.Len() * lf.source.Width() * AvgBytesPerCell),
 			},
 		},
 		Properties: make(map[string]string),
@@ -1204,15 +1207,14 @@ func (lf *LazyFrame) collectWithProfiling(plan *DebugExecutionPlan) (*DataFrame,
 		return nil, err
 	}
 	// Fill in actual statistics (simplified for demo)
-	const avgBytesPerCell = 8
 	plan.Actual.TotalRows = int64(result.Len())
-	plan.Actual.TotalMemory = int64(result.Len() * result.Width() * avgBytesPerCell)
+	plan.Actual.TotalMemory = int64(result.Len() * result.Width() * AvgBytesPerCell)
 	plan.Metadata.ExecutedAt = time.Now()
 
 	// Update root node with actual statistics
 	plan.RootNode.Cost.Actual = ActualCost{
 		Rows:   int64(result.Len()),
-		Memory: int64(result.Len() * result.Width() * avgBytesPerCell),
+		Memory: int64(result.Len() * result.Width() * AvgBytesPerCell),
 	}
 
 	return result, nil
