@@ -84,6 +84,48 @@ func New[T any](name string, values []T, mem memory.Allocator) *Series[T] {
 			builder.Append(timestamp)
 		}
 		arr = builder.NewArray()
+	case []int16:
+		builder := array.NewInt16Builder(mem)
+		defer builder.Release()
+		for _, val := range v {
+			builder.Append(val)
+		}
+		arr = builder.NewArray()
+	case []int8:
+		builder := array.NewInt8Builder(mem)
+		defer builder.Release()
+		for _, val := range v {
+			builder.Append(val)
+		}
+		arr = builder.NewArray()
+	case []uint64:
+		builder := array.NewUint64Builder(mem)
+		defer builder.Release()
+		for _, val := range v {
+			builder.Append(val)
+		}
+		arr = builder.NewArray()
+	case []uint32:
+		builder := array.NewUint32Builder(mem)
+		defer builder.Release()
+		for _, val := range v {
+			builder.Append(val)
+		}
+		arr = builder.NewArray()
+	case []uint16:
+		builder := array.NewUint16Builder(mem)
+		defer builder.Release()
+		for _, val := range v {
+			builder.Append(val)
+		}
+		arr = builder.NewArray()
+	case []uint8:
+		builder := array.NewUint8Builder(mem)
+		defer builder.Release()
+		for _, val := range v {
+			builder.Append(val)
+		}
+		arr = builder.NewArray()
 	default:
 		panic(fmt.Sprintf("unsupported type: %T", values))
 	}
@@ -156,6 +198,48 @@ func NewSafe[T any](name string, values []T, mem memory.Allocator) (*Series[T], 
 			builder.Append(timestamp)
 		}
 		arr = builder.NewArray()
+	case []int16:
+		builder := array.NewInt16Builder(mem)
+		defer builder.Release()
+		for _, val := range v {
+			builder.Append(val)
+		}
+		arr = builder.NewArray()
+	case []int8:
+		builder := array.NewInt8Builder(mem)
+		defer builder.Release()
+		for _, val := range v {
+			builder.Append(val)
+		}
+		arr = builder.NewArray()
+	case []uint64:
+		builder := array.NewUint64Builder(mem)
+		defer builder.Release()
+		for _, val := range v {
+			builder.Append(val)
+		}
+		arr = builder.NewArray()
+	case []uint32:
+		builder := array.NewUint32Builder(mem)
+		defer builder.Release()
+		for _, val := range v {
+			builder.Append(val)
+		}
+		arr = builder.NewArray()
+	case []uint16:
+		builder := array.NewUint16Builder(mem)
+		defer builder.Release()
+		for _, val := range v {
+			builder.Append(val)
+		}
+		arr = builder.NewArray()
+	case []uint8:
+		builder := array.NewUint8Builder(mem)
+		defer builder.Release()
+		for _, val := range v {
+			builder.Append(val)
+		}
+		arr = builder.NewArray()
 	default:
 		return nil, errors.NewUnsupportedTypeError("series creation", fmt.Sprintf("%T", values))
 	}
@@ -182,55 +266,84 @@ func (s *Series[T]) Values() []T {
 
 	switch arr := s.array.(type) {
 	case *array.String:
-		if any(result).([]string) != nil {
-			values := any(result).([]string)
+		if values, ok := any(result).([]string); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
 		}
 	case *array.Int64:
-		if any(result).([]int64) != nil {
-			values := any(result).([]int64)
+		if values, ok := any(result).([]int64); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
 		}
 	case *array.Int32:
-		if any(result).([]int32) != nil {
-			values := any(result).([]int32)
+		if values, ok := any(result).([]int32); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
 		}
 	case *array.Float64:
-		if any(result).([]float64) != nil {
-			values := any(result).([]float64)
+		if values, ok := any(result).([]float64); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
 		}
 	case *array.Float32:
-		if any(result).([]float32) != nil {
-			values := any(result).([]float32)
+		if values, ok := any(result).([]float32); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
 		}
 	case *array.Boolean:
-		if any(result).([]bool) != nil {
-			values := any(result).([]bool)
+		if values, ok := any(result).([]bool); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
 		}
 	case *array.Timestamp:
-		if any(result).([]time.Time) != nil {
-			values := any(result).([]time.Time)
+		if values, ok := any(result).([]time.Time); ok {
 			for i := 0; i < arr.Len(); i++ {
 				// Convert Arrow timestamp (nanoseconds since Unix epoch) back to time.Time in UTC
 				timestamp := arr.Value(i)
 				nanos := int64(timestamp)
 				values[i] = time.Unix(nanos/nanosPerSecond, nanos%nanosPerSecond).UTC()
+			}
+		}
+	case *array.Int16:
+		if values, ok := any(result).([]int16); ok {
+			for i := 0; i < arr.Len(); i++ {
+				values[i] = arr.Value(i)
+			}
+		}
+	case *array.Int8:
+		if values, ok := any(result).([]int8); ok {
+			for i := 0; i < arr.Len(); i++ {
+				values[i] = arr.Value(i)
+			}
+		}
+	case *array.Uint64:
+		if values, ok := any(result).([]uint64); ok {
+			for i := 0; i < arr.Len(); i++ {
+				values[i] = arr.Value(i)
+			}
+		}
+	case *array.Uint32:
+		if values, ok := any(result).([]uint32); ok {
+			for i := 0; i < arr.Len(); i++ {
+				values[i] = arr.Value(i)
+			}
+		}
+	case *array.Uint16:
+		if values, ok := any(result).([]uint16); ok {
+			for i := 0; i < arr.Len(); i++ {
+				values[i] = arr.Value(i)
+			}
+		}
+	case *array.Uint8:
+		if values, ok := any(result).([]uint8); ok {
+			for i := 0; i < arr.Len(); i++ {
+				values[i] = arr.Value(i)
 			}
 		}
 	default:
@@ -247,55 +360,84 @@ func (s *Series[T]) ValuesSafe() ([]T, error) {
 
 	switch arr := s.array.(type) {
 	case *array.String:
-		if any(result).([]string) != nil {
-			values := any(result).([]string)
+		if values, ok := any(result).([]string); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
 		}
 	case *array.Int64:
-		if any(result).([]int64) != nil {
-			values := any(result).([]int64)
+		if values, ok := any(result).([]int64); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
 		}
 	case *array.Int32:
-		if any(result).([]int32) != nil {
-			values := any(result).([]int32)
+		if values, ok := any(result).([]int32); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
 		}
 	case *array.Float64:
-		if any(result).([]float64) != nil {
-			values := any(result).([]float64)
+		if values, ok := any(result).([]float64); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
 		}
 	case *array.Float32:
-		if any(result).([]float32) != nil {
-			values := any(result).([]float32)
+		if values, ok := any(result).([]float32); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
 		}
 	case *array.Boolean:
-		if any(result).([]bool) != nil {
-			values := any(result).([]bool)
+		if values, ok := any(result).([]bool); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
 		}
 	case *array.Timestamp:
-		if any(result).([]time.Time) != nil {
-			values := any(result).([]time.Time)
+		if values, ok := any(result).([]time.Time); ok {
 			for i := 0; i < arr.Len(); i++ {
 				// Convert Arrow timestamp (nanoseconds since Unix epoch) back to time.Time in UTC
 				timestamp := arr.Value(i)
 				nanos := int64(timestamp)
 				values[i] = time.Unix(nanos/nanosPerSecond, nanos%nanosPerSecond).UTC()
+			}
+		}
+	case *array.Int16:
+		if values, ok := any(result).([]int16); ok {
+			for i := 0; i < arr.Len(); i++ {
+				values[i] = arr.Value(i)
+			}
+		}
+	case *array.Int8:
+		if values, ok := any(result).([]int8); ok {
+			for i := 0; i < arr.Len(); i++ {
+				values[i] = arr.Value(i)
+			}
+		}
+	case *array.Uint64:
+		if values, ok := any(result).([]uint64); ok {
+			for i := 0; i < arr.Len(); i++ {
+				values[i] = arr.Value(i)
+			}
+		}
+	case *array.Uint32:
+		if values, ok := any(result).([]uint32); ok {
+			for i := 0; i < arr.Len(); i++ {
+				values[i] = arr.Value(i)
+			}
+		}
+	case *array.Uint16:
+		if values, ok := any(result).([]uint16); ok {
+			for i := 0; i < arr.Len(); i++ {
+				values[i] = arr.Value(i)
+			}
+		}
+	case *array.Uint8:
+		if values, ok := any(result).([]uint8); ok {
+			for i := 0; i < arr.Len(); i++ {
+				values[i] = arr.Value(i)
 			}
 		}
 	default:
@@ -344,6 +486,30 @@ func (s *Series[T]) Value(index int) T {
 			timestamp := arr.Value(index)
 			nanos := int64(timestamp)
 			*v = time.Unix(nanos/nanosPerSecond, nanos%nanosPerSecond).UTC()
+		}
+	case *array.Int16:
+		if v, ok := any(&result).(*int16); ok {
+			*v = arr.Value(index)
+		}
+	case *array.Int8:
+		if v, ok := any(&result).(*int8); ok {
+			*v = arr.Value(index)
+		}
+	case *array.Uint64:
+		if v, ok := any(&result).(*uint64); ok {
+			*v = arr.Value(index)
+		}
+	case *array.Uint32:
+		if v, ok := any(&result).(*uint32); ok {
+			*v = arr.Value(index)
+		}
+	case *array.Uint16:
+		if v, ok := any(&result).(*uint16); ok {
+			*v = arr.Value(index)
+		}
+	case *array.Uint8:
+		if v, ok := any(&result).(*uint8); ok {
+			*v = arr.Value(index)
 		}
 	}
 
