@@ -2,6 +2,7 @@ package parallel
 
 import (
 	"runtime"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -178,6 +179,12 @@ func TestAdvancedWorkerPool(t *testing.T) {
 
 // TestWorkerPoolPriorityQueue tests priority-based task scheduling
 func TestWorkerPoolPriorityQueue(t *testing.T) {
+	// Test constants
+	const (
+		taskDelay = 5 * time.Millisecond // Small delay to observe priority effects
+		highPriorityTaskThreshold = 1.0 / 3.0 // At least 1/3 of high priority tasks should complete early
+	)
+
 	t.Run("priority task scheduling", func(t *testing.T) {
 		pool := NewAdvancedWorkerPool(AdvancedWorkerPoolConfig{
 			MinWorkers:     2,
@@ -211,7 +218,7 @@ func TestWorkerPoolPriorityQueue(t *testing.T) {
 
 		results := pool.ProcessWithPriority(tasks, func(task PriorityTask) int {
 			// Small delay to observe priority effects
-			time.Sleep(5 * time.Millisecond)
+			time.Sleep(taskDelay)
 
 			completionTime := time.Now()
 			timesMutex.Lock()
@@ -234,13 +241,9 @@ func TestWorkerPoolPriorityQueue(t *testing.T) {
 		highPriorityInFirstHalf := 0
 
 		// Sort by completion time
-		for i := 0; i < len(completionTimes)-1; i++ {
-			for j := i + 1; j < len(completionTimes); j++ {
-				if completionTimes[i].time.After(completionTimes[j].time) {
-					completionTimes[i], completionTimes[j] = completionTimes[j], completionTimes[i]
-				}
-			}
-		}
+		sort.Slice(completionTimes, func(i, j int) bool {
+			return completionTimes[i].time.Before(completionTimes[j].time)
+		})
 
 		// Check if high priority tasks tend to complete earlier
 		for i := 0; i < midPoint && i < len(completionTimes); i++ {
@@ -252,7 +255,7 @@ func TestWorkerPoolPriorityQueue(t *testing.T) {
 
 		// With priority scheduling, we expect more high priority tasks to complete early
 		// This is a statistical test - not 100% guaranteed but very likely
-		expectedMinHighPriority := expectedHighPriority / 3 // At least 1/3 of high priority tasks should complete early
+		expectedMinHighPriority := int(float64(expectedHighPriority) * highPriorityTaskThreshold)
 		assert.GreaterOrEqual(t, highPriorityInFirstHalf, expectedMinHighPriority,
 			"Priority scheduling should cause more high priority tasks to complete earlier")
 	})
