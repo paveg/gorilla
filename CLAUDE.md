@@ -263,6 +263,13 @@ gh issue list --label="priority: high,area: core"    # High priority core featur
 - New aggregation functions need both eager and lazy variants
 - Comprehensive test coverage including edge cases and benchmarks
 
+### Pull Request Guidelines
+When creating pull requests:
+- **Always include `Closes #<issue-number>` or `Resolves #<issue-number>`** in the PR description when implementing a GitHub issue
+- This automatically links the PR to the issue and closes it when the PR is merged
+- Example: "Closes #6" or "Resolves #42"
+- Place this after the summary section in the PR description
+
 ## Information Accuracy Requirements
 
 **CRITICAL: Always verify information from official sources before making any changes.**
