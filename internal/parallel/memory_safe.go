@@ -10,11 +10,13 @@ import (
 
 // AllocatorPool manages a pool of memory allocators for safe reuse in parallel processing
 type AllocatorPool struct {
-	pool     sync.Pool
-	active   int64 // Number of allocators currently in use
-	maxSize  int   // Maximum number of allocators to keep in pool
-	released bool  // Flag to track if pool has been closed
-	mu       sync.RWMutex
+	pool           sync.Pool
+	active         int64 // Number of allocators currently in use
+	maxSize        int   // Maximum number of allocators to keep in pool
+	released       bool  // Flag to track if pool has been closed
+	mu             sync.RWMutex
+	totalAllocated int64 // Total memory allocated by all allocators
+	peakAllocated  int64 // Peak memory allocated by the pool
 }
 
 // NewAllocatorPool creates a new allocator pool with the specified maximum size
@@ -231,4 +233,158 @@ func maxInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// RecordAllocation records memory allocation in the pool
+func (p *AllocatorPool) RecordAllocation(bytes int64) {
+	newTotal := atomic.AddInt64(&p.totalAllocated, bytes)
+
+	// Update peak if necessary
+	for {
+		peak := atomic.LoadInt64(&p.peakAllocated)
+		if newTotal <= peak || atomic.CompareAndSwapInt64(&p.peakAllocated, peak, newTotal) {
+			break
+		}
+	}
+}
+
+// RecordDeallocation records memory deallocation in the pool
+func (p *AllocatorPool) RecordDeallocation(bytes int64) {
+	atomic.AddInt64(&p.totalAllocated, -bytes)
+}
+
+// TotalAllocated returns the total memory allocated by the pool
+func (p *AllocatorPool) TotalAllocated() int64 {
+	return atomic.LoadInt64(&p.totalAllocated)
+}
+
+// PeakAllocated returns the peak memory allocated by the pool
+func (p *AllocatorPool) PeakAllocated() int64 {
+	return atomic.LoadInt64(&p.peakAllocated)
+}
+
+// PoolStats provides statistics about the allocator pool
+type PoolStats struct {
+	ActiveAllocators int64
+	TotalAllocated   int64
+	PeakAllocated    int64
+	MaxSize          int
+}
+
+// GetStats returns current pool statistics
+func (p *AllocatorPool) GetStats() PoolStats {
+	return PoolStats{
+		ActiveAllocators: atomic.LoadInt64(&p.active),
+		TotalAllocated:   atomic.LoadInt64(&p.totalAllocated),
+		PeakAllocated:    atomic.LoadInt64(&p.peakAllocated),
+		MaxSize:          p.maxSize,
+	}
+}
+
+// AdvancedMemoryPool provides enhanced memory pool management with adaptive sizing
+type AdvancedMemoryPool struct {
+	allocatorPool *AllocatorPool
+	memoryMonitor *MemoryMonitor
+	adaptiveSize  bool
+}
+
+// NewAdvancedMemoryPool creates a new advanced memory pool
+func NewAdvancedMemoryPool(maxSize int, memoryThreshold int64, adaptiveSize bool) *AdvancedMemoryPool {
+	allocatorPool := NewAllocatorPool(maxSize)
+	memoryMonitor := NewMemoryMonitor(memoryThreshold, maxSize)
+
+	return &AdvancedMemoryPool{
+		allocatorPool: allocatorPool,
+		memoryMonitor: memoryMonitor,
+		adaptiveSize:  adaptiveSize,
+	}
+}
+
+// GetAllocator gets an allocator from the pool with memory monitoring
+func (amp *AdvancedMemoryPool) GetAllocator() memory.Allocator {
+	// Check if we can allocate based on memory pressure
+	if amp.adaptiveSize {
+		parallelism := amp.memoryMonitor.AdjustParallelism()
+		if amp.allocatorPool.ActiveCount() >= int64(parallelism) {
+			// Return nil to indicate no allocator available due to memory pressure
+			return nil
+		}
+	}
+
+	alloc := amp.allocatorPool.Get()
+	if alloc != nil {
+		// Wrap allocator with monitoring
+		return NewMonitoredAllocator(alloc, amp.allocatorPool)
+	}
+
+	return alloc
+}
+
+// PutAllocator returns an allocator to the pool
+func (amp *AdvancedMemoryPool) PutAllocator(alloc memory.Allocator) {
+	if monitored, ok := alloc.(*MonitoredAllocator); ok {
+		amp.allocatorPool.Put(monitored.underlying)
+	} else {
+		amp.allocatorPool.Put(alloc)
+	}
+}
+
+// GetStats returns comprehensive pool statistics
+func (amp *AdvancedMemoryPool) GetStats() (PoolStats, *MemoryMonitor) {
+	return amp.allocatorPool.GetStats(), amp.memoryMonitor
+}
+
+// Close closes the advanced memory pool
+func (amp *AdvancedMemoryPool) Close() {
+	amp.allocatorPool.Close()
+}
+
+// MonitoredAllocator wraps a memory allocator with monitoring capabilities
+type MonitoredAllocator struct {
+	underlying memory.Allocator
+	pool       *AllocatorPool
+}
+
+// NewMonitoredAllocator creates a new monitored allocator
+func NewMonitoredAllocator(underlying memory.Allocator, pool *AllocatorPool) *MonitoredAllocator {
+	return &MonitoredAllocator{
+		underlying: underlying,
+		pool:       pool,
+	}
+}
+
+// Allocate allocates memory and records the allocation
+func (ma *MonitoredAllocator) Allocate(size int) []byte {
+	buf := ma.underlying.Allocate(size)
+	if buf != nil {
+		ma.pool.RecordAllocation(int64(size))
+	}
+	return buf
+}
+
+// Reallocate reallocates memory and updates allocation records
+func (ma *MonitoredAllocator) Reallocate(size int, b []byte) []byte {
+	oldSize := len(b)
+	newBuf := ma.underlying.Reallocate(size, b)
+	if newBuf != nil {
+		// Record the difference in allocation
+		ma.pool.RecordDeallocation(int64(oldSize))
+		ma.pool.RecordAllocation(int64(size))
+	}
+	return newBuf
+}
+
+// Free frees memory and records the deallocation
+func (ma *MonitoredAllocator) Free(b []byte) {
+	if b != nil {
+		ma.pool.RecordDeallocation(int64(len(b)))
+		ma.underlying.Free(b)
+	}
+}
+
+// AllocatedBytes returns the number of bytes allocated by the underlying allocator
+func (ma *MonitoredAllocator) AllocatedBytes() int64 {
+	// Note: Arrow's memory.Allocator interface doesn't provide AllocatedBytes method
+	// We could track this internally, but for now return 0
+	return 0
 }
