@@ -268,8 +268,24 @@ func createSlicedSeriesFromArray(
 		return createSlicedStringSeries(name, typedArr, start, length, mem)
 	case *array.Int64:
 		return createSlicedInt64Series(name, typedArr, start, length, mem)
+	case *array.Int32:
+		return createSlicedInt32Series(name, typedArr, start, length, mem)
+	case *array.Int16:
+		return createSlicedInt16Series(name, typedArr, start, length, mem)
+	case *array.Int8:
+		return createSlicedInt8Series(name, typedArr, start, length, mem)
+	case *array.Uint64:
+		return createSlicedUint64Series(name, typedArr, start, length, mem)
+	case *array.Uint32:
+		return createSlicedUint32Series(name, typedArr, start, length, mem)
+	case *array.Uint16:
+		return createSlicedUint16Series(name, typedArr, start, length, mem)
+	case *array.Uint8:
+		return createSlicedUint8Series(name, typedArr, start, length, mem)
 	case *array.Float64:
 		return createSlicedFloat64Series(name, typedArr, start, length, mem)
+	case *array.Float32:
+		return createSlicedFloat32Series(name, typedArr, start, length, mem)
 	case *array.Boolean:
 		return createSlicedBoolSeries(name, typedArr, start, length, mem)
 	case *array.Timestamp:
@@ -311,8 +327,48 @@ func createSlicedInt64Series(name string, typedArr *array.Int64, start, length i
 	return createSlicedSeries(name, typedArr, start, length, mem)
 }
 
+// createSlicedInt32Series creates an int32 series slice
+func createSlicedInt32Series(name string, typedArr *array.Int32, start, length int, mem memory.Allocator) ISeries {
+	return createSlicedSeries(name, typedArr, start, length, mem)
+}
+
+// createSlicedInt16Series creates an int16 series slice
+func createSlicedInt16Series(name string, typedArr *array.Int16, start, length int, mem memory.Allocator) ISeries {
+	return createSlicedSeries(name, typedArr, start, length, mem)
+}
+
+// createSlicedInt8Series creates an int8 series slice
+func createSlicedInt8Series(name string, typedArr *array.Int8, start, length int, mem memory.Allocator) ISeries {
+	return createSlicedSeries(name, typedArr, start, length, mem)
+}
+
+// createSlicedUint64Series creates a uint64 series slice
+func createSlicedUint64Series(name string, typedArr *array.Uint64, start, length int, mem memory.Allocator) ISeries {
+	return createSlicedSeries(name, typedArr, start, length, mem)
+}
+
+// createSlicedUint32Series creates a uint32 series slice
+func createSlicedUint32Series(name string, typedArr *array.Uint32, start, length int, mem memory.Allocator) ISeries {
+	return createSlicedSeries(name, typedArr, start, length, mem)
+}
+
+// createSlicedUint16Series creates a uint16 series slice
+func createSlicedUint16Series(name string, typedArr *array.Uint16, start, length int, mem memory.Allocator) ISeries {
+	return createSlicedSeries(name, typedArr, start, length, mem)
+}
+
+// createSlicedUint8Series creates a uint8 series slice
+func createSlicedUint8Series(name string, typedArr *array.Uint8, start, length int, mem memory.Allocator) ISeries {
+	return createSlicedSeries(name, typedArr, start, length, mem)
+}
+
 // createSlicedFloat64Series creates a float64 series slice
 func createSlicedFloat64Series(name string, typedArr *array.Float64, start, length int, mem memory.Allocator) ISeries {
+	return createSlicedSeries(name, typedArr, start, length, mem)
+}
+
+// createSlicedFloat32Series creates a float32 series slice
+func createSlicedFloat32Series(name string, typedArr *array.Float32, start, length int, mem memory.Allocator) ISeries {
 	return createSlicedSeries(name, typedArr, start, length, mem)
 }
 
