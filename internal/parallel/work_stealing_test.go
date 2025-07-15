@@ -86,11 +86,11 @@ func TestFunctionalWorkStealing(t *testing.T) {
 		})
 
 		assert.Len(t, results, 8)
-		
+
 		metrics := pool.GetMetrics()
 		t.Logf("Work stealing count: %d", metrics.WorkStealingCount)
 		t.Logf("Total tasks processed: %d", metrics.TotalTasksProcessed)
-		
+
 		// Even if work stealing doesn't occur, we should see all tasks processed
 		assert.Equal(t, int64(8), metrics.TotalTasksProcessed)
 	})
@@ -144,7 +144,7 @@ func TestFunctionalWorkStealing(t *testing.T) {
 			t.Logf("2. Workers finished their local work at the same time")
 			t.Logf("3. Race condition in work distribution")
 			t.Logf("4. Different timing behavior in CI environment")
-			
+
 			// In CI, we'll be more lenient but still verify the implementation works
 			// The key is that tasks are processed correctly, even if work stealing doesn't occur
 			assert.Equal(t, int64(200), metrics.TotalTasksProcessed, "All tasks should be processed")
