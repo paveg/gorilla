@@ -163,7 +163,7 @@ func (pool *AdvancedWorkerPool) Process(items []interface{}, worker func(interfa
 	// Create result channel
 	results := make(chan advancedIndexedResult, len(items))
 
-	// Submit work items
+	// Submit work items - distribute to worker queues if work stealing is enabled
 	for i, item := range items {
 		workItem := workItem{
 			index:  i,
@@ -172,18 +172,32 @@ func (pool *AdvancedWorkerPool) Process(items []interface{}, worker func(interfa
 			result: results,
 		}
 
-		select {
-		case pool.workQueue <- workItem:
-		case <-pool.ctx.Done():
-			close(results)
-			return nil
-		default:
-			// Handle backpressure
-			if pool.config.BackpressurePolicy == BackpressureBlock {
-				pool.workQueue <- workItem
-			} else {
-				// Drop or spill to disk (simplified for now)
-				continue
+		// Try to distribute work to worker queues first if work stealing is enabled
+		distributed := false
+		if pool.workStealingEnabled && len(pool.stealingQueues) > 0 {
+			// Use round-robin distribution to worker queues
+			targetWorker := i % len(pool.stealingQueues)
+			if targetWorker < len(pool.stealingQueues) && pool.stealingQueues[targetWorker] != nil {
+				pool.stealingQueues[targetWorker].pushLocal(workItem)
+				distributed = true
+			}
+		}
+
+		// If not distributed to worker queue, use global queue
+		if !distributed {
+			select {
+			case pool.workQueue <- workItem:
+			case <-pool.ctx.Done():
+				close(results)
+				return nil
+			default:
+				// Handle backpressure
+				if pool.config.BackpressurePolicy == BackpressureBlock {
+					pool.workQueue <- workItem
+				} else {
+					// Drop or spill to disk (simplified for now)
+					continue
+				}
 			}
 		}
 	}
@@ -242,10 +256,24 @@ func (pool *AdvancedWorkerPool) ProcessWithPriority(tasks []PriorityTask, worker
 			result: item.Result,
 		}
 
-		select {
-		case pool.workQueue <- workItem:
-		case <-pool.ctx.Done():
-			return nil
+		// Try to distribute priority work to worker queues first if work stealing is enabled
+		distributed := false
+		if pool.workStealingEnabled && len(pool.stealingQueues) > 0 {
+			// Use round-robin distribution to worker queues
+			targetWorker := item.Index % len(pool.stealingQueues)
+			if targetWorker < len(pool.stealingQueues) && pool.stealingQueues[targetWorker] != nil {
+				pool.stealingQueues[targetWorker].pushLocal(workItem)
+				distributed = true
+			}
+		}
+
+		// If not distributed to worker queue, use global queue
+		if !distributed {
+			select {
+			case pool.workQueue <- workItem:
+			case <-pool.ctx.Done():
+				return nil
+			}
 		}
 	}
 
@@ -449,20 +477,43 @@ func (w *advancedWorker) run() {
 		select {
 		case <-w.ctx.Done():
 			return
-		case workItem, ok := <-w.pool.workQueue:
-			if !ok {
-				return
-			}
-			w.processWork(workItem)
 		default:
-			// Try work stealing if enabled
-			if w.pool.workStealingEnabled {
-				if stolenWork := w.stealWork(); stolenWork != nil {
-					w.processWork(*stolenWork)
+			// Try to get work in priority order:
+			// 1. Local queue (highest priority)
+			// 2. Global queue
+			// 3. Steal from other workers
+			var workItem *workItem
+
+			// Try local queue first if work stealing is enabled
+			if w.pool.workStealingEnabled && w.stealingQueue != nil {
+				workItem = w.stealingQueue.popLocal()
+			}
+
+			// If no local work, try global queue
+			if workItem == nil {
+				select {
+				case item, ok := <-w.pool.workQueue:
+					if !ok {
+						return
+					}
+					workItem = &item
+				default:
+					// No work in global queue
 				}
 			}
-			// Small sleep to avoid busy waiting
-			time.Sleep(time.Millisecond)
+
+			// If still no work, try stealing from other workers
+			if workItem == nil && w.pool.workStealingEnabled {
+				workItem = w.stealWork()
+			}
+
+			// Process work if we found any
+			if workItem != nil {
+				w.processWork(*workItem)
+			} else {
+				// Small sleep to avoid busy waiting
+				time.Sleep(time.Millisecond)
+			}
 		}
 	}
 }
@@ -518,7 +569,20 @@ func newWorkStealingQueue() *workStealingQueue {
 	}
 }
 
-func (q *workStealingQueue) steal() *workItem {
+// pushLocal adds a work item to the local end of the queue (LIFO for owner)
+func (q *workStealingQueue) pushLocal(item workItem) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	if q.closed {
+		return
+	}
+
+	q.items = append(q.items, item)
+}
+
+// popLocal removes a work item from the local end of the queue (LIFO for owner)
+func (q *workStealingQueue) popLocal() *workItem {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
@@ -529,6 +593,21 @@ func (q *workStealingQueue) steal() *workItem {
 	// Take from the end (LIFO for better cache locality)
 	item := q.items[len(q.items)-1]
 	q.items = q.items[:len(q.items)-1]
+	return &item
+}
+
+// steal removes a work item from the remote end of the queue (FIFO for thieves)
+func (q *workStealingQueue) steal() *workItem {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	if q.closed || len(q.items) == 0 {
+		return nil
+	}
+
+	// Take from the beginning (FIFO for thieves - reduces contention)
+	item := q.items[0]
+	q.items = q.items[1:]
 	return &item
 }
 
