@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
@@ -1074,4 +1075,145 @@ func (lf *LazyFrame) Release() {
 	if lf.pool != nil {
 		lf.pool.Close()
 	}
+}
+
+// Explain generates an execution plan without executing the operations
+func (lf *LazyFrame) Explain() DebugExecutionPlan {
+	return lf.buildExecutionPlan(false)
+}
+
+// ExplainAnalyze generates an execution plan and executes it with profiling
+func (lf *LazyFrame) ExplainAnalyze() (DebugExecutionPlan, error) {
+	plan := lf.buildExecutionPlan(true)
+
+	// Execute with profiling to get actual statistics
+	start := time.Now()
+	result, err := lf.collectWithProfiling(&plan)
+	plan.Actual.TotalDuration = time.Since(start)
+
+	if err != nil {
+		return plan, err
+	}
+	defer result.Release()
+
+	return plan, nil
+}
+
+// buildExecutionPlan builds an execution plan from the operations
+func (lf *LazyFrame) buildExecutionPlan(_ bool) DebugExecutionPlan {
+	const avgBytesPerCell = 8
+	plan := DebugExecutionPlan{
+		RootNode: &PlanNode{
+			ID:          "root",
+			Type:        "LazyFrame",
+			Description: "Collect operation",
+			Cost: PlanCost{
+				Estimated: EstimatedCost{
+					Rows:   int64(lf.source.Len()),
+					Memory: int64(lf.source.Len() * lf.source.Width() * avgBytesPerCell), // Rough estimate
+				},
+			},
+			Properties: make(map[string]string),
+		},
+		Estimated: PlanStats{
+			TotalRows:   int64(lf.source.Len()),
+			TotalMemory: int64(lf.source.Len() * lf.source.Width() * avgBytesPerCell),
+		},
+		Metadata: DebugPlanMetadata{
+			CreatedAt: time.Now(),
+		},
+	}
+
+	// Check if operations warrant parallel execution
+	const parallelThreshold = 1000
+	if lf.source.Len() >= parallelThreshold {
+		plan.RootNode.Properties["parallel"] = "true"
+		plan.RootNode.Properties["worker_count"] = fmt.Sprintf("%d", runtime.NumCPU())
+		plan.Estimated.ParallelOps = 1
+	}
+
+	// Build child nodes for each operation
+	current := plan.RootNode
+	estimatedRows := int64(lf.source.Len())
+
+	for i, op := range lf.operations {
+		node := &PlanNode{
+			ID:          fmt.Sprintf("op_%d", i),
+			Type:        lf.getOperationType(op),
+			Description: op.String(),
+			Cost: PlanCost{
+				Estimated: EstimatedCost{
+					Rows:   estimatedRows,
+					Memory: estimatedRows * int64(lf.source.Width()) * avgBytesPerCell,
+				},
+			},
+			Properties: make(map[string]string),
+		}
+
+		// Estimate selectivity for filters
+		if _, isFilter := op.(*FilterOperation); isFilter {
+			const filterSelectivity = 0.5 // Assume 50% selectivity
+			estimatedRows = int64(float64(estimatedRows) * filterSelectivity)
+		}
+
+		current.Children = append(current.Children, node)
+		current = node
+	}
+
+	// Add scan node
+	scanNode := &PlanNode{
+		ID:          "scan",
+		Type:        "Scan",
+		Description: "DataFrame",
+		Cost: PlanCost{
+			Estimated: EstimatedCost{
+				Rows:   int64(lf.source.Len()),
+				Memory: int64(lf.source.Len() * lf.source.Width() * avgBytesPerCell),
+			},
+		},
+		Properties: make(map[string]string),
+	}
+	current.Children = append(current.Children, scanNode)
+
+	return plan
+}
+
+// getOperationType returns the type string for an operation
+func (lf *LazyFrame) getOperationType(op LazyOperation) string {
+	switch op.(type) {
+	case *FilterOperation:
+		return "Filter"
+	case *SelectOperation:
+		return "Select"
+	case *WithColumnOperation:
+		return "WithColumn"
+	case *GroupByOperation:
+		return "GroupBy"
+	case *JoinOperation:
+		return "Join"
+	default:
+		return "Unknown"
+	}
+}
+
+// collectWithProfiling executes the operations with profiling enabled
+func (lf *LazyFrame) collectWithProfiling(plan *DebugExecutionPlan) (*DataFrame, error) {
+	// Execute the operations normally and populate actual stats
+	result, err := lf.Collect()
+	if err != nil {
+		return nil, err
+	}
+	// Fill in actual statistics (simplified for demo)
+	const avgBytesPerCell = 8
+	plan.Actual.TotalRows = int64(result.Len())
+	plan.Actual.TotalMemory = int64(result.Len() * result.Width() * avgBytesPerCell)
+	plan.Metadata.ExecutedAt = time.Now()
+
+	// Update root node with actual statistics
+	plan.RootNode.Cost.Actual = ActualCost{
+		Rows:   int64(result.Len()),
+		Memory: int64(result.Len() * result.Width() * avgBytesPerCell),
+	}
+
+	return result, nil
 }
