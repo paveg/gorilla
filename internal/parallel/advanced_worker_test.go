@@ -212,7 +212,7 @@ func TestWorkerPoolPriorityQueue(t *testing.T) {
 		results := pool.ProcessWithPriority(tasks, func(task PriorityTask) int {
 			// Small delay to observe priority effects
 			time.Sleep(5 * time.Millisecond)
-			
+
 			completionTime := time.Now()
 			timesMutex.Lock()
 			completionTimes = append(completionTimes, struct {
@@ -220,7 +220,7 @@ func TestWorkerPoolPriorityQueue(t *testing.T) {
 				time     time.Time
 			}{task.Priority, completionTime})
 			timesMutex.Unlock()
-			
+
 			return task.Value * 10
 		})
 
@@ -232,7 +232,7 @@ func TestWorkerPoolPriorityQueue(t *testing.T) {
 		totalTasks := len(completionTimes)
 		midPoint := totalTasks / 2
 		highPriorityInFirstHalf := 0
-		
+
 		// Sort by completion time
 		for i := 0; i < len(completionTimes)-1; i++ {
 			for j := i + 1; j < len(completionTimes); j++ {
@@ -241,7 +241,7 @@ func TestWorkerPoolPriorityQueue(t *testing.T) {
 				}
 			}
 		}
-		
+
 		// Check if high priority tasks tend to complete earlier
 		for i := 0; i < midPoint && i < len(completionTimes); i++ {
 			if completionTimes[i].priority == 10 {
@@ -253,7 +253,7 @@ func TestWorkerPoolPriorityQueue(t *testing.T) {
 		// With priority scheduling, we expect more high priority tasks to complete early
 		// This is a statistical test - not 100% guaranteed but very likely
 		expectedMinHighPriority := expectedHighPriority / 3 // At least 1/3 of high priority tasks should complete early
-		assert.GreaterOrEqual(t, highPriorityInFirstHalf, expectedMinHighPriority, 
+		assert.GreaterOrEqual(t, highPriorityInFirstHalf, expectedMinHighPriority,
 			"Priority scheduling should cause more high priority tasks to complete earlier")
 	})
 }
