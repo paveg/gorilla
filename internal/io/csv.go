@@ -129,11 +129,13 @@ func (r *CSVReader) inferDataType(data []string) string {
 	canBeInt := true
 	canBeFloat := true
 	canBeBool := true
+	hasNonEmptyValue := false
 
 	for _, value := range data {
 		if value == "" {
 			continue // Skip empty values for type inference
 		}
+		hasNonEmptyValue = true
 
 		// Check if it's a boolean
 		if canBeBool {
@@ -158,6 +160,11 @@ func (r *CSVReader) inferDataType(data []string) string {
 				canBeFloat = false
 			}
 		}
+	}
+
+	// If all values are empty, default to string
+	if !hasNonEmptyValue {
+		return "string"
 	}
 
 	// Return the most specific type
@@ -273,6 +280,6 @@ func (w *CSVWriter) getValueAsString(column dataframe.ISeries, index int) string
 		return "false"
 	default:
 		// Fallback for unknown types
-		return arr.String()
+		return ""
 	}
 }

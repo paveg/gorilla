@@ -148,7 +148,7 @@ func BenchmarkCSVTypeInference(b *testing.B) {
 
 	for _, tc := range testCases {
 		b.Run(tc.name, func(b *testing.B) {
-			reader := &CSVReader{mem: mem}
+			reader := NewCSVReader(strings.NewReader(""), DefaultCSVOptions(), mem)
 
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {

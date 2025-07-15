@@ -305,10 +305,11 @@ False`
 	})
 
 	t.Run("handles all empty values", func(t *testing.T) {
+		// Test case with all empty values (not empty lines)
 		csvData := `values
-		
-		
-		`
+""
+""
+""`
 
 		reader := NewCSVReader(strings.NewReader(csvData), DefaultCSVOptions(), mem)
 		df, err := reader.Read()
