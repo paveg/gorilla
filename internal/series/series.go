@@ -266,50 +266,43 @@ func (s *Series[T]) Values() []T {
 
 	switch arr := s.array.(type) {
 	case *array.String:
-		if any(result).([]string) != nil {
-			values := any(result).([]string)
+		if values, ok := any(result).([]string); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
 		}
 	case *array.Int64:
-		if any(result).([]int64) != nil {
-			values := any(result).([]int64)
+		if values, ok := any(result).([]int64); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
 		}
 	case *array.Int32:
-		if any(result).([]int32) != nil {
-			values := any(result).([]int32)
+		if values, ok := any(result).([]int32); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
 		}
 	case *array.Float64:
-		if any(result).([]float64) != nil {
-			values := any(result).([]float64)
+		if values, ok := any(result).([]float64); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
 		}
 	case *array.Float32:
-		if any(result).([]float32) != nil {
-			values := any(result).([]float32)
+		if values, ok := any(result).([]float32); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
 		}
 	case *array.Boolean:
-		if any(result).([]bool) != nil {
-			values := any(result).([]bool)
+		if values, ok := any(result).([]bool); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
 		}
 	case *array.Timestamp:
-		if any(result).([]time.Time) != nil {
-			values := any(result).([]time.Time)
+		if values, ok := any(result).([]time.Time); ok {
 			for i := 0; i < arr.Len(); i++ {
 				// Convert Arrow timestamp (nanoseconds since Unix epoch) back to time.Time in UTC
 				timestamp := arr.Value(i)
@@ -318,43 +311,37 @@ func (s *Series[T]) Values() []T {
 			}
 		}
 	case *array.Int16:
-		if any(result).([]int16) != nil {
-			values := any(result).([]int16)
+		if values, ok := any(result).([]int16); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
 		}
 	case *array.Int8:
-		if any(result).([]int8) != nil {
-			values := any(result).([]int8)
+		if values, ok := any(result).([]int8); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
 		}
 	case *array.Uint64:
-		if any(result).([]uint64) != nil {
-			values := any(result).([]uint64)
+		if values, ok := any(result).([]uint64); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
 		}
 	case *array.Uint32:
-		if any(result).([]uint32) != nil {
-			values := any(result).([]uint32)
+		if values, ok := any(result).([]uint32); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
 		}
 	case *array.Uint16:
-		if any(result).([]uint16) != nil {
-			values := any(result).([]uint16)
+		if values, ok := any(result).([]uint16); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
 		}
 	case *array.Uint8:
-		if any(result).([]uint8) != nil {
-			values := any(result).([]uint8)
+		if values, ok := any(result).([]uint8); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
@@ -373,50 +360,43 @@ func (s *Series[T]) ValuesSafe() ([]T, error) {
 
 	switch arr := s.array.(type) {
 	case *array.String:
-		if any(result).([]string) != nil {
-			values := any(result).([]string)
+		if values, ok := any(result).([]string); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
 		}
 	case *array.Int64:
-		if any(result).([]int64) != nil {
-			values := any(result).([]int64)
+		if values, ok := any(result).([]int64); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
 		}
 	case *array.Int32:
-		if any(result).([]int32) != nil {
-			values := any(result).([]int32)
+		if values, ok := any(result).([]int32); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
 		}
 	case *array.Float64:
-		if any(result).([]float64) != nil {
-			values := any(result).([]float64)
+		if values, ok := any(result).([]float64); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
 		}
 	case *array.Float32:
-		if any(result).([]float32) != nil {
-			values := any(result).([]float32)
+		if values, ok := any(result).([]float32); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
 		}
 	case *array.Boolean:
-		if any(result).([]bool) != nil {
-			values := any(result).([]bool)
+		if values, ok := any(result).([]bool); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
 		}
 	case *array.Timestamp:
-		if any(result).([]time.Time) != nil {
-			values := any(result).([]time.Time)
+		if values, ok := any(result).([]time.Time); ok {
 			for i := 0; i < arr.Len(); i++ {
 				// Convert Arrow timestamp (nanoseconds since Unix epoch) back to time.Time in UTC
 				timestamp := arr.Value(i)
@@ -425,43 +405,37 @@ func (s *Series[T]) ValuesSafe() ([]T, error) {
 			}
 		}
 	case *array.Int16:
-		if any(result).([]int16) != nil {
-			values := any(result).([]int16)
+		if values, ok := any(result).([]int16); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
 		}
 	case *array.Int8:
-		if any(result).([]int8) != nil {
-			values := any(result).([]int8)
+		if values, ok := any(result).([]int8); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
 		}
 	case *array.Uint64:
-		if any(result).([]uint64) != nil {
-			values := any(result).([]uint64)
+		if values, ok := any(result).([]uint64); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
 		}
 	case *array.Uint32:
-		if any(result).([]uint32) != nil {
-			values := any(result).([]uint32)
+		if values, ok := any(result).([]uint32); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
 		}
 	case *array.Uint16:
-		if any(result).([]uint16) != nil {
-			values := any(result).([]uint16)
+		if values, ok := any(result).([]uint16); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
 		}
 	case *array.Uint8:
-		if any(result).([]uint8) != nil {
-			values := any(result).([]uint8)
+		if values, ok := any(result).([]uint8); ok {
 			for i := 0; i < arr.Len(); i++ {
 				values[i] = arr.Value(i)
 			}
