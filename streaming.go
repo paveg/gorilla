@@ -241,7 +241,9 @@ func NewSpillableBatch(data *DataFrame) *SpillableBatch {
 	}
 }
 
-// GetData returns the data, loading from spill if necessary
+// GetData returns the data, loading from spill if necessary.
+// If the data has been spilled to disk, this method attempts to reload it.
+// Returns an error if the data cannot be loaded from spill storage.
 func (sb *SpillableBatch) GetData() (*DataFrame, error) {
 	sb.mu.RLock()
 	if !sb.spilled {
@@ -251,7 +253,8 @@ func (sb *SpillableBatch) GetData() (*DataFrame, error) {
 	}
 	sb.mu.RUnlock()
 
-	// Load from spill storage
+	// Load from spill storage - this operation can fail
+	// In a production system, proper error handling and retry logic would be implemented
 	return sb.loadFromSpill()
 }
 
@@ -285,11 +288,22 @@ func (sb *SpillableBatch) spillToDisk() {
 	sb.spillRef = "spilled_data_placeholder"
 }
 
-// loadFromSpill loads data from spill storage
+// loadFromSpill loads data from spill storage.
+// This is a placeholder implementation that demonstrates error handling for spill operations.
+// In a production system, this would deserialize the DataFrame from persistent storage
+// with proper error handling, validation, and retry logic.
 func (sb *SpillableBatch) loadFromSpill() (*DataFrame, error) {
-	// This is a placeholder implementation
-	// In a real implementation, we would deserialize the DataFrame from disk
-	// For now, we'll return an error indicating this is not implemented
+	if sb.spillRef == nil {
+		return nil, errors.New("spill reference is nil, cannot load data")
+	}
+	
+	// This is a placeholder implementation that always fails with a clear error message
+	// In a real implementation, we would:
+	// 1. Validate the spill reference
+	// 2. Attempt to read from persistent storage
+	// 3. Deserialize the DataFrame
+	// 4. Handle any I/O or deserialization errors
+	// 5. Implement retry logic for transient failures
 	return nil, errors.New("loading from spill not implemented in this version")
 }
 
@@ -306,6 +320,8 @@ func (sb *SpillableBatch) Release() {
 	// Clean up spill reference if needed
 	if sb.spilled && sb.spillRef != nil {
 		// Clean up spilled data
+		// In a production system, this would include proper cleanup of disk resources
+		// and error handling for failed cleanup operations
 		sb.spillRef = nil
 	}
 }
