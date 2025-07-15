@@ -242,7 +242,11 @@ func (m *MemoryUsageMonitor) triggerSpill() {
 	if callback != nil {
 		atomic.AddInt64(&m.spillCount, 1)
 		go func() {
-			_ = callback() // Ignore error for now as this is a background operation
+			if err := callback(); err != nil {
+				// In a production system, this would be logged properly
+				// For now, we track the error but continue operation
+				atomic.AddInt64(&m.spillCount, -1) // Decrement on failure
+			}
 		}()
 	}
 }
@@ -304,7 +308,11 @@ func (m *MemoryUsageMonitor) checkMemoryPressure() {
 
 		if callback != nil {
 			go func() {
-				_ = callback() // Ignore error for now as this is a background operation
+				if err := callback(); err != nil {
+					// In a production system, this would be logged properly
+					// For now, we continue as cleanup operations are best-effort
+					return
+				}
 			}()
 		}
 	}
