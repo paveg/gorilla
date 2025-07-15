@@ -1,0 +1,23 @@
+# Gorilla DataFrame Configuration Example
+# This file demonstrates the configuration options available for Gorilla DataFrame operations
+
+# Parallel Processing Configuration
+parallel_threshold: 2000      # Minimum rows to trigger parallel processing
+worker_pool_size: 8           # Number of worker goroutines (0 = auto-detect)
+chunk_size: 1000              # Size of data chunks for parallel processing (0 = auto-calculate)
+max_parallelism: 16           # Maximum number of parallel operations
+
+# Memory Management Configuration
+memory_threshold: 1073741824  # Memory threshold in bytes (1GB, 0 = unlimited)
+gc_pressure_threshold: 0.75   # GC pressure threshold (0.0-1.0)
+allocator_pool_size: 20       # Size of allocator pool
+
+# Query Optimization Configuration
+filter_fusion: true           # Enable filter fusion optimization
+predicate_pushdown: true      # Enable predicate pushdown optimization
+join_optimization: true       # Enable join optimization
+
+# Debugging Configuration
+enable_profiling: false       # Enable performance profiling
+verbose_logging: false        # Enable verbose logging
+metrics_collection: true      # Enable metrics collection

@@ -13,6 +13,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/paveg/gorilla/internal/config"
 	"github.com/paveg/gorilla/internal/expr"
 	"github.com/paveg/gorilla/internal/parallel"
 	"github.com/paveg/gorilla/internal/series"
@@ -26,8 +27,9 @@ const (
 
 // DataFrame represents a table of data with typed columns
 type DataFrame struct {
-	columns map[string]ISeries
-	order   []string // Maintains column order
+	columns         map[string]ISeries
+	order           []string                // Maintains column order
+	operationConfig *config.OperationConfig // Optional per-operation configuration
 }
 
 // JoinType represents the type of join operation
@@ -61,8 +63,9 @@ func New(series ...ISeries) *DataFrame {
 	}
 
 	return &DataFrame{
-		columns: columns,
-		order:   order,
+		columns:         columns,
+		order:           order,
+		operationConfig: nil,
 	}
 }
 
@@ -152,6 +155,15 @@ func (df *DataFrame) HasColumn(name string) bool {
 	return exists
 }
 
+// WithConfig returns a new DataFrame with the specified operation configuration
+func (df *DataFrame) WithConfig(opConfig config.OperationConfig) *DataFrame {
+	return &DataFrame{
+		columns:         df.columns,
+		order:           df.order,
+		operationConfig: &opConfig,
+	}
+}
+
 // String returns a string representation of the DataFrame
 func (df *DataFrame) String() string {
 	if len(df.columns) == 0 {
@@ -223,10 +235,10 @@ func (df *DataFrame) SortBy(columns []string, ascending []bool) (*DataFrame, err
 	}
 
 	// Create sorted indices using parallel or sequential approach
-	const minRowsForParallelSort = 1000
+	parallelThreshold := config.GetGlobalConfig().ParallelThreshold
 	var sortedIndices []int
 
-	if rowCount >= minRowsForParallelSort {
+	if rowCount >= parallelThreshold {
 		sortedIndices = df.sortParallel(columns, ascending)
 	} else {
 		sortedIndices = df.sortSequential(columns, ascending)
@@ -720,7 +732,8 @@ func (gb *GroupBy) Agg(aggregations ...*expr.AggregationExpr) *DataFrame {
 	}
 
 	// Use parallel processing for large number of groups
-	const minGroupsForParallel = 100
+	parallelThreshold := config.GetGlobalConfig().ParallelThreshold
+	minGroupsForParallel := parallelThreshold / 10 // Use 1/10 of row threshold for groups
 	if len(gb.groups) >= minGroupsForParallel {
 		return gb.aggParallel(aggregations...)
 	}
@@ -1015,7 +1028,7 @@ func (df *DataFrame) Join(right *DataFrame, options *JoinOptions) (*DataFrame, e
 	}
 
 	// Use parallel execution for large datasets
-	const parallelThreshold = 1000
+	parallelThreshold := config.GetGlobalConfig().ParallelThreshold
 	useParallel := df.Len() >= parallelThreshold || right.Len() >= parallelThreshold
 
 	if useParallel {
@@ -1090,7 +1103,7 @@ func (df *DataFrame) parallelJoin(
 	mem := memory.NewGoAllocator()
 
 	// Use sequential join for small datasets
-	const parallelThreshold = 1000
+	parallelThreshold := config.GetGlobalConfig().ParallelThreshold
 	if right.Len() < parallelThreshold {
 		return df.sequentialJoin(right, leftKeys, rightKeys, joinType)
 	}
