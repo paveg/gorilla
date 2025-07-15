@@ -1,0 +1,15 @@
+{
+  "parallel_threshold": 1500,
+  "worker_pool_size": 0,
+  "chunk_size": 800,
+  "max_parallelism": 12,
+  "memory_threshold": 536870912,
+  "gc_pressure_threshold": 0.8,
+  "allocator_pool_size": 15,
+  "filter_fusion": true,
+  "predicate_pushdown": true,
+  "join_optimization": true,
+  "enable_profiling": false,
+  "verbose_logging": false,
+  "metrics_collection": false
+}

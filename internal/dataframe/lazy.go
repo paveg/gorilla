@@ -9,6 +9,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/paveg/gorilla/internal/config"
 	"github.com/paveg/gorilla/internal/expr"
 	"github.com/paveg/gorilla/internal/parallel"
 	"github.com/paveg/gorilla/internal/series"
@@ -583,8 +584,8 @@ func (lf *LazyFrame) Collect() (*DataFrame, error) {
 	optimizedOperations := optimizedPlan.operations
 
 	// Use parallel execution for larger datasets
-	const minRowsForParallel = 1000
-	if lf.source.Len() >= minRowsForParallel && lf.pool != nil {
+	parallelThreshold := lf.getParallelThreshold()
+	if lf.shouldUseParallelExecution(parallelThreshold) {
 		return lf.collectParallelWithOps(optimizedOperations)
 	}
 
@@ -680,7 +681,7 @@ func (lf *LazyFrame) collectParallel() (*DataFrame, error) {
 // collectParallelWithOps implements parallel execution with provided operations
 func (lf *LazyFrame) collectParallelWithOps(operations []LazyOperation) (*DataFrame, error) {
 	// Calculate optimal chunk size based on data size and worker count
-	chunkSize := lf.calculateChunkSize()
+	chunkSize := lf.getChunkSize()
 	totalRows := lf.source.Len()
 
 	// Create independent chunks sequentially to avoid concurrent memory access
@@ -755,6 +756,51 @@ func (lf *LazyFrame) String() string {
 		result += fmt.Sprintf("    %d. %s\n", i+1, op.String())
 	}
 	return result
+}
+
+// getParallelThreshold returns the parallel threshold based on configuration
+func (lf *LazyFrame) getParallelThreshold() int {
+	// Check operation-specific configuration first
+	if lf.source.operationConfig != nil {
+		// If parallel is forced, use threshold of 1
+		if lf.source.operationConfig.ForceParallel {
+			return 1
+		}
+		// If parallel is disabled, use very high threshold
+		if lf.source.operationConfig.DisableParallel {
+			return int(^uint(0) >> 1) // Max int value
+		}
+	}
+
+	// Fall back to global configuration
+	globalConfig := config.GetGlobalConfig()
+	return globalConfig.ParallelThreshold
+}
+
+// shouldUseParallelExecution determines if parallel execution should be used
+func (lf *LazyFrame) shouldUseParallelExecution(threshold int) bool {
+	if lf.pool == nil {
+		return false
+	}
+
+	return lf.source.Len() >= threshold
+}
+
+// getChunkSize returns the chunk size based on configuration
+func (lf *LazyFrame) getChunkSize() int {
+	// Check operation-specific configuration first
+	if lf.source.operationConfig != nil && lf.source.operationConfig.CustomChunkSize > 0 {
+		return lf.source.operationConfig.CustomChunkSize
+	}
+
+	// Fall back to global configuration
+	globalConfig := config.GetGlobalConfig()
+	if globalConfig.ChunkSize > 0 {
+		return globalConfig.ChunkSize
+	}
+
+	// Auto-calculate chunk size
+	return lf.calculateChunkSize()
 }
 
 // Join adds a join operation to the lazy frame
@@ -864,7 +910,7 @@ func (lf *LazyFrame) safeCollectParallelWithOps(operations []LazyOperation) (*Da
 	defer pool.Close()
 
 	// Calculate optimal chunk size based on data size and worker count
-	chunkSize := lf.calculateChunkSize()
+	chunkSize := lf.getChunkSize()
 	totalRows := lf.source.Len()
 
 	// Create safe chunks with independent memory
