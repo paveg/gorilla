@@ -438,6 +438,13 @@ func minInt(a, b int) int {
 	return b
 }
 
+func minDuration(a, b time.Duration) time.Duration {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 // maxInt is already defined in memory_safe.go
 
 // Internal types
@@ -465,47 +472,57 @@ type advancedWorker struct {
 func (w *advancedWorker) run() {
 	defer w.pool.wg.Done()
 
+	idleBackoff := time.Millisecond
+	const (
+		maxBackoff        = 10 * time.Millisecond
+		backoffMultiplier = 2
+	)
+
 	for {
-		select {
-		case <-w.ctx.Done():
-			return
-		default:
-			// Try to get work in priority order:
-			// 1. Local queue (highest priority)
-			// 2. Global queue
-			// 3. Steal from other workers
-			var workItem *workItem
+		// Try to get work in priority order:
+		// 1. Local queue (highest priority)
+		// 2. Global queue with timeout
+		// 3. Steal from other workers
+		var workItem *workItem
 
-			// Try local queue first if work stealing is enabled
-			if w.pool.workStealingEnabled && w.stealingQueue != nil {
-				workItem = w.stealingQueue.popLocal()
-			}
+		// Try local queue first if work stealing is enabled
+		if w.pool.workStealingEnabled && w.stealingQueue != nil {
+			workItem = w.stealingQueue.popLocal()
+		}
 
-			// If no local work, try global queue
-			if workItem == nil {
-				select {
-				case item, ok := <-w.pool.workQueue:
-					if !ok {
-						return
-					}
-					workItem = &item
-				default:
-					// No work in global queue
+		// If no local work, try global queue with blocking receive and timeout
+		if workItem == nil {
+			select {
+			case <-w.ctx.Done():
+				return
+			case item, ok := <-w.pool.workQueue:
+				if !ok {
+					return
+				}
+				workItem = &item
+				// Reset backoff since we found work
+				idleBackoff = time.Millisecond
+			case <-time.After(idleBackoff):
+				// Timeout occurred, try work stealing
+				if w.pool.workStealingEnabled {
+					workItem = w.stealWork()
+				}
+
+				// If still no work, increase backoff (exponential backoff)
+				if workItem == nil {
+					idleBackoff = minDuration(idleBackoff*backoffMultiplier, maxBackoff)
+				} else {
+					// Reset backoff since we found work
+					idleBackoff = time.Millisecond
 				}
 			}
+		}
 
-			// If still no work, try stealing from other workers
-			if workItem == nil && w.pool.workStealingEnabled {
-				workItem = w.stealWork()
-			}
-
-			// Process work if we found any
-			if workItem != nil {
-				w.processWork(*workItem)
-			} else {
-				// Small sleep to avoid busy waiting
-				time.Sleep(time.Millisecond)
-			}
+		// Process work if we found any
+		if workItem != nil {
+			w.processWork(*workItem)
+			// Reset backoff since we processed work
+			idleBackoff = time.Millisecond
 		}
 	}
 }
