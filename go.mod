@@ -4,11 +4,11 @@ go 1.24.4
 
 require (
 	github.com/apache/arrow-go/v18 v18.3.1
+	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/stretchr/testify v1.10.0
 )
 
 require (
-	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/google/flatbuffers v25.2.10+incompatible // indirect

@@ -4,6 +4,7 @@ package dataframe
 import (
 	"cmp"
 	"fmt"
+	"math"
 	"runtime"
 	"sort"
 	"strings"
@@ -1758,4 +1759,647 @@ func (df *DataFrame) SafeCollectParallel() (*DataFrame, error) {
 func (df *DataFrame) SafeCollectParallelWithMonitoring() (*DataFrame, error) {
 	// Use the existing lazy frame collection but with safe infrastructure and monitoring
 	return df.Lazy().SafeCollectParallelWithMonitoring()
+}
+
+// Advanced Analytics Functions
+
+// Correlation calculates the Pearson correlation coefficient between two numeric columns
+func (df *DataFrame) Correlation(col1, col2 string) (float64, error) {
+	// Validate columns exist
+	series1, exists1 := df.Column(col1)
+	if !exists1 {
+		return 0, fmt.Errorf("column %s not found", col1)
+	}
+
+	series2, exists2 := df.Column(col2)
+	if !exists2 {
+		return 0, fmt.Errorf("column %s not found", col2)
+	}
+
+	// Extract numeric values
+	values1, err := df.extractNumericValues(series1)
+	if err != nil {
+		return 0, fmt.Errorf("column %s is not numeric: %w", col1, err)
+	}
+
+	values2, err := df.extractNumericValues(series2)
+	if err != nil {
+		return 0, fmt.Errorf("column %s is not numeric: %w", col2, err)
+	}
+
+	if len(values1) != len(values2) {
+		return 0, fmt.Errorf("columns have different lengths: %d vs %d", len(values1), len(values2))
+	}
+
+	if len(values1) == 0 {
+		return 0, fmt.Errorf("no data to calculate correlation")
+	}
+
+	// Calculate correlation coefficient
+	return df.calculateCorrelation(values1, values2), nil
+}
+
+// extractNumericValues extracts numeric values from a series
+func (df *DataFrame) extractNumericValues(s ISeries) ([]float64, error) {
+	arr := s.Array()
+	if arr == nil {
+		return nil, fmt.Errorf("series has no data")
+	}
+	defer arr.Release()
+
+	switch typedArr := arr.(type) {
+	case *array.Float64:
+		return df.extractFloat64Values(typedArr), nil
+	case *array.Float32:
+		return df.extractFloat32Values(typedArr), nil
+	case *array.Int64:
+		return df.extractInt64Values(typedArr), nil
+	case *array.Int32:
+		return df.extractInt32Values(typedArr), nil
+	case *array.Int16:
+		return df.extractInt16Values(typedArr), nil
+	case *array.Int8:
+		return df.extractInt8Values(typedArr), nil
+	case *array.Uint64:
+		return df.extractUint64Values(typedArr), nil
+	case *array.Uint32:
+		return df.extractUint32Values(typedArr), nil
+	case *array.Uint16:
+		return df.extractUint16Values(typedArr), nil
+	case *array.Uint8:
+		return df.extractUint8Values(typedArr), nil
+	default:
+		return nil, fmt.Errorf("unsupported data type for correlation: %T", arr)
+	}
+}
+
+// Helper functions for extractNumericValues
+func (df *DataFrame) extractFloat64Values(arr *array.Float64) []float64 {
+	var values []float64
+	for i := 0; i < arr.Len(); i++ {
+		if !arr.IsNull(i) {
+			values = append(values, arr.Value(i))
+		}
+	}
+	return values
+}
+
+func (df *DataFrame) extractFloat32Values(arr *array.Float32) []float64 {
+	var values []float64
+	for i := 0; i < arr.Len(); i++ {
+		if !arr.IsNull(i) {
+			values = append(values, float64(arr.Value(i)))
+		}
+	}
+	return values
+}
+
+func (df *DataFrame) extractInt64Values(arr *array.Int64) []float64 {
+	var values []float64
+	for i := 0; i < arr.Len(); i++ {
+		if !arr.IsNull(i) {
+			values = append(values, float64(arr.Value(i)))
+		}
+	}
+	return values
+}
+
+func (df *DataFrame) extractInt32Values(arr *array.Int32) []float64 {
+	var values []float64
+	for i := 0; i < arr.Len(); i++ {
+		if !arr.IsNull(i) {
+			values = append(values, float64(arr.Value(i)))
+		}
+	}
+	return values
+}
+
+func (df *DataFrame) extractInt16Values(arr *array.Int16) []float64 {
+	var values []float64
+	for i := 0; i < arr.Len(); i++ {
+		if !arr.IsNull(i) {
+			values = append(values, float64(arr.Value(i)))
+		}
+	}
+	return values
+}
+
+func (df *DataFrame) extractInt8Values(arr *array.Int8) []float64 {
+	var values []float64
+	for i := 0; i < arr.Len(); i++ {
+		if !arr.IsNull(i) {
+			values = append(values, float64(arr.Value(i)))
+		}
+	}
+	return values
+}
+
+func (df *DataFrame) extractUint64Values(arr *array.Uint64) []float64 {
+	var values []float64
+	for i := 0; i < arr.Len(); i++ {
+		if !arr.IsNull(i) {
+			values = append(values, float64(arr.Value(i)))
+		}
+	}
+	return values
+}
+
+func (df *DataFrame) extractUint32Values(arr *array.Uint32) []float64 {
+	var values []float64
+	for i := 0; i < arr.Len(); i++ {
+		if !arr.IsNull(i) {
+			values = append(values, float64(arr.Value(i)))
+		}
+	}
+	return values
+}
+
+func (df *DataFrame) extractUint16Values(arr *array.Uint16) []float64 {
+	var values []float64
+	for i := 0; i < arr.Len(); i++ {
+		if !arr.IsNull(i) {
+			values = append(values, float64(arr.Value(i)))
+		}
+	}
+	return values
+}
+
+func (df *DataFrame) extractUint8Values(arr *array.Uint8) []float64 {
+	var values []float64
+	for i := 0; i < arr.Len(); i++ {
+		if !arr.IsNull(i) {
+			values = append(values, float64(arr.Value(i)))
+		}
+	}
+	return values
+}
+
+// calculateCorrelation computes the Pearson correlation coefficient
+func (df *DataFrame) calculateCorrelation(x, y []float64) float64 {
+	if len(x) != len(y) || len(x) == 0 {
+		return 0.0
+	}
+
+	n := float64(len(x))
+
+	// Calculate means
+	var sumX, sumY float64
+	for i := 0; i < len(x); i++ {
+		sumX += x[i]
+		sumY += y[i]
+	}
+	meanX := sumX / n
+	meanY := sumY / n
+
+	// Calculate correlation coefficient
+	var numerator, denomX, denomY float64
+	for i := 0; i < len(x); i++ {
+		dx := x[i] - meanX
+		dy := y[i] - meanY
+		numerator += dx * dy
+		denomX += dx * dx
+		denomY += dy * dy
+	}
+
+	if denomX == 0 || denomY == 0 {
+		return 0.0
+	}
+
+	return numerator / math.Sqrt(denomX*denomY)
+}
+
+// RollingWindow applies a rolling window operation to a column
+func (df *DataFrame) RollingWindow(column string, windowSize int, operation string) (*DataFrame, error) {
+	// Validate column exists
+	columnSeries, exists := df.Column(column)
+	if !exists {
+		return nil, fmt.Errorf("column %s not found", column)
+	}
+
+	if windowSize <= 0 {
+		return nil, fmt.Errorf("window size must be positive, got %d", windowSize)
+	}
+
+	// Extract numeric values
+	values, err := df.extractNumericValues(columnSeries)
+	if err != nil {
+		return nil, fmt.Errorf("column %s is not numeric: %w", column, err)
+	}
+
+	// Apply rolling window operation
+	results, err := df.applyRollingWindow(values, windowSize, operation)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create result DataFrame
+	mem := memory.NewGoAllocator()
+	var resultSeries []ISeries
+
+	// Add original columns
+	for _, colName := range df.order {
+		if originalSeries, exists := df.columns[colName]; exists {
+			resultSeries = append(resultSeries, df.copySeries(originalSeries))
+		}
+	}
+
+	// Add rolling window result column
+	resultColumnName := fmt.Sprintf("%s_%s", column, operation)
+	resultSeries = append(resultSeries, series.New(resultColumnName, results, mem))
+
+	return New(resultSeries...), nil
+}
+
+// applyRollingWindow applies a rolling window operation to values
+func (df *DataFrame) applyRollingWindow(values []float64, windowSize int, operation string) ([]float64, error) {
+	results := make([]float64, len(values))
+
+	for i := 0; i < len(values); i++ {
+		if i < windowSize-1 {
+			// Not enough data for window, set to NaN
+			results[i] = math.NaN()
+			continue
+		}
+
+		// Extract window values
+		window := values[i-windowSize+1 : i+1]
+
+		// Apply operation
+		switch operation {
+		case "mean":
+			results[i] = df.calculateMean(window)
+		case "sum":
+			results[i] = df.calculateSum(window)
+		case "min":
+			results[i] = df.calculateMin(window)
+		case "max":
+			results[i] = df.calculateMax(window)
+		case "std":
+			results[i] = df.calculateStd(window)
+		default:
+			return nil, fmt.Errorf("unsupported rolling window operation: %s", operation)
+		}
+	}
+
+	return results, nil
+}
+
+// calculateMean calculates the mean of a slice of values
+func (df *DataFrame) calculateMean(values []float64) float64 {
+	if len(values) == 0 {
+		return math.NaN()
+	}
+
+	sum := 0.0
+	for _, v := range values {
+		sum += v
+	}
+	return sum / float64(len(values))
+}
+
+// calculateSum calculates the sum of a slice of values
+func (df *DataFrame) calculateSum(values []float64) float64 {
+	sum := 0.0
+	for _, v := range values {
+		sum += v
+	}
+	return sum
+}
+
+// calculateMin calculates the minimum of a slice of values
+func (df *DataFrame) calculateMin(values []float64) float64 {
+	if len(values) == 0 {
+		return math.NaN()
+	}
+
+	minimum := values[0]
+	for _, v := range values[1:] {
+		if v < minimum {
+			minimum = v
+		}
+	}
+	return minimum
+}
+
+// calculateMax calculates the maximum of a slice of values
+func (df *DataFrame) calculateMax(values []float64) float64 {
+	if len(values) == 0 {
+		return math.NaN()
+	}
+
+	maximum := values[0]
+	for _, v := range values[1:] {
+		if v > maximum {
+			maximum = v
+		}
+	}
+	return maximum
+}
+
+// calculateStd calculates the standard deviation of a slice of values
+func (df *DataFrame) calculateStd(values []float64) float64 {
+	if len(values) == 0 {
+		return math.NaN()
+	}
+
+	mean := df.calculateMean(values)
+	variance := 0.0
+	for _, v := range values {
+		variance += (v - mean) * (v - mean)
+	}
+	variance /= float64(len(values))
+	return math.Sqrt(variance)
+}
+
+// WindowFunction applies a window function to the DataFrame
+func (df *DataFrame) WindowFunction(function string, columns ...string) (*DataFrame, error) {
+	return df.WindowFunctionWithPartition(function, strings.Join(columns, ","), "")
+}
+
+// WindowFunctionWithPartition applies a window function with optional partitioning
+func (df *DataFrame) WindowFunctionWithPartition(function, orderBy, partitionBy string) (*DataFrame, error) {
+	mem := memory.NewGoAllocator()
+	var resultSeries []ISeries
+
+	// Add original columns
+	for _, colName := range df.order {
+		if originalSeries, exists := df.columns[colName]; exists {
+			resultSeries = append(resultSeries, df.copySeries(originalSeries))
+		}
+	}
+
+	// Apply window function
+	var functionResult ISeries
+	var err error
+
+	switch function {
+	case "row_number":
+		functionResult = df.applyRowNumber(partitionBy, mem)
+	case "rank":
+		if orderBy == "" {
+			return nil, fmt.Errorf("rank function requires order by column")
+		}
+		functionResult, err = df.applyRank(orderBy, partitionBy, mem)
+	case "lag":
+		if orderBy == "" {
+			return nil, fmt.Errorf("lag function requires order by column")
+		}
+		functionResult, err = df.applyLag(orderBy, 1, mem)
+	case "lead":
+		if orderBy == "" {
+			return nil, fmt.Errorf("lead function requires order by column")
+		}
+		functionResult, err = df.applyLead(orderBy, 1, mem)
+	default:
+		return nil, fmt.Errorf("unsupported window function: %s", function)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	resultSeries = append(resultSeries, functionResult)
+
+	return New(resultSeries...), nil
+}
+
+// applyRowNumber applies row_number window function
+func (df *DataFrame) applyRowNumber(partitionBy string, mem memory.Allocator) ISeries {
+	rowCount := df.Len()
+	results := make([]int64, rowCount)
+
+	if partitionBy == "" {
+		// Simple row numbering
+		for i := 0; i < rowCount; i++ {
+			results[i] = int64(i + 1)
+		}
+	} else {
+		// Partitioned row numbering
+		partitionGroups := df.buildPartitionGroups(partitionBy)
+		for _, indices := range partitionGroups {
+			for i, idx := range indices {
+				results[idx] = int64(i + 1)
+			}
+		}
+	}
+
+	return series.New("row_number", results, mem)
+}
+
+// applyRank applies rank window function
+func (df *DataFrame) applyRank(orderBy, partitionBy string, mem memory.Allocator) (ISeries, error) {
+	orderSeries, exists := df.Column(orderBy)
+	if !exists {
+		return nil, fmt.Errorf("order by column %s not found", orderBy)
+	}
+
+	orderValues, err := df.extractNumericValues(orderSeries)
+	if err != nil {
+		return nil, fmt.Errorf("order by column %s is not numeric: %w", orderBy, err)
+	}
+
+	rowCount := df.Len()
+	results := make([]int64, rowCount)
+
+	if partitionBy == "" {
+		// Simple ranking
+		ranks := df.calculateRanks(orderValues)
+		for i, rank := range ranks {
+			results[i] = int64(rank)
+		}
+	} else {
+		// Partitioned ranking
+		partitionGroups := df.buildPartitionGroups(partitionBy)
+		for _, indices := range partitionGroups {
+			partitionValues := make([]float64, len(indices))
+			for i, idx := range indices {
+				partitionValues[i] = orderValues[idx]
+			}
+			ranks := df.calculateRanks(partitionValues)
+			for i, idx := range indices {
+				results[idx] = int64(ranks[i])
+			}
+		}
+	}
+
+	return series.New("rank", results, mem), nil
+}
+
+// applyLag applies lag window function
+func (df *DataFrame) applyLag(column string, offset int, mem memory.Allocator) (ISeries, error) {
+	columnSeries, exists := df.Column(column)
+	if !exists {
+		return nil, fmt.Errorf("column %s not found", column)
+	}
+
+	values, err := df.extractNumericValues(columnSeries)
+	if err != nil {
+		return nil, fmt.Errorf("column %s is not numeric: %w", column, err)
+	}
+
+	return df.createLagLeadSeries("lag", values, offset, true, mem)
+}
+
+// applyLead applies lead window function
+func (df *DataFrame) applyLead(column string, offset int, mem memory.Allocator) (ISeries, error) {
+	columnSeries, exists := df.Column(column)
+	if !exists {
+		return nil, fmt.Errorf("column %s not found", column)
+	}
+
+	values, err := df.extractNumericValues(columnSeries)
+	if err != nil {
+		return nil, fmt.Errorf("column %s is not numeric: %w", column, err)
+	}
+
+	return df.createLagLeadSeries("lead", values, offset, false, mem)
+}
+
+// createLagLeadSeries creates a series with proper null handling for lag/lead functions
+func (df *DataFrame) createLagLeadSeries(
+	name string, values []float64, offset int, isLag bool, mem memory.Allocator,
+) (ISeries, error) {
+	// Create Arrow array builder with proper null handling
+	builder := array.NewFloat64Builder(mem)
+	defer builder.Release()
+
+	for i := 0; i < len(values); i++ {
+		if (isLag && i < offset) || (!isLag && i+offset >= len(values)) {
+			builder.AppendNull()
+		} else {
+			if isLag {
+				builder.Append(values[i-offset])
+			} else {
+				builder.Append(values[i+offset])
+			}
+		}
+	}
+
+	arr := builder.NewArray()
+
+	// Create a series wrapper that properly manages the Arrow array
+	return &lagLeadSeries{
+		name:  name,
+		array: arr,
+	}, nil
+}
+
+// lagLeadSeries is a simple wrapper for lag/lead series that implements ISeries
+type lagLeadSeries struct {
+	name  string
+	array arrow.Array
+}
+
+func (s *lagLeadSeries) Name() string {
+	return s.name
+}
+
+func (s *lagLeadSeries) Len() int {
+	return s.array.Len()
+}
+
+func (s *lagLeadSeries) DataType() arrow.DataType {
+	return s.array.DataType()
+}
+
+func (s *lagLeadSeries) Array() arrow.Array {
+	s.array.Retain()
+	return s.array
+}
+
+func (s *lagLeadSeries) IsNull(index int) bool {
+	return s.array.IsNull(index)
+}
+
+func (s *lagLeadSeries) String() string {
+	return fmt.Sprintf("lagLeadSeries[%s]", s.name)
+}
+
+func (s *lagLeadSeries) Release() {
+	s.array.Release()
+}
+
+// buildPartitionGroups builds groups for partitioned window functions
+func (df *DataFrame) buildPartitionGroups(partitionBy string) map[string][]int {
+	if partitionBy == "" {
+		return map[string][]int{}
+	}
+
+	groups := make(map[string][]int)
+	rowCount := df.Len()
+
+	partitionSeries, exists := df.Column(partitionBy)
+	if !exists {
+		return groups
+	}
+
+	arr := partitionSeries.Array()
+	defer arr.Release()
+
+	for i := 0; i < rowCount; i++ {
+		key := df.getPartitionKey(arr, i)
+		groups[key] = append(groups[key], i)
+	}
+
+	return groups
+}
+
+// getPartitionKey gets the partition key for a row
+func (df *DataFrame) getPartitionKey(arr arrow.Array, rowIdx int) string {
+	if arr.IsNull(rowIdx) {
+		return "null"
+	}
+
+	switch typedArr := arr.(type) {
+	case *array.String:
+		return typedArr.Value(rowIdx)
+	case *array.Int64:
+		return fmt.Sprintf("%d", typedArr.Value(rowIdx))
+	case *array.Float64:
+		return fmt.Sprintf("%f", typedArr.Value(rowIdx))
+	case *array.Boolean:
+		return fmt.Sprintf("%t", typedArr.Value(rowIdx))
+	default:
+		return "unknown"
+	}
+}
+
+// calculateRanks calculates ranks for a slice of values
+func (df *DataFrame) calculateRanks(values []float64) []int {
+	n := len(values)
+	if n == 0 {
+		return []int{}
+	}
+
+	// Create index-value pairs
+	type indexValue struct {
+		index int
+		value float64
+	}
+
+	pairs := make([]indexValue, n)
+	for i, v := range values {
+		pairs[i] = indexValue{index: i, value: v}
+	}
+
+	// Sort by value
+	sort.Slice(pairs, func(i, j int) bool {
+		return pairs[i].value < pairs[j].value
+	})
+
+	// Assign ranks with ties handled correctly
+	ranks := make([]int, n)
+	currentRank := 1
+	for i, pair := range pairs {
+		if i > 0 && pairs[i-1].value == pair.value {
+			// Same value as previous, use same rank
+			ranks[pair.index] = ranks[pairs[i-1].index]
+		} else {
+			// New value, use current rank
+			ranks[pair.index] = currentRank
+		}
+		currentRank++
+	}
+
+	return ranks
 }
