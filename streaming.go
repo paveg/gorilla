@@ -296,7 +296,7 @@ func (sb *SpillableBatch) loadFromSpill() (*DataFrame, error) {
 	if sb.spillRef == nil {
 		return nil, errors.New("spill reference is nil, cannot load data")
 	}
-	
+
 	// This is a placeholder implementation that always fails with a clear error message
 	// In a real implementation, we would:
 	// 1. Validate the spill reference
