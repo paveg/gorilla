@@ -181,8 +181,8 @@ func TestAdvancedWorkerPool(t *testing.T) {
 func TestWorkerPoolPriorityQueue(t *testing.T) {
 	// Test constants
 	const (
-		taskDelay = 5 * time.Millisecond // Small delay to observe priority effects
-		highPriorityTaskThreshold = 1.0 / 3.0 // At least 1/3 of high priority tasks should complete early
+		taskDelay                 = 5 * time.Millisecond // Small delay to observe priority effects
+		highPriorityTaskThreshold = 1.0 / 3.0            // At least 1/3 of high priority tasks should complete early
 	)
 
 	t.Run("priority task scheduling", func(t *testing.T) {
