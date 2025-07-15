@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -302,9 +303,13 @@ type Bottleneck struct {
 	Reason    string        `json:"reason"`
 }
 
+var traceCounter int64
+
 // generateTraceID generates a unique trace ID
 func generateTraceID() string {
-	return fmt.Sprintf("trace_%d", time.Now().UnixNano())
+	// Use atomic counter to ensure uniqueness even when called rapidly
+	counter := atomic.AddInt64(&traceCounter, 1)
+	return fmt.Sprintf("trace_%d_%d", time.Now().UnixNano(), counter)
 }
 
 // convertMemoryStats safely converts uint64 to int64 for memory statistics
