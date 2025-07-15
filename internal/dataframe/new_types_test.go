@@ -134,4 +134,50 @@ func TestDataFrameWithNewIntegerTypes(t *testing.T) {
 		expectedTail := []uint8{8, 9, 10}
 		assert.Equal(t, expectedTail, tailValues)
 	})
+
+	t.Run("DataFrame slicing with int32 series", func(t *testing.T) {
+		int32Values := []int32{100, 200, 300, 400, 500}
+		int32Series, err := series.NewSafe("values", int32Values, mem)
+		require.NoError(t, err)
+		defer int32Series.Release()
+
+		df := New(int32Series)
+		defer df.Release()
+
+		// Test slicing
+		sliced := df.Slice(1, 4)
+		defer sliced.Release()
+
+		assert.Equal(t, 3, sliced.Len())
+
+		// Verify sliced values
+		valuesSeries, exists := sliced.Column("values")
+		require.True(t, exists)
+		values := valuesSeries.(*series.Series[int32]).Values()
+		expected := []int32{200, 300, 400}
+		assert.Equal(t, expected, values)
+	})
+
+	t.Run("DataFrame slicing with float32 series", func(t *testing.T) {
+		float32Values := []float32{1.1, 2.2, 3.3, 4.4, 5.5}
+		float32Series, err := series.NewSafe("values", float32Values, mem)
+		require.NoError(t, err)
+		defer float32Series.Release()
+
+		df := New(float32Series)
+		defer df.Release()
+
+		// Test slicing
+		sliced := df.Slice(1, 4)
+		defer sliced.Release()
+
+		assert.Equal(t, 3, sliced.Len())
+
+		// Verify sliced values
+		valuesSeries, exists := sliced.Column("values")
+		require.True(t, exists)
+		values := valuesSeries.(*series.Series[float32]).Values()
+		expected := []float32{2.2, 3.3, 4.4}
+		assert.Equal(t, expected, values)
+	})
 }

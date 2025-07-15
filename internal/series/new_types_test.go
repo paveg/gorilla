@@ -121,4 +121,52 @@ func TestNewIntegerTypes(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, values, retrievedValues)
 	})
+
+	t.Run("int32 series creation and operations", func(t *testing.T) {
+		values := []int32{100, -200, 300, -400, 500}
+		series, err := NewSafe("test_int32", values, mem)
+		require.NoError(t, err)
+		defer series.Release()
+
+		// Test basic properties
+		assert.Equal(t, "test_int32", series.Name())
+		assert.Equal(t, 5, series.Len())
+		assert.Equal(t, arrow.PrimitiveTypes.Int32, series.DataType())
+
+		// Test value retrieval
+		retrievedValues, err := series.ValuesSafe()
+		require.NoError(t, err)
+		assert.Equal(t, values, retrievedValues)
+
+		// Test individual value access
+		val := series.Value(0)
+		assert.Equal(t, int32(100), val)
+
+		val = series.Value(1)
+		assert.Equal(t, int32(-200), val)
+	})
+
+	t.Run("float32 series creation and operations", func(t *testing.T) {
+		values := []float32{1.1, -2.2, 3.3, -4.4, 5.5}
+		series, err := NewSafe("test_float32", values, mem)
+		require.NoError(t, err)
+		defer series.Release()
+
+		// Test basic properties
+		assert.Equal(t, "test_float32", series.Name())
+		assert.Equal(t, 5, series.Len())
+		assert.Equal(t, arrow.PrimitiveTypes.Float32, series.DataType())
+
+		// Test value retrieval
+		retrievedValues, err := series.ValuesSafe()
+		require.NoError(t, err)
+		assert.Equal(t, values, retrievedValues)
+
+		// Test individual value access
+		val := series.Value(0)
+		assert.Equal(t, float32(1.1), val)
+
+		val = series.Value(1)
+		assert.Equal(t, float32(-2.2), val)
+	})
 }
