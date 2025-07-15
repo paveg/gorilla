@@ -21,8 +21,9 @@ import (
 )
 
 const (
-	nanosPerSecond      = 1e9
-	minChunkSizeForJoin = 100 // Minimum chunk size to avoid excessive overhead in parallel joins
+	nanosPerSecond            = 1e9
+	minChunkSizeForJoin       = 100 // Minimum chunk size to avoid excessive overhead in parallel joins
+	groupParallelThresholdDiv = 10  // Divisor for calculating group parallel threshold from row threshold
 )
 
 // DataFrame represents a table of data with typed columns
@@ -733,7 +734,7 @@ func (gb *GroupBy) Agg(aggregations ...*expr.AggregationExpr) *DataFrame {
 
 	// Use parallel processing for large number of groups
 	parallelThreshold := config.GetGlobalConfig().ParallelThreshold
-	minGroupsForParallel := parallelThreshold / 10 // Use 1/10 of row threshold for groups
+	minGroupsForParallel := parallelThreshold / groupParallelThresholdDiv // Use 1/10 of row threshold for groups
 	if len(gb.groups) >= minGroupsForParallel {
 		return gb.aggParallel(aggregations...)
 	}

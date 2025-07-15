@@ -128,7 +128,7 @@ func TestConfig_LoadFromFile(t *testing.T) {
 	// Create temporary test file
 	tmpFile, err := os.CreateTemp("", "config_test_*.json")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	jsonData := `{
 		"parallel_threshold": 1500,
@@ -138,7 +138,7 @@ func TestConfig_LoadFromFile(t *testing.T) {
 
 	_, err = tmpFile.WriteString(jsonData)
 	require.NoError(t, err)
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	config, err := LoadFromFile(tmpFile.Name())
 	require.NoError(t, err)
@@ -155,15 +155,15 @@ func TestConfig_LoadFromEnv(t *testing.T) {
 	originalProfiling := os.Getenv("GORILLA_ENABLE_PROFILING")
 
 	// Set test environment variables
-	os.Setenv("GORILLA_PARALLEL_THRESHOLD", "3000")
-	os.Setenv("GORILLA_WORKER_POOL_SIZE", "12")
-	os.Setenv("GORILLA_ENABLE_PROFILING", "true")
+	_ = os.Setenv("GORILLA_PARALLEL_THRESHOLD", "3000")
+	_ = os.Setenv("GORILLA_WORKER_POOL_SIZE", "12")
+	_ = os.Setenv("GORILLA_ENABLE_PROFILING", "true")
 
 	// Restore environment after test
 	defer func() {
-		os.Setenv("GORILLA_PARALLEL_THRESHOLD", originalThreshold)
-		os.Setenv("GORILLA_WORKER_POOL_SIZE", originalWorkerPool)
-		os.Setenv("GORILLA_ENABLE_PROFILING", originalProfiling)
+		_ = os.Setenv("GORILLA_PARALLEL_THRESHOLD", originalThreshold)
+		_ = os.Setenv("GORILLA_WORKER_POOL_SIZE", originalWorkerPool)
+		_ = os.Setenv("GORILLA_ENABLE_PROFILING", originalProfiling)
 	}()
 
 	config := LoadFromEnv()
@@ -270,10 +270,10 @@ func TestConfig_UnsupportedFileFormat(t *testing.T) {
 	// Create temporary file with unsupported extension
 	tmpFile, err := os.CreateTemp("", "config_test_*.xyz")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
-	tmpFile.WriteString("some content")
-	tmpFile.Close()
+	_, _ = tmpFile.WriteString("some content")
+	_ = tmpFile.Close()
 
 	_, err = LoadFromFile(tmpFile.Name())
 	assert.Error(t, err)
@@ -306,14 +306,14 @@ func TestConfig_MemoryCalculations(t *testing.T) {
 
 func TestConfig_EnvironmentVariableParsing(t *testing.T) {
 	// Test invalid environment variable values
-	os.Setenv("GORILLA_PARALLEL_THRESHOLD", "invalid_number")
-	os.Setenv("GORILLA_WORKER_POOL_SIZE", "not_a_number")
-	os.Setenv("GORILLA_ENABLE_PROFILING", "invalid_bool")
+	_ = os.Setenv("GORILLA_PARALLEL_THRESHOLD", "invalid_number")
+	_ = os.Setenv("GORILLA_WORKER_POOL_SIZE", "not_a_number")
+	_ = os.Setenv("GORILLA_ENABLE_PROFILING", "invalid_bool")
 
 	defer func() {
-		os.Unsetenv("GORILLA_PARALLEL_THRESHOLD")
-		os.Unsetenv("GORILLA_WORKER_POOL_SIZE")
-		os.Unsetenv("GORILLA_ENABLE_PROFILING")
+		_ = os.Unsetenv("GORILLA_PARALLEL_THRESHOLD")
+		_ = os.Unsetenv("GORILLA_WORKER_POOL_SIZE")
+		_ = os.Unsetenv("GORILLA_ENABLE_PROFILING")
 	}()
 
 	// Should not panic and should use defaults for invalid values
@@ -355,7 +355,7 @@ func TestConfig_LoadFromYAML(t *testing.T) {
 	// Create temporary YAML file
 	tmpFile, err := os.CreateTemp("", "config_test_*.yaml")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	yamlData := `
 parallel_threshold: 2000
@@ -367,7 +367,7 @@ enable_profiling: false
 
 	_, err = tmpFile.WriteString(yamlData)
 	require.NoError(t, err)
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	config, err := LoadFromFile(tmpFile.Name())
 	require.NoError(t, err)

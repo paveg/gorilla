@@ -11,21 +11,26 @@ import (
 	"strings"
 	"sync"
 
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 // Config represents the global configuration for Gorilla DataFrame operations
 type Config struct {
 	// Parallel Processing Configuration
-	ParallelThreshold int `json:"parallel_threshold" yaml:"parallel_threshold"` // Minimum rows to trigger parallel processing
-	WorkerPoolSize    int `json:"worker_pool_size" yaml:"worker_pool_size"`     // Number of worker goroutines (0 = auto-detect)
-	ChunkSize         int `json:"chunk_size" yaml:"chunk_size"`                 // Size of data chunks for parallel processing (0 = auto-calculate)
-	MaxParallelism    int `json:"max_parallelism" yaml:"max_parallelism"`       // Maximum number of parallel operations
+	// Minimum rows to trigger parallel processing
+	ParallelThreshold int `json:"parallel_threshold" yaml:"parallel_threshold"`
+	// Number of worker goroutines (0 = auto-detect)
+	WorkerPoolSize int `json:"worker_pool_size" yaml:"worker_pool_size"`
+	// Size of data chunks for parallel processing (0 = auto-calculate)
+	ChunkSize      int `json:"chunk_size" yaml:"chunk_size"`
+	MaxParallelism int `json:"max_parallelism" yaml:"max_parallelism"` // Maximum number of parallel operations
 
 	// Memory Management Configuration
-	MemoryThreshold     int64   `json:"memory_threshold" yaml:"memory_threshold"`           // Memory threshold in bytes (0 = unlimited)
-	GCPressureThreshold float64 `json:"gc_pressure_threshold" yaml:"gc_pressure_threshold"` // GC pressure threshold (0.0-1.0)
-	AllocatorPoolSize   int     `json:"allocator_pool_size" yaml:"allocator_pool_size"`     // Size of allocator pool
+	// Memory threshold in bytes (0 = unlimited)
+	MemoryThreshold int64 `json:"memory_threshold" yaml:"memory_threshold"`
+	// GC pressure threshold (0.0-1.0)
+	GCPressureThreshold float64 `json:"gc_pressure_threshold" yaml:"gc_pressure_threshold"`
+	AllocatorPoolSize   int     `json:"allocator_pool_size" yaml:"allocator_pool_size"` // Size of allocator pool
 
 	// Query Optimization Configuration
 	FilterFusion      bool `json:"filter_fusion" yaml:"filter_fusion"`           // Enable filter fusion optimization
@@ -66,24 +71,29 @@ type PerformanceTuner struct {
 	mu               sync.RWMutex
 }
 
-// Global configuration instance
-var (
-	globalConfig Config
-	configMutex  sync.RWMutex
-)
-
 // Default configuration values
 const (
 	DefaultParallelThreshold   = 1000
 	DefaultMaxParallelism      = 16
 	DefaultGCPressureThreshold = 0.8
 	DefaultAllocatorPoolSize   = 10
+
+	// Performance tuning constants
+	SmallDatasetThreshold         = 100
+	LargeDatasetThreshold         = 1000000
+	LargeDatasetParallelThreshold = 500
+	HighColumnCountThreshold      = 50
+	LowColumnCountThreshold       = 5
+	SmallChunkSize                = 100
+	LargeChunkSize                = 2000
+	WorkerPoolReductionFactor     = 2
 )
 
-// Initialize global configuration with defaults
-func init() {
-	globalConfig = NewConfig()
-}
+// Global configuration instance
+var (
+	globalConfig = NewConfig() // Initialize with defaults
+	configMutex  sync.RWMutex
+)
 
 // NewConfig creates a new configuration with default values
 func NewConfig() Config {
@@ -201,8 +211,9 @@ func LoadFromJSON(data []byte) (Config, error) {
 	return config.WithDefaults(), nil
 }
 
-// LoadFromFile loads configuration from a file (supports JSON, YAML, TOML)
+// LoadFromFile loads configuration from a file (supports JSON, YAML)
 func LoadFromFile(filename string) (Config, error) {
+	// #nosec G304 - Configuration file path is expected to be user-provided
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		return Config{}, fmt.Errorf("reading config file %s: %w", filename, err)
@@ -231,6 +242,16 @@ func LoadFromFile(filename string) (Config, error) {
 func LoadFromEnv() Config {
 	config := NewConfig()
 
+	loadParallelProcessingEnv(&config)
+	loadMemoryManagementEnv(&config)
+	loadOptimizationEnv(&config)
+	loadDebuggingEnv(&config)
+
+	return config
+}
+
+// loadParallelProcessingEnv loads parallel processing environment variables
+func loadParallelProcessingEnv(config *Config) {
 	if val := os.Getenv("GORILLA_PARALLEL_THRESHOLD"); val != "" {
 		if parsed, err := strconv.Atoi(val); err == nil {
 			config.ParallelThreshold = parsed
@@ -254,7 +275,10 @@ func LoadFromEnv() Config {
 			config.MaxParallelism = parsed
 		}
 	}
+}
 
+// loadMemoryManagementEnv loads memory management environment variables
+func loadMemoryManagementEnv(config *Config) {
 	if val := os.Getenv("GORILLA_MEMORY_THRESHOLD"); val != "" {
 		if parsed, err := strconv.ParseInt(val, 10, 64); err == nil {
 			config.MemoryThreshold = parsed
@@ -272,7 +296,10 @@ func LoadFromEnv() Config {
 			config.AllocatorPoolSize = parsed
 		}
 	}
+}
 
+// loadOptimizationEnv loads optimization environment variables
+func loadOptimizationEnv(config *Config) {
 	if val := os.Getenv("GORILLA_FILTER_FUSION"); val != "" {
 		if parsed, err := strconv.ParseBool(val); err == nil {
 			config.FilterFusion = parsed
@@ -290,7 +317,10 @@ func LoadFromEnv() Config {
 			config.JoinOptimization = parsed
 		}
 	}
+}
 
+// loadDebuggingEnv loads debugging environment variables
+func loadDebuggingEnv(config *Config) {
 	if val := os.Getenv("GORILLA_ENABLE_PROFILING"); val != "" {
 		if parsed, err := strconv.ParseBool(val); err == nil {
 			config.EnableProfiling = parsed
@@ -308,8 +338,6 @@ func LoadFromEnv() Config {
 			config.MetricsCollection = parsed
 		}
 	}
-
-	return config
 }
 
 // GetSystemInfo returns system information for configuration validation
@@ -351,7 +379,7 @@ func (cv *ConfigValidator) Validate(config Config) (Config, []string, error) {
 	// Validate memory settings
 	if config.MemoryThreshold > cv.systemInfo.MemorySize {
 		return Config{}, warnings, fmt.Errorf(
-			"Memory threshold (%d) exceeds estimated system memory (%d)",
+			"memory threshold (%d) exceeds estimated system memory (%d)",
 			config.MemoryThreshold, cv.systemInfo.MemorySize)
 	}
 
@@ -375,39 +403,39 @@ func NewPerformanceTuner(config *Config) *PerformanceTuner {
 }
 
 // OptimizeForDataset optimizes configuration for a specific dataset
-func (pt *PerformanceTuner) OptimizeForDataset(rowCount int, columnCount int) Config {
+func (pt *PerformanceTuner) OptimizeForDataset(rowCount, columnCount int) Config {
 	pt.mu.Lock()
 	defer pt.mu.Unlock()
 
 	optimized := *pt.config
 
 	// Adjust parallel threshold based on data size
-	if rowCount < 100 {
+	if rowCount < SmallDatasetThreshold {
 		optimized.ParallelThreshold = rowCount + 1 // Disable parallel for very small datasets
-	} else if rowCount >= 1000000 {
-		optimized.ParallelThreshold = 500 // More aggressive parallel for large datasets
+	} else if rowCount >= LargeDatasetThreshold {
+		optimized.ParallelThreshold = LargeDatasetParallelThreshold // More aggressive parallel for large datasets
 	}
 
 	// Adjust chunk size based on data characteristics
-	if columnCount > 50 {
+	if columnCount > HighColumnCountThreshold {
 		// Many columns - use smaller chunks to avoid memory pressure
 		if optimized.ChunkSize == 0 {
-			optimized.ChunkSize = 100
+			optimized.ChunkSize = SmallChunkSize
 		} else {
-			optimized.ChunkSize = minInt(optimized.ChunkSize, 100)
+			optimized.ChunkSize = minInt(optimized.ChunkSize, SmallChunkSize)
 		}
-	} else if columnCount < 5 {
+	} else if columnCount < LowColumnCountThreshold {
 		// Few columns - can use larger chunks
 		if optimized.ChunkSize == 0 {
-			optimized.ChunkSize = 2000
+			optimized.ChunkSize = LargeChunkSize
 		} else {
-			optimized.ChunkSize = maxInt(optimized.ChunkSize, 2000)
+			optimized.ChunkSize = maxInt(optimized.ChunkSize, LargeChunkSize)
 		}
 	}
 
 	// Adjust worker pool size based on system load (simplified)
 	if pt.isSystemLoadHigh() {
-		optimized.WorkerPoolSize = maxInt(1, optimized.WorkerPoolSize/2)
+		optimized.WorkerPoolSize = maxInt(1, optimized.WorkerPoolSize/WorkerPoolReductionFactor)
 	}
 
 	return optimized
