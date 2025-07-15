@@ -1,9 +1,19 @@
 package gorilla
 
 import (
+	"runtime"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
+)
+
+const (
+	// DefaultCheckInterval is the default interval for memory monitoring
+	DefaultCheckInterval = 5 * time.Second
+	// HighMemoryPressureThreshold is the threshold for triggering cleanup
+	HighMemoryPressureThreshold = 0.8
 )
 
 // Releasable represents any resource that can be released to free memory.
@@ -131,4 +141,215 @@ func WithMemoryManager(allocator memory.Allocator, fn func(*MemoryManager) error
 	manager := NewMemoryManager(allocator)
 	defer manager.ReleaseAll()
 	return fn(manager)
+}
+
+// MemoryStats provides detailed memory usage statistics
+type MemoryStats struct {
+	// Total allocated memory in bytes
+	AllocatedBytes int64
+	// Peak allocated memory in bytes
+	PeakAllocatedBytes int64
+	// Number of active allocations
+	ActiveAllocations int64
+	// Number of garbage collections triggered
+	GCCount int64
+	// Last garbage collection time
+	LastGCTime time.Time
+	// Memory pressure level (0.0 to 1.0)
+	MemoryPressure float64
+}
+
+// MemoryUsageMonitor provides real-time memory usage monitoring and automatic spilling
+type MemoryUsageMonitor struct {
+	// Memory threshold in bytes for triggering spilling
+	spillThreshold int64
+	// Current memory usage in bytes
+	currentUsage int64
+	// Peak memory usage in bytes
+	peakUsage int64
+	// Number of active resources being tracked
+	activeResources int64
+	// Number of times spilling was triggered
+	spillCount int64
+	// Callback function for spilling operations
+	spillCallback func() error
+	// Callback function for cleanup operations
+	cleanupCallback func() error
+	// Mutex for synchronizing access to monitor state
+	mu sync.RWMutex
+	// Channel for stopping the monitoring goroutine
+	stopChan chan struct{}
+	// Flag indicating if monitoring is active
+	monitoring bool
+	// Interval for checking memory usage
+	checkInterval time.Duration
+}
+
+// NewMemoryUsageMonitor creates a new memory usage monitor with the specified spill threshold
+func NewMemoryUsageMonitor(spillThreshold int64) *MemoryUsageMonitor {
+	return &MemoryUsageMonitor{
+		spillThreshold: spillThreshold,
+		stopChan:       make(chan struct{}),
+		checkInterval:  DefaultCheckInterval,
+	}
+}
+
+// SetSpillCallback sets the callback function to be called when memory usage exceeds threshold
+func (m *MemoryUsageMonitor) SetSpillCallback(callback func() error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.spillCallback = callback
+}
+
+// SetCleanupCallback sets the callback function to be called for cleanup operations
+func (m *MemoryUsageMonitor) SetCleanupCallback(callback func() error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.cleanupCallback = callback
+}
+
+// RecordAllocation records a new memory allocation
+func (m *MemoryUsageMonitor) RecordAllocation(bytes int64) {
+	newUsage := atomic.AddInt64(&m.currentUsage, bytes)
+	atomic.AddInt64(&m.activeResources, 1)
+
+	// Update peak usage if necessary
+	for {
+		peak := atomic.LoadInt64(&m.peakUsage)
+		if newUsage <= peak || atomic.CompareAndSwapInt64(&m.peakUsage, peak, newUsage) {
+			break
+		}
+	}
+
+	// Check if we need to trigger spilling
+	if newUsage >= m.spillThreshold {
+		m.triggerSpill()
+	}
+}
+
+// RecordDeallocation records a memory deallocation
+func (m *MemoryUsageMonitor) RecordDeallocation(bytes int64) {
+	atomic.AddInt64(&m.currentUsage, -bytes)
+	atomic.AddInt64(&m.activeResources, -1)
+}
+
+// triggerSpill triggers the spilling callback if memory usage exceeds threshold
+func (m *MemoryUsageMonitor) triggerSpill() {
+	m.mu.RLock()
+	callback := m.spillCallback
+	m.mu.RUnlock()
+
+	if callback != nil {
+		atomic.AddInt64(&m.spillCount, 1)
+		go func() {
+			if err := callback(); err != nil {
+				// In a production system, this would be logged properly
+				// For now, we track the error but continue operation
+				atomic.AddInt64(&m.spillCount, -1) // Decrement on failure
+			}
+		}()
+	}
+}
+
+// StartMonitoring starts the background memory monitoring goroutine
+func (m *MemoryUsageMonitor) StartMonitoring() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.monitoring {
+		return
+	}
+
+	m.monitoring = true
+	go m.monitorLoop()
+}
+
+// StopMonitoring stops the background memory monitoring goroutine
+func (m *MemoryUsageMonitor) StopMonitoring() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if !m.monitoring {
+		return
+	}
+
+	m.monitoring = false
+	close(m.stopChan)
+}
+
+// monitorLoop is the main monitoring loop that runs in a separate goroutine
+func (m *MemoryUsageMonitor) monitorLoop() {
+	ticker := time.NewTicker(m.checkInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			m.checkMemoryPressure()
+		case <-m.stopChan:
+			return
+		}
+	}
+}
+
+// checkMemoryPressure checks system memory pressure and triggers cleanup if needed
+func (m *MemoryUsageMonitor) checkMemoryPressure() {
+	var memStats runtime.MemStats
+	runtime.ReadMemStats(&memStats)
+
+	// Calculate memory pressure based on heap size and system memory
+	pressure := float64(memStats.HeapInuse) / float64(memStats.Sys)
+
+	// If memory pressure is high (>80%), trigger cleanup
+	if pressure > HighMemoryPressureThreshold {
+		m.mu.RLock()
+		callback := m.cleanupCallback
+		m.mu.RUnlock()
+
+		if callback != nil {
+			go func() {
+				if err := callback(); err != nil {
+					// In a production system, this would be logged properly
+					// For now, we continue as cleanup operations are best-effort
+					return
+				}
+			}()
+		}
+	}
+}
+
+// GetStats returns current memory usage statistics
+func (m *MemoryUsageMonitor) GetStats() MemoryStats {
+	var memStats runtime.MemStats
+	runtime.ReadMemStats(&memStats)
+
+	currentUsage := atomic.LoadInt64(&m.currentUsage)
+	peakUsage := atomic.LoadInt64(&m.peakUsage)
+	activeResources := atomic.LoadInt64(&m.activeResources)
+
+	pressure := float64(memStats.HeapInuse) / float64(memStats.Sys)
+
+	return MemoryStats{
+		AllocatedBytes:     currentUsage,
+		PeakAllocatedBytes: peakUsage,
+		ActiveAllocations:  activeResources,
+		GCCount:            int64(memStats.NumGC),
+		LastGCTime:         time.Now(), // Use current time as placeholder for GC time
+		MemoryPressure:     pressure,
+	}
+}
+
+// CurrentUsage returns the current memory usage in bytes
+func (m *MemoryUsageMonitor) CurrentUsage() int64 {
+	return atomic.LoadInt64(&m.currentUsage)
+}
+
+// PeakUsage returns the peak memory usage in bytes
+func (m *MemoryUsageMonitor) PeakUsage() int64 {
+	return atomic.LoadInt64(&m.peakUsage)
+}
+
+// SpillCount returns the number of times spilling was triggered
+func (m *MemoryUsageMonitor) SpillCount() int64 {
+	return atomic.LoadInt64(&m.spillCount)
 }

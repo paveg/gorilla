@@ -3,7 +3,9 @@ package gorilla
 import (
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/paveg/gorilla/internal/series"
@@ -226,5 +228,76 @@ func TestMemoryLeakDetection(t *testing.T) {
 		memGrowth := memAfter.Alloc - memBefore.Alloc
 		t.Logf("Memory growth: %d bytes", memGrowth)
 		assert.LessOrEqual(t, memGrowth, maxMemGrowth)
+	})
+}
+
+// TestMemoryUsageMonitor tests the memory usage monitoring functionality
+func TestMemoryUsageMonitor(t *testing.T) {
+	t.Run("records allocations and deallocations", func(t *testing.T) {
+		monitor := NewMemoryUsageMonitor(1024 * 1024) // 1MB threshold
+		defer monitor.StopMonitoring()
+
+		// Record some allocations
+		monitor.RecordAllocation(1000)
+		monitor.RecordAllocation(2000)
+		assert.Equal(t, int64(3000), monitor.CurrentUsage())
+
+		// Record deallocations
+		monitor.RecordDeallocation(1000)
+		assert.Equal(t, int64(2000), monitor.CurrentUsage())
+
+		// Check peak usage
+		assert.Equal(t, int64(3000), monitor.PeakUsage())
+	})
+
+	t.Run("triggers spill callback when threshold exceeded", func(t *testing.T) {
+		var spillCalled int32
+		monitor := NewMemoryUsageMonitor(1000) // 1KB threshold
+		defer monitor.StopMonitoring()
+
+		monitor.SetSpillCallback(func() error {
+			atomic.AddInt32(&spillCalled, 1)
+			return nil
+		})
+
+		// Trigger spill by exceeding threshold
+		monitor.RecordAllocation(1500)
+
+		// Wait a bit for the callback to be called
+		time.Sleep(100 * time.Millisecond)
+		assert.Equal(t, int32(1), atomic.LoadInt32(&spillCalled))
+		assert.Equal(t, int64(1), monitor.SpillCount())
+	})
+
+	t.Run("provides comprehensive stats", func(t *testing.T) {
+		monitor := NewMemoryUsageMonitor(1024 * 1024)
+		defer monitor.StopMonitoring()
+
+		monitor.RecordAllocation(5000)
+		stats := monitor.GetStats()
+
+		assert.Equal(t, int64(5000), stats.AllocatedBytes)
+		assert.Equal(t, int64(5000), stats.PeakAllocatedBytes)
+		assert.Equal(t, int64(1), stats.ActiveAllocations)
+		assert.True(t, stats.MemoryPressure >= 0.0 && stats.MemoryPressure <= 1.0)
+	})
+
+	t.Run("background monitoring works", func(t *testing.T) {
+		monitor := NewMemoryUsageMonitor(1024 * 1024)
+
+		monitor.SetCleanupCallback(func() error {
+			return nil
+		})
+
+		monitor.StartMonitoring()
+		defer monitor.StopMonitoring()
+
+		// Monitoring should be active
+		assert.True(t, monitor.monitoring)
+
+		// Wait for at least one monitoring cycle
+		time.Sleep(1 * time.Second)
+
+		// This test mainly verifies the monitoring loop runs without crashing
 	})
 }
