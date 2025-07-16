@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2025-07-16
+
 ### Added
 - Comprehensive CSV I/O operations with automatic type inference
 - Join operations (Inner, Left, Right, Full Outer) with multi-key support
@@ -32,17 +34,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Type assertion optimization to eliminate double assertions
 - Memory leaks in parallel operations with proper resource cleanup
 - CSV edge cases handling for quotes, escapes, and malformed data
-
-## [0.1.0] - Initial Release
-
-### Added
-- Basic DataFrame and Series data structures
-- Apache Arrow columnar storage backend
-- Lazy evaluation with query plan optimization
-- Basic filtering, selection, and transformation operations
-- Expression system for complex operations
-- Memory allocator integration
-- Initial test suite and benchmarks
 
 ---
 
