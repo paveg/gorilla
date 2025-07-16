@@ -1,3 +1,17 @@
+// Package io provides I/O operations for reading and writing DataFrame data.
+//
+// This package includes readers and writers for various data formats,
+// with automatic type inference and schema handling. The primary
+// implementation is CSV I/O with support for streaming large datasets.
+//
+// Key components:
+//   - DataReader/DataWriter interfaces for pluggable I/O backends
+//   - CSVReader/CSVWriter for CSV file operations
+//   - Type inference for automatic schema detection
+//   - Configurable options for delimiters, headers, and batch sizes
+//
+// Memory management: All I/O operations integrate with Apache Arrow's
+// memory management system and require proper cleanup with defer patterns.
 package io
 
 import (

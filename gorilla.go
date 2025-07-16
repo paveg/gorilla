@@ -67,6 +67,8 @@
 package gorilla
 
 import (
+	"fmt"
+
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/paveg/gorilla/internal/dataframe"
@@ -629,3 +631,94 @@ func Case() *expr.CaseExpr {
 //   - Sum(col) returns *expr.AggregationExpr with methods like As(), etc.
 //
 // All expression types implement the expr.Expr interface for use in DataFrame operations.
+
+// Example demonstrates basic DataFrame creation and operations.
+func Example() {
+	mem := memory.NewGoAllocator()
+
+	// Create Series (columns)
+	names := NewSeries("name", []string{"Alice", "Bob", "Charlie"}, mem)
+	ages := NewSeries("age", []int64{25, 30, 35}, mem)
+	defer names.Release()
+	defer ages.Release()
+
+	// Create DataFrame
+	df := NewDataFrame(names, ages)
+	defer df.Release()
+
+	// Lazy evaluation with method chaining
+	const filterAge = 30
+	result, err := df.Lazy().
+		Filter(Col("age").Gt(Lit(int64(filterAge)))).
+		Select("name").
+		Collect()
+	if err != nil {
+		panic(err)
+	}
+	defer result.Release()
+
+	fmt.Println(result)
+}
+
+// ExampleDataFrameGroupBy demonstrates GroupBy operations with aggregations.
+func ExampleDataFrameGroupBy() {
+	mem := memory.NewGoAllocator()
+
+	// Create test data
+	departments := NewSeries("department", []string{"Engineering", "Sales", "Engineering", "Sales"}, mem)
+	salaries := NewSeries("salary", []int64{100000, 80000, 120000, 85000}, mem)
+	defer departments.Release()
+	defer salaries.Release()
+
+	df := NewDataFrame(departments, salaries)
+	defer df.Release()
+
+	// Group by department and calculate aggregations
+	result, err := df.Lazy().
+		GroupBy("department").
+		Agg(
+			Sum(Col("salary")).As("total_salary"),
+			Count(Col("salary")).As("employee_count"),
+		).
+		Collect()
+	if err != nil {
+		panic(err)
+	}
+	defer result.Release()
+
+	fmt.Println(result)
+}
+
+// ExampleDataFrameJoin demonstrates join operations between DataFrames.
+func ExampleDataFrameJoin() {
+	mem := memory.NewGoAllocator()
+
+	// Create employees DataFrame
+	empIds := NewSeries("id", []int64{1, 2, 3}, mem)
+	empNames := NewSeries("name", []string{"Alice", "Bob", "Charlie"}, mem)
+	defer empIds.Release()
+	defer empNames.Release()
+	employees := NewDataFrame(empIds, empNames)
+	defer employees.Release()
+
+	// Create departments DataFrame
+	deptIds := NewSeries("id", []int64{1, 2, 3}, mem)
+	deptNames := NewSeries("department", []string{"Engineering", "Sales", "Marketing"}, mem)
+	defer deptIds.Release()
+	defer deptNames.Release()
+	departments := NewDataFrame(deptIds, deptNames)
+	defer departments.Release()
+
+	// Perform inner join
+	result, err := employees.Join(departments, &JoinOptions{
+		Type:     InnerJoin,
+		LeftKey:  "id",
+		RightKey: "id",
+	})
+	if err != nil {
+		panic(err)
+	}
+	defer result.Release()
+
+	fmt.Println(result)
+}

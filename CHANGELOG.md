@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Comprehensive package-level documentation for pkg.go.dev discoverability
+- Example functions demonstrating basic usage, GroupBy, and Join operations
+- Enhanced documentation for internal packages (io, parallel)
+
 ## [0.1.0] - 2025-07-16
 
 ### Added

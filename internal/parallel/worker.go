@@ -1,4 +1,19 @@
-// Package parallel provides concurrent processing utilities
+// Package parallel provides parallel processing infrastructure for DataFrame operations.
+//
+// This package implements worker pools and parallel execution strategies for
+// DataFrame operations that exceed the parallelization threshold. It provides
+// both generic parallel processing and specialized order-preserving variants.
+//
+// Key features:
+//   - Adaptive worker pool sizing based on CPU count and data size
+//   - Fan-out/fan-in patterns for parallel execution
+//   - Thread-safe operations with independent data copies
+//   - Memory-efficient chunking for large datasets
+//   - Order-preserving parallel operations when needed
+//
+// The package automatically activates for DataFrames with 1000+ rows and
+// uses runtime.NumCPU() as the default worker count, with dynamic adjustment
+// based on workload characteristics.
 package parallel
 
 import (
