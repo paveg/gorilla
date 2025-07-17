@@ -1179,10 +1179,7 @@ func (e *Evaluator) evaluateRowNumber(window *WindowSpec, columns map[string]arr
 		// Sort partition if ORDER BY is specified
 		sortedIndices := partition
 		if len(window.orderBy) > 0 {
-			sortedIndices, err = e.sortPartition(partition, window.orderBy, columns)
-			if err != nil {
-				return nil, fmt.Errorf("sorting partition: %w", err)
-			}
+			sortedIndices = e.sortPartition(partition, window.orderBy, columns)
 		}
 
 		// Assign row numbers within partition

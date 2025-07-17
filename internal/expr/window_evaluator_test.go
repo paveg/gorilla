@@ -349,8 +349,7 @@ func TestWindowFunction_SortingPerformance(t *testing.T) {
 			partition[i] = i
 		}
 
-		sorted, err := evaluator.sortPartition(partition, orderBy, columns)
-		require.NoError(t, err)
+		sorted := evaluator.sortPartition(partition, orderBy, columns)
 		assert.Equal(t, 1000, len(sorted))
 
 		// Verify first few elements are sorted correctly

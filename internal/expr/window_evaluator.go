@@ -31,10 +31,7 @@ func (e *Evaluator) evaluateRank(
 		// Sort partition if ORDER BY is specified
 		sortedIndices := partition
 		if len(window.orderBy) > 0 {
-			sortedIndices, err = e.sortPartition(partition, window.orderBy, columns)
-			if err != nil {
-				return nil, fmt.Errorf("sorting partition: %w", err)
-			}
+			sortedIndices = e.sortPartition(partition, window.orderBy, columns)
 		}
 
 		// Assign ranks within partition (same values get same rank)
@@ -78,10 +75,7 @@ func (e *Evaluator) evaluateDenseRank(
 	for _, partition := range partitions {
 		sortedIndices := partition
 		if len(window.orderBy) > 0 {
-			sortedIndices, err = e.sortPartition(partition, window.orderBy, columns)
-			if err != nil {
-				return nil, fmt.Errorf("sorting partition: %w", err)
-			}
+			sortedIndices = e.sortPartition(partition, window.orderBy, columns)
 		}
 
 		currentRank := int64(1)
@@ -230,7 +224,7 @@ func (e *Evaluator) evaluateWindowSum(
 		return nil, fmt.Errorf("getting partitions: %w", err)
 	}
 
-	return e.createWindowAggregationResult(columnExpr, partitions, window, columns, AggNameSum)
+	return e.createWindowAggregationResult(columnExpr, partitions, AggNameSum)
 }
 
 // evaluateWindowCount implements COUNT() with OVER clause
@@ -253,7 +247,7 @@ func (e *Evaluator) evaluateWindowCount(
 		return nil, fmt.Errorf("getting partitions: %w", err)
 	}
 
-	return e.createWindowAggregationResult(columnExpr, partitions, window, columns, AggNameCount)
+	return e.createWindowAggregationResult(columnExpr, partitions, AggNameCount)
 }
 
 // evaluateWindowMean implements MEAN() with OVER clause
@@ -276,7 +270,7 @@ func (e *Evaluator) evaluateWindowMean(
 		return nil, fmt.Errorf("getting partitions: %w", err)
 	}
 
-	return e.createWindowAggregationResult(columnExpr, partitions, window, columns, AggNameMean)
+	return e.createWindowAggregationResult(columnExpr, partitions, AggNameMean)
 }
 
 // evaluateWindowMin implements MIN() with OVER clause
@@ -299,7 +293,7 @@ func (e *Evaluator) evaluateWindowMin(
 		return nil, fmt.Errorf("getting partitions: %w", err)
 	}
 
-	return e.createWindowAggregationResult(columnExpr, partitions, window, columns, AggNameMin)
+	return e.createWindowAggregationResult(columnExpr, partitions, AggNameMin)
 }
 
 // evaluateWindowMax implements MAX() with OVER clause
@@ -322,7 +316,7 @@ func (e *Evaluator) evaluateWindowMax(
 		return nil, fmt.Errorf("getting partitions: %w", err)
 	}
 
-	return e.createWindowAggregationResult(columnExpr, partitions, window, columns, AggNameMax)
+	return e.createWindowAggregationResult(columnExpr, partitions, AggNameMax)
 }
 
 // sortPartition sorts a partition based on ORDER BY clause
@@ -330,9 +324,9 @@ func (e *Evaluator) sortPartition(
 	partition []int,
 	orderBy []OrderByExpr,
 	columns map[string]arrow.Array,
-) ([]int, error) {
+) []int {
 	if len(orderBy) == 0 {
-		return partition, nil
+		return partition
 	}
 
 	// Create a copy to avoid modifying the original
@@ -352,7 +346,7 @@ func (e *Evaluator) sortPartition(
 		return !shouldSwap
 	})
 
-	return sortedIndices, nil
+	return sortedIndices
 }
 
 // compareRows compares two rows based on ORDER BY clause
@@ -385,52 +379,79 @@ func (e *Evaluator) compareRows(
 
 // compareValues compares two values in an array
 func (e *Evaluator) compareValues(arr arrow.Array, idx1, idx2 int) (int, error) {
-	if arr.IsNull(idx1) && arr.IsNull(idx2) {
-		return 0, nil
-	}
-	if arr.IsNull(idx1) {
-		return -1, nil
-	}
-	if arr.IsNull(idx2) {
-		return 1, nil
+	// Handle null values first
+	if nullCmp := e.compareNullValues(arr, idx1, idx2); nullCmp != 0 {
+		return nullCmp, nil
 	}
 
+	// Compare non-null values based on type
 	switch a := arr.(type) {
 	case *array.String:
-		v1, v2 := a.Value(idx1), a.Value(idx2)
-		if v1 < v2 {
-			return -1, nil
-		} else if v1 > v2 {
-			return 1, nil
-		}
-		return 0, nil
+		return e.compareStringValues(a.Value(idx1), a.Value(idx2)), nil
 	case *array.Int64:
-		v1, v2 := a.Value(idx1), a.Value(idx2)
-		if v1 < v2 {
-			return -1, nil
-		} else if v1 > v2 {
-			return 1, nil
-		}
-		return 0, nil
+		return e.compareInt64Values(a.Value(idx1), a.Value(idx2)), nil
 	case *array.Float64:
-		v1, v2 := a.Value(idx1), a.Value(idx2)
-		if v1 < v2 {
-			return -1, nil
-		} else if v1 > v2 {
-			return 1, nil
-		}
-		return 0, nil
+		return e.compareFloat64Values(a.Value(idx1), a.Value(idx2)), nil
 	case *array.Boolean:
-		v1, v2 := a.Value(idx1), a.Value(idx2)
-		if !v1 && v2 {
-			return -1, nil
-		} else if v1 && !v2 {
-			return 1, nil
-		}
-		return 0, nil
+		return e.compareBooleanValues(a.Value(idx1), a.Value(idx2)), nil
 	default:
 		return 0, fmt.Errorf("unsupported type for comparison: %T", arr)
 	}
+}
+
+// compareNullValues handles null value comparison logic
+func (e *Evaluator) compareNullValues(arr arrow.Array, idx1, idx2 int) int {
+	isNull1, isNull2 := arr.IsNull(idx1), arr.IsNull(idx2)
+	if isNull1 && isNull2 {
+		return 0 // Both null, equal
+	}
+	if isNull1 {
+		return -1 // Null is less than non-null
+	}
+	if isNull2 {
+		return 1 // Non-null is greater than null
+	}
+	return 0 // Neither is null, continue with type-specific comparison
+}
+
+// compareStringValues compares two string values
+func (e *Evaluator) compareStringValues(v1, v2 string) int {
+	if v1 < v2 {
+		return -1
+	} else if v1 > v2 {
+		return 1
+	}
+	return 0
+}
+
+// compareInt64Values compares two int64 values
+func (e *Evaluator) compareInt64Values(v1, v2 int64) int {
+	if v1 < v2 {
+		return -1
+	} else if v1 > v2 {
+		return 1
+	}
+	return 0
+}
+
+// compareFloat64Values compares two float64 values
+func (e *Evaluator) compareFloat64Values(v1, v2 float64) int {
+	if v1 < v2 {
+		return -1
+	} else if v1 > v2 {
+		return 1
+	}
+	return 0
+}
+
+// compareBooleanValues compares two boolean values
+func (e *Evaluator) compareBooleanValues(v1, v2 bool) int {
+	if !v1 && v2 {
+		return -1 // false < true
+	} else if v1 && !v2 {
+		return 1 // true > false
+	}
+	return 0 // Both same
 }
 
 // rowsEqual checks if two rows have equal values for specified columns
@@ -462,94 +483,31 @@ func (e *Evaluator) createLagResult(
 	offset int64,
 ) (arrow.Array, error) {
 	dataLength := columnExpr.Len()
+	result := make([]interface{}, dataLength)
 
-	// Create result array based on column type
-	switch arr := columnExpr.(type) {
-	case *array.Int64:
-		builder := array.NewInt64Builder(e.mem)
-		defer builder.Release()
+	// Process partitions with LAG/LEAD logic
+	for _, partition := range partitions {
+		sortedIndices := partition
+		if len(window.orderBy) > 0 {
+			sortedIndices = e.sortPartition(partition, window.orderBy, columns)
+		}
 
-		result := make([]interface{}, dataLength)
-
-		for _, partition := range partitions {
-			sortedIndices := partition
-			if len(window.orderBy) > 0 {
-				var err error
-				sortedIndices, err = e.sortPartition(partition, window.orderBy, columns)
-				if err != nil {
-					return nil, fmt.Errorf("sorting partition: %w", err)
-				}
-			}
-
-			for i, idx := range sortedIndices {
-				lagIndex := i + int(offset)
-				if lagIndex >= 0 && lagIndex < len(sortedIndices) {
-					srcIdx := sortedIndices[lagIndex]
-					if arr.IsNull(srcIdx) {
-						result[idx] = nil
-					} else {
-						result[idx] = arr.Value(srcIdx)
-					}
-				} else {
+		for i, idx := range sortedIndices {
+			lagIndex := i + int(offset)
+			if lagIndex >= 0 && lagIndex < len(sortedIndices) {
+				srcIdx := sortedIndices[lagIndex]
+				if columnExpr.IsNull(srcIdx) {
 					result[idx] = nil
-				}
-			}
-		}
-
-		for i := 0; i < dataLength; i++ {
-			if result[i] == nil {
-				builder.AppendNull()
-			} else {
-				builder.Append(result[i].(int64))
-			}
-		}
-
-		return builder.NewArray(), nil
-
-	case *array.String:
-		builder := array.NewStringBuilder(e.mem)
-		defer builder.Release()
-
-		result := make([]interface{}, dataLength)
-
-		for _, partition := range partitions {
-			sortedIndices := partition
-			if len(window.orderBy) > 0 {
-				var err error
-				sortedIndices, err = e.sortPartition(partition, window.orderBy, columns)
-				if err != nil {
-					return nil, fmt.Errorf("sorting partition: %w", err)
-				}
-			}
-
-			for i, idx := range sortedIndices {
-				lagIndex := i + int(offset)
-				if lagIndex >= 0 && lagIndex < len(sortedIndices) {
-					srcIdx := sortedIndices[lagIndex]
-					if arr.IsNull(srcIdx) {
-						result[idx] = nil
-					} else {
-						result[idx] = arr.Value(srcIdx)
-					}
 				} else {
-					result[idx] = nil
+					result[idx] = e.getArrayValue(columnExpr, srcIdx)
 				}
-			}
-		}
-
-		for i := 0; i < dataLength; i++ {
-			if result[i] == nil {
-				builder.AppendNull()
 			} else {
-				builder.Append(result[i].(string))
+				result[idx] = nil
 			}
 		}
-
-		return builder.NewArray(), nil
-
-	default:
-		return nil, fmt.Errorf("unsupported column type for LAG/LEAD: %T", columnExpr)
 	}
+
+	return e.buildTypedArrayResult(result, dataLength, e.getArrayType(columnExpr))
 }
 
 // evaluateWindowValueFunction helper for FIRST_VALUE/LAST_VALUE functions
@@ -590,114 +548,43 @@ func (e *Evaluator) createFirstLastResult(
 	isFirst bool,
 ) (arrow.Array, error) {
 	dataLength := columnExpr.Len()
+	result := make([]interface{}, dataLength)
 
-	// Create result array based on column type
-	switch arr := columnExpr.(type) {
-	case *array.Int64:
-		builder := array.NewInt64Builder(e.mem)
-		defer builder.Release()
-
-		result := make([]interface{}, dataLength)
-
-		for _, partition := range partitions {
-			sortedIndices := partition
-			if len(window.orderBy) > 0 {
-				var err error
-				sortedIndices, err = e.sortPartition(partition, window.orderBy, columns)
-				if err != nil {
-					return nil, fmt.Errorf("sorting partition: %w", err)
-				}
-			}
-
-			// Get first or last value
-			var valueIdx int
-			if isFirst {
-				valueIdx = sortedIndices[0]
-			} else {
-				valueIdx = sortedIndices[len(sortedIndices)-1]
-			}
-
-			var value interface{}
-			if arr.IsNull(valueIdx) {
-				value = nil
-			} else {
-				value = arr.Value(valueIdx)
-			}
-
-			// Set the same value for all rows in partition
-			for _, idx := range partition {
-				result[idx] = value
-			}
+	// Process partitions with FIRST_VALUE/LAST_VALUE logic
+	for _, partition := range partitions {
+		sortedIndices := partition
+		if len(window.orderBy) > 0 {
+			sortedIndices = e.sortPartition(partition, window.orderBy, columns)
 		}
 
-		for i := 0; i < dataLength; i++ {
-			if result[i] == nil {
-				builder.AppendNull()
-			} else {
-				builder.Append(result[i].(int64))
-			}
+		// Get first or last value
+		var valueIdx int
+		if isFirst {
+			valueIdx = sortedIndices[0]
+		} else {
+			valueIdx = sortedIndices[len(sortedIndices)-1]
 		}
 
-		return builder.NewArray(), nil
-
-	case *array.String:
-		builder := array.NewStringBuilder(e.mem)
-		defer builder.Release()
-
-		result := make([]interface{}, dataLength)
-
-		for _, partition := range partitions {
-			sortedIndices := partition
-			if len(window.orderBy) > 0 {
-				var err error
-				sortedIndices, err = e.sortPartition(partition, window.orderBy, columns)
-				if err != nil {
-					return nil, fmt.Errorf("sorting partition: %w", err)
-				}
-			}
-
-			// Get first or last value
-			var valueIdx int
-			if isFirst {
-				valueIdx = sortedIndices[0]
-			} else {
-				valueIdx = sortedIndices[len(sortedIndices)-1]
-			}
-
-			var value interface{}
-			if arr.IsNull(valueIdx) {
-				value = nil
-			} else {
-				value = arr.Value(valueIdx)
-			}
-
-			// Set the same value for all rows in partition
-			for _, idx := range partition {
-				result[idx] = value
-			}
+		var value interface{}
+		if columnExpr.IsNull(valueIdx) {
+			value = nil
+		} else {
+			value = e.getArrayValue(columnExpr, valueIdx)
 		}
 
-		for i := 0; i < dataLength; i++ {
-			if result[i] == nil {
-				builder.AppendNull()
-			} else {
-				builder.Append(result[i].(string))
-			}
+		// Set the same value for all rows in partition
+		for _, idx := range partition {
+			result[idx] = value
 		}
-
-		return builder.NewArray(), nil
-
-	default:
-		return nil, fmt.Errorf("unsupported column type for FIRST_VALUE/LAST_VALUE: %T", columnExpr)
 	}
+
+	return e.buildTypedArrayResult(result, dataLength, e.getArrayType(columnExpr))
 }
 
 // createWindowAggregationResult creates result array for window aggregation functions
 func (e *Evaluator) createWindowAggregationResult(
 	columnExpr arrow.Array,
 	partitions [][]int,
-	window *WindowSpec,
-	columns map[string]arrow.Array,
 	aggType string,
 ) (arrow.Array, error) {
 	dataLength := columnExpr.Len()
@@ -707,116 +594,209 @@ func (e *Evaluator) createWindowAggregationResult(
 
 	switch arr := columnExpr.(type) {
 	case *array.Int64:
-		builder := array.NewInt64Builder(e.mem)
-		defer builder.Release()
-
-		result := make([]int64, dataLength)
-
-		for _, partition := range partitions {
-			// Calculate aggregation for the partition
-			var aggValue int64
-			var count int64
-
-			for _, idx := range partition {
-				if !arr.IsNull(idx) {
-					val := arr.Value(idx)
-					switch aggType {
-					case AggNameSum:
-						aggValue += val
-					case AggNameCount:
-						count++
-					case AggNameMean:
-						aggValue += val
-						count++
-					case AggNameMin:
-						if count == 0 || val < aggValue {
-							aggValue = val
-						}
-						count++
-					case AggNameMax:
-						if count == 0 || val > aggValue {
-							aggValue = val
-						}
-						count++
-					}
-				}
-			}
-
-			if aggType == AggNameMean && count > 0 {
-				aggValue /= count
-			}
-			if aggType == AggNameCount {
-				aggValue = count
-			}
-
-			// Set the same value for all rows in partition
-			for _, idx := range partition {
-				result[idx] = aggValue
-			}
-		}
-
-		for i := 0; i < dataLength; i++ {
-			builder.Append(result[i])
-		}
-
-		return builder.NewArray(), nil
-
+		return e.createInt64AggregationResult(arr, partitions, aggType, dataLength)
 	case *array.Float64:
-		builder := array.NewFloat64Builder(e.mem)
-		defer builder.Release()
-
-		result := make([]float64, dataLength)
-
-		for _, partition := range partitions {
-			// Calculate aggregation for the partition
-			var aggValue float64
-			var count int64
-
-			for _, idx := range partition {
-				if !arr.IsNull(idx) {
-					val := arr.Value(idx)
-					switch aggType {
-					case AggNameSum:
-						aggValue += val
-					case AggNameCount:
-						count++
-					case AggNameMean:
-						aggValue += val
-						count++
-					case AggNameMin:
-						if count == 0 || val < aggValue {
-							aggValue = val
-						}
-						count++
-					case AggNameMax:
-						if count == 0 || val > aggValue {
-							aggValue = val
-						}
-						count++
-					}
-				}
-			}
-
-			if aggType == AggNameMean && count > 0 {
-				aggValue /= float64(count)
-			}
-			if aggType == AggNameCount {
-				aggValue = float64(count)
-			}
-
-			// Set the same value for all rows in partition
-			for _, idx := range partition {
-				result[idx] = aggValue
-			}
-		}
-
-		for i := 0; i < dataLength; i++ {
-			builder.Append(result[i])
-		}
-
-		return builder.NewArray(), nil
-
+		return e.createFloat64AggregationResult(arr, partitions, aggType, dataLength)
 	default:
 		return nil, fmt.Errorf("unsupported column type for window aggregation: %T", columnExpr)
 	}
+}
+
+// getArrayType returns the type string for an Arrow array
+func (e *Evaluator) getArrayType(arr arrow.Array) string {
+	switch arr.(type) {
+	case *array.Int64:
+		return typeInt64
+	case *array.String:
+		return "string"
+	default:
+		return "unknown"
+	}
+}
+
+// getArrayValue returns the value at the given index from an Arrow array
+func (e *Evaluator) getArrayValue(arr arrow.Array, idx int) interface{} {
+	switch a := arr.(type) {
+	case *array.Int64:
+		return a.Value(idx)
+	case *array.String:
+		return a.Value(idx)
+	default:
+		return nil
+	}
+}
+
+// buildTypedArrayResult is a helper function to build typed array results
+func (e *Evaluator) buildTypedArrayResult(
+	result []interface{},
+	dataLength int,
+	arrayType string,
+) (arrow.Array, error) {
+	switch arrayType {
+	case typeInt64:
+		builder := array.NewInt64Builder(e.mem)
+		defer builder.Release()
+		for i := 0; i < dataLength; i++ {
+			if result[i] == nil {
+				builder.AppendNull()
+			} else {
+				builder.Append(result[i].(int64))
+			}
+		}
+		return builder.NewArray(), nil
+	case "string":
+		builder := array.NewStringBuilder(e.mem)
+		defer builder.Release()
+		for i := 0; i < dataLength; i++ {
+			if result[i] == nil {
+				builder.AppendNull()
+			} else {
+				builder.Append(result[i].(string))
+			}
+		}
+		return builder.NewArray(), nil
+	case typeFloat64:
+		builder := array.NewFloat64Builder(e.mem)
+		defer builder.Release()
+		for i := 0; i < dataLength; i++ {
+			if result[i] == nil {
+				builder.AppendNull()
+			} else {
+				builder.Append(result[i].(float64))
+			}
+		}
+		return builder.NewArray(), nil
+	default:
+		return nil, fmt.Errorf("unsupported array type: %s", arrayType)
+	}
+}
+
+// createInt64AggregationResult creates aggregation result for Int64 arrays
+func (e *Evaluator) createInt64AggregationResult(
+	arr *array.Int64,
+	partitions [][]int,
+	aggType string,
+	dataLength int,
+) (arrow.Array, error) {
+	result := make([]interface{}, dataLength)
+
+	for _, partition := range partitions {
+		aggValue := e.calculateInt64Aggregation(arr, partition, aggType)
+
+		// Set the same value for all rows in partition
+		for _, idx := range partition {
+			result[idx] = aggValue
+		}
+	}
+
+	return e.buildTypedArrayResult(result, dataLength, typeInt64)
+}
+
+// createFloat64AggregationResult creates aggregation result for Float64 arrays
+func (e *Evaluator) createFloat64AggregationResult(
+	arr *array.Float64,
+	partitions [][]int,
+	aggType string,
+	dataLength int,
+) (arrow.Array, error) {
+	result := make([]interface{}, dataLength)
+
+	for _, partition := range partitions {
+		aggValue := e.calculateFloat64Aggregation(arr, partition, aggType)
+
+		// Set the same value for all rows in partition
+		for _, idx := range partition {
+			result[idx] = aggValue
+		}
+	}
+
+	return e.buildTypedArrayResult(result, dataLength, typeFloat64)
+}
+
+// calculateInt64Aggregation calculates aggregation for Int64 values
+func (e *Evaluator) calculateInt64Aggregation(
+	arr *array.Int64,
+	partition []int,
+	aggType string,
+) int64 {
+	var aggValue int64
+	var count int64
+
+	for _, idx := range partition {
+		if !arr.IsNull(idx) {
+			val := arr.Value(idx)
+			switch aggType {
+			case AggNameSum:
+				aggValue += val
+			case AggNameCount:
+				count++
+			case AggNameMean:
+				aggValue += val
+				count++
+			case AggNameMin:
+				if count == 0 || val < aggValue {
+					aggValue = val
+				}
+				count++
+			case AggNameMax:
+				if count == 0 || val > aggValue {
+					aggValue = val
+				}
+				count++
+			}
+		}
+	}
+
+	if aggType == AggNameMean && count > 0 {
+		aggValue /= count
+	}
+	if aggType == AggNameCount {
+		aggValue = count
+	}
+
+	return aggValue
+}
+
+// calculateFloat64Aggregation calculates aggregation for Float64 values
+func (e *Evaluator) calculateFloat64Aggregation(
+	arr *array.Float64,
+	partition []int,
+	aggType string,
+) float64 {
+	var aggValue float64
+	var count int64
+
+	for _, idx := range partition {
+		if !arr.IsNull(idx) {
+			val := arr.Value(idx)
+			switch aggType {
+			case AggNameSum:
+				aggValue += val
+			case AggNameCount:
+				count++
+			case AggNameMean:
+				aggValue += val
+				count++
+			case AggNameMin:
+				if count == 0 || val < aggValue {
+					aggValue = val
+				}
+				count++
+			case AggNameMax:
+				if count == 0 || val > aggValue {
+					aggValue = val
+				}
+				count++
+			}
+		}
+	}
+
+	if aggType == AggNameMean && count > 0 {
+		aggValue /= float64(count)
+	}
+	if aggType == AggNameCount {
+		aggValue = float64(count)
+	}
+
+	return aggValue
 }
