@@ -333,3 +333,80 @@ When creating pull requests:
    - **Fix**: Prefer `defer` for most cases, use MemoryManager only for many short-lived resources
 
 7. **Information Accuracy**: Making assumptions about dependencies, licenses, or APIs without verification
+   - **Fix**: Always verify information from official sources before making changes
+
+## Commit Message Guidelines
+
+**CRITICAL**: All commits must follow the [Conventional Commits](https://www.conventionalcommits.org/) specification for automated changelog generation and proper version bumping.
+
+### Commit Message Format
+```
+<type>[optional scope]: <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+### Required Commit Types
+- **feat**: New features (triggers minor version bump)
+- **fix**: Bug fixes (triggers patch version bump) 
+- **docs**: Documentation changes only
+- **style**: Code style changes (formatting, etc.)
+- **refactor**: Code refactoring without functional changes
+- **test**: Test additions or modifications
+- **chore**: Build system, tooling, or dependency updates
+- **perf**: Performance improvements
+- **ci**: CI/CD configuration changes
+
+### Breaking Changes
+- Add `BREAKING CHANGE:` in the commit footer (triggers major version bump)
+- Or add `!` after type: `feat!: redesign DataFrame API`
+
+### Commit Examples
+```bash
+feat(io): add Parquet reader support
+
+Implements basic Parquet file reading with schema inference
+and integration with existing DataFrame operations.
+
+Closes #78
+
+fix(dataframe): resolve memory leak in GroupBy operations
+
+Use proper defer pattern for resource cleanup in parallel operations.
+
+Fixes #92
+
+docs: update CONTRIBUTING.md with commit guidelines
+
+Add conventional commit specification and examples for contributors.
+
+chore(deps): update Apache Arrow to v18.3.1
+
+Update to latest stable version for performance improvements.
+```
+
+### Scope Guidelines
+Common scopes to use:
+- `io`: I/O operations (CSV, Parquet, etc.)
+- `dataframe`: Core DataFrame functionality
+- `expr`: Expression system
+- `parallel`: Parallel processing features
+- `memory`: Memory management
+- `cli`: Command-line interface
+- `api`: Public API changes
+- `test`: Test-related changes
+
+### Validation
+- The version-check workflow validates commit messages on PRs
+- Use `lefthook run pre-commit` to validate locally
+- Invalid commit messages will cause CI to fail
+
+### Auto-Generated Signatures
+All commits should end with:
+```
+🤖 Generated with [Claude Code](https://claude.ai/code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+```
