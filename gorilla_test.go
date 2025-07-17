@@ -437,9 +437,14 @@ func TestGroupBy_Agg(t *testing.T) {
 func TestLazyGroupBy_Agg(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
+	keySeries := gorilla.NewSeries("key", []string{"a", "a", "b"}, mem)
+	defer keySeries.Release()
+	valSeries := gorilla.NewSeries("val", []int64{1, 2, 3}, mem)
+	defer valSeries.Release()
+
 	df := gorilla.NewDataFrame(
-		gorilla.NewSeries("key", []string{"a", "a", "b"}, mem),
-		gorilla.NewSeries("val", []int64{1, 2, 3}, mem),
+		keySeries,
+		valSeries,
 	)
 	defer df.Release()
 
