@@ -113,3 +113,33 @@ func DefaultParquetOptions() ParquetOptions {
 		BatchSize:   DefaultBatchSize,
 	}
 }
+
+// ParquetReader reads Parquet data and converts it to DataFrames
+type ParquetReader struct {
+	reader  io.Reader
+	options ParquetOptions
+	mem     memory.Allocator
+}
+
+// NewParquetReader creates a new Parquet reader with the specified options
+func NewParquetReader(reader io.Reader, options ParquetOptions, mem memory.Allocator) *ParquetReader {
+	return &ParquetReader{
+		reader:  reader,
+		options: options,
+		mem:     mem,
+	}
+}
+
+// ParquetWriter writes DataFrames to Parquet format
+type ParquetWriter struct {
+	writer  io.Writer
+	options ParquetOptions
+}
+
+// NewParquetWriter creates a new Parquet writer with the specified options
+func NewParquetWriter(writer io.Writer, options ParquetOptions) *ParquetWriter {
+	return &ParquetWriter{
+		writer:  writer,
+		options: options,
+	}
+}

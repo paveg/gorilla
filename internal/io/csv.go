@@ -17,6 +17,7 @@ const (
 	// Boolean string constants
 	trueStr  = "true"
 	falseStr = "false"
+	boolType = "bool"
 )
 
 // Read reads CSV data and returns a DataFrame
@@ -113,7 +114,7 @@ func (r *CSVReader) createSeriesFromStrings(name string, data []string) (datafra
 
 	// Create series based on inferred type
 	switch inferredType {
-	case "bool":
+	case boolType:
 		return r.createBoolSeries(name, data)
 	case "int":
 		return r.createIntSeries(name, data)
@@ -169,7 +170,7 @@ func (r *CSVReader) inferDataType(data []string) string {
 
 	// Return the most specific type
 	if canBeBool {
-		return "bool"
+		return boolType
 	}
 	if canBeInt {
 		return "int"
