@@ -67,7 +67,8 @@ jobs:
           ./gorilla-cli --version
           
           # Test that version package works
-          go run -c "package main; import \"github.com/paveg/gorilla\"; func main() { println(gorilla.Version()) }"
+          echo 'package main; import "github.com/paveg/gorilla"; func main() { println(gorilla.Version()) }' > test_version.go
+          go run test_version.go
           
       - name: Check conventional commits
         run: |
