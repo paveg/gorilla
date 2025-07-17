@@ -85,6 +85,54 @@ Issues use a structured 3-tier labeling system:
 - `type: security` 🔒 - Memory safety and security enhancements
 - `type: breaking-change` 💥 - Breaking changes requiring major version bump
 
+### Commit Message Convention
+
+We follow the [Conventional Commits](https://www.conventionalcommits.org/) specification for consistent commit messages and automated changelog generation.
+
+**Format:**
+```
+<type>[optional scope]: <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+**Types:**
+- `feat`: New features (triggers minor version bump)
+- `fix`: Bug fixes (triggers patch version bump)
+- `docs`: Documentation changes only
+- `style`: Code style changes (formatting, missing semicolons, etc.)
+- `refactor`: Code refactoring without functional changes
+- `test`: Test additions or modifications
+- `chore`: Build system, tooling, or dependency updates
+- `perf`: Performance improvements
+- `ci`: CI/CD configuration changes
+
+**Breaking Changes:**
+- Add `BREAKING CHANGE:` in the commit footer for major version bumps
+- Or add `!` after the type: `feat!: redesign DataFrame API`
+
+**Examples:**
+```bash
+feat(io): add Parquet reader support
+
+Implements basic Parquet file reading with schema inference
+and integration with existing DataFrame operations.
+
+Closes #78
+
+fix(dataframe): resolve memory leak in GroupBy
+
+Use proper defer pattern for resource cleanup in parallel operations.
+
+Fixes #92
+
+docs(readme): add installation instructions for specific versions
+
+Include examples for Go modules and version pinning.
+```
+
 ### Pull Request Process
 
 1. **Create a feature branch:**
