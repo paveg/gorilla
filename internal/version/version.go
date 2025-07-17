@@ -158,12 +158,24 @@ type SemVer struct {
 	Build      string
 }
 
-// ParseSemVer parses a semantic version string
+// ParseSemVer parses a semantic version string using a simplified parser.
+//
+// This implementation handles basic semantic version parsing for build information
+// and version comparison. For production applications requiring strict SemVer
+// compliance, consider using a dedicated library like github.com/Masterminds/semver.
+//
+// Supported format: [v]MAJOR.MINOR.PATCH[-PRERELEASE][+BUILD]
+//
+// Examples:
+//   - "1.0.0" -> SemVer{Major: 1, Minor: 0, Patch: 0}
+//   - "v2.1.3-alpha.1" -> SemVer{Major: 2, Minor: 1, Patch: 3, PreRelease: "alpha.1"}
+//   - "1.0.0+build.1" -> SemVer{Major: 1, Minor: 0, Patch: 0, Build: "build.1"}
 func ParseSemVer(version string) (*SemVer, error) {
-	version = strings.TrimPrefix(version, "v")
+	if version == "" {
+		return nil, fmt.Errorf("version string cannot be empty")
+	}
 
-	// This is a simplified parser - in production, consider using
-	// a proper semver library like github.com/Masterminds/semver
+	version = strings.TrimPrefix(version, "v")
 
 	var major, minor, patch int
 	var preRelease, build string

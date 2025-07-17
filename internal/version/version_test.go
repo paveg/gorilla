@@ -181,6 +181,10 @@ func TestParseSemVer(t *testing.T) {
 			version:  "a.b.c",
 			hasError: true,
 		},
+		{
+			version:  "",
+			hasError: true,
+		},
 	}
 
 	for _, tt := range tests {
