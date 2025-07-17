@@ -69,7 +69,7 @@ jobs:
           # Test that version package works
           mkdir -p /tmp/version_test
           echo 'package main; import "github.com/paveg/gorilla"; func main() { println(gorilla.Version()) }' > /tmp/version_test/test_version.go
-          cd /tmp/version_test && go mod init test_version && go mod edit -replace=github.com/paveg/gorilla=/home/runner/work/gorilla/gorilla && go run test_version.go
+          cd /tmp/version_test && go mod init test_version && go mod edit -replace=github.com/paveg/gorilla=/home/runner/work/gorilla/gorilla && go get github.com/paveg/gorilla && go run test_version.go
           
       - name: Check conventional commits
         run: |
