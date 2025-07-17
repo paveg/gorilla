@@ -70,6 +70,10 @@ func (e *Evaluator) Evaluate(expr Expr, columns map[string]arrow.Array) (arrow.A
 		return e.evaluateBinary(ex, columns)
 	case *FunctionExpr:
 		return e.evaluateFunction(ex, columns)
+	case *WindowExpr:
+		return e.EvaluateWindow(ex, columns)
+	case *WindowFunctionExpr:
+		return e.evaluateWindowFunction(ex, nil, columns)
 	case *InvalidExpr:
 		return nil, fmt.Errorf("invalid expression: %s", ex.Message())
 	default:
@@ -1076,4 +1080,188 @@ func (e *Evaluator) evaluateDateTimeFunction(expr *FunctionExpr, columns map[str
 	}
 
 	return builder.NewArray(), nil
+}
+
+// EvaluateWindow evaluates a window expression
+func (e *Evaluator) EvaluateWindow(expr *WindowExpr, columns map[string]arrow.Array) (arrow.Array, error) {
+	// Get the data length from one of the columns
+	if len(columns) == 0 {
+		return nil, fmt.Errorf("no columns provided for window function evaluation")
+	}
+
+	var dataLength int
+	for _, arr := range columns {
+		dataLength = arr.Len()
+		break
+	}
+
+	if dataLength == 0 {
+		return nil, fmt.Errorf("empty data for window function evaluation")
+	}
+
+	// Handle different types of window functions
+	switch fn := expr.function.(type) {
+	case *WindowFunctionExpr:
+		return e.evaluateWindowFunction(fn, expr.window, columns)
+	case *AggregationExpr:
+		return e.evaluateWindowAggregation(fn, expr.window, columns)
+	default:
+		return nil, fmt.Errorf("unsupported window function type: %T", expr.function)
+	}
+}
+
+// evaluateWindowFunction evaluates window-specific functions (ROW_NUMBER, RANK, LAG, LEAD, etc.)
+func (e *Evaluator) evaluateWindowFunction(expr *WindowFunctionExpr, window *WindowSpec, columns map[string]arrow.Array) (arrow.Array, error) {
+	dataLength := getDataLength(columns)
+
+	switch expr.funcName {
+	case "ROW_NUMBER":
+		return e.evaluateRowNumber(window, columns, dataLength)
+	case "RANK":
+		return e.evaluateRank(window, columns, dataLength)
+	case "DENSE_RANK":
+		return e.evaluateDenseRank(window, columns, dataLength)
+	case "LAG":
+		return e.evaluateLag(expr, window, columns, dataLength)
+	case "LEAD":
+		return e.evaluateLead(expr, window, columns, dataLength)
+	case "FIRST_VALUE":
+		return e.evaluateFirstValue(expr, window, columns, dataLength)
+	case "LAST_VALUE":
+		return e.evaluateLastValue(expr, window, columns, dataLength)
+	default:
+		return nil, fmt.Errorf("unsupported window function: %s", expr.funcName)
+	}
+}
+
+// evaluateWindowAggregation evaluates aggregation functions with OVER clause
+func (e *Evaluator) evaluateWindowAggregation(expr *AggregationExpr, window *WindowSpec, columns map[string]arrow.Array) (arrow.Array, error) {
+	dataLength := getDataLength(columns)
+
+	switch expr.aggType {
+	case AggSum:
+		return e.evaluateWindowSum(expr, window, columns, dataLength)
+	case AggCount:
+		return e.evaluateWindowCount(expr, window, columns, dataLength)
+	case AggMean:
+		return e.evaluateWindowMean(expr, window, columns, dataLength)
+	case AggMin:
+		return e.evaluateWindowMin(expr, window, columns, dataLength)
+	case AggMax:
+		return e.evaluateWindowMax(expr, window, columns, dataLength)
+	default:
+		return nil, fmt.Errorf("unsupported window aggregation: %v", expr.aggType)
+	}
+}
+
+// evaluateRowNumber implements ROW_NUMBER() window function
+func (e *Evaluator) evaluateRowNumber(window *WindowSpec, columns map[string]arrow.Array, dataLength int) (arrow.Array, error) {
+	// Get partitions
+	partitions, err := e.getPartitions(window, columns, dataLength)
+	if err != nil {
+		return nil, fmt.Errorf("getting partitions: %w", err)
+	}
+
+	// Create result array
+	builder := array.NewInt64Builder(e.mem)
+	defer builder.Release()
+
+	result := make([]int64, dataLength)
+
+	// Process each partition
+	for _, partition := range partitions {
+		// Sort partition if ORDER BY is specified
+		sortedIndices := partition
+		if len(window.orderBy) > 0 {
+			sortedIndices, err = e.sortPartition(partition, window.orderBy, columns)
+			if err != nil {
+				return nil, fmt.Errorf("sorting partition: %w", err)
+			}
+		}
+
+		// Assign row numbers within partition
+		for i, idx := range sortedIndices {
+			result[idx] = int64(i + 1)
+		}
+	}
+
+	// Build the result array
+	for i := 0; i < dataLength; i++ {
+		builder.Append(result[i])
+	}
+
+	return builder.NewArray(), nil
+}
+
+// Helper functions
+
+func getDataLength(columns map[string]arrow.Array) int {
+	for _, arr := range columns {
+		return arr.Len()
+	}
+	return 0
+}
+
+// getPartitions creates partitions based on PARTITION BY clause
+func (e *Evaluator) getPartitions(window *WindowSpec, columns map[string]arrow.Array, dataLength int) ([][]int, error) {
+	if len(window.partitionBy) == 0 {
+		// No partitioning, single partition with all rows
+		partition := make([]int, dataLength)
+		for i := 0; i < dataLength; i++ {
+			partition[i] = i
+		}
+		return [][]int{partition}, nil
+	}
+
+	// Group by partition columns
+	partitionMap := make(map[string][]int)
+
+	for i := 0; i < dataLength; i++ {
+		key, err := e.getPartitionKey(i, window.partitionBy, columns)
+		if err != nil {
+			return nil, fmt.Errorf("getting partition key for row %d: %w", i, err)
+		}
+		partitionMap[key] = append(partitionMap[key], i)
+	}
+
+	// Convert map to slice
+	partitions := make([][]int, 0, len(partitionMap))
+	for _, partition := range partitionMap {
+		partitions = append(partitions, partition)
+	}
+
+	return partitions, nil
+}
+
+// getPartitionKey creates a string key for partitioning
+func (e *Evaluator) getPartitionKey(rowIndex int, partitionColumns []string, columns map[string]arrow.Array) (string, error) {
+	key := ""
+	for i, colName := range partitionColumns {
+		if i > 0 {
+			key += "|"
+		}
+
+		arr, exists := columns[colName]
+		if !exists {
+			return "", fmt.Errorf("partition column not found: %s", colName)
+		}
+
+		if arr.IsNull(rowIndex) {
+			key += "NULL"
+		} else {
+			switch a := arr.(type) {
+			case *array.String:
+				key += a.Value(rowIndex)
+			case *array.Int64:
+				key += fmt.Sprintf("%d", a.Value(rowIndex))
+			case *array.Float64:
+				key += fmt.Sprintf("%g", a.Value(rowIndex))
+			case *array.Boolean:
+				key += fmt.Sprintf("%t", a.Value(rowIndex))
+			default:
+				key += fmt.Sprintf("%v", arr)
+			}
+		}
+	}
+	return key, nil
 }
