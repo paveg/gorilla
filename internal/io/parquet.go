@@ -115,7 +115,7 @@ func (r *ParquetReader) arrowTableToDataFrame(table arrow.Table) (*dataframe.Dat
 	schema := table.Schema()
 
 	for i := 0; i < int(table.NumCols()); i++ {
-		column := *table.Column(i)
+		column := table.Column(i)
 		field := schema.Field(i)
 
 		// Create series from Arrow column
@@ -130,87 +130,109 @@ func (r *ParquetReader) arrowTableToDataFrame(table arrow.Table) (*dataframe.Dat
 }
 
 // arrowColumnToSeries converts an Arrow column to a Series
-func (r *ParquetReader) arrowColumnToSeries(name string, column arrow.Column, dataType arrow.DataType) (dataframe.ISeries, error) {
-	// Concatenate all chunks into a single array
+func (r *ParquetReader) arrowColumnToSeries(
+	name string, column *arrow.Column, dataType arrow.DataType,
+) (dataframe.ISeries, error) {
 	chunked := column.Data()
 	if chunked.Len() == 0 {
-		// Handle empty column based on type
-		//nolint:exhaustive // Only handling supported types for now
-		switch dataType.ID() {
-		case arrow.INT64:
-			return series.NewSafe(name, []int64{}, r.mem)
-		case arrow.INT32:
-			return series.NewSafe(name, []int32{}, r.mem)
-		case arrow.FLOAT64:
-			return series.NewSafe(name, []float64{}, r.mem)
-		case arrow.FLOAT32:
-			return series.NewSafe(name, []float32{}, r.mem)
-		case arrow.STRING:
-			return series.NewSafe(name, []string{}, r.mem)
-		case arrow.BOOL:
-			return series.NewSafe(name, []bool{}, r.mem)
-		default:
-			return series.NewSafe(name, []string{}, r.mem)
-		}
+		return r.createEmptySeriesByType(name, dataType)
 	}
 
 	// Get the first chunk (for simplicity, assume single chunk)
-	// In a production implementation, we'd concatenate all chunks
 	arr := chunked.Chunk(0)
+	return r.convertArrowArrayToSeries(name, arr, dataType)
+}
 
+// createEmptySeriesByType creates an empty series based on Arrow data type
+func (r *ParquetReader) createEmptySeriesByType(name string, dataType arrow.DataType) (dataframe.ISeries, error) {
 	//nolint:exhaustive // Only handling supported types for now
 	switch dataType.ID() {
 	case arrow.INT64:
-		int64Array := arr.(*array.Int64)
-		values := make([]int64, int64Array.Len())
-		for i := 0; i < int64Array.Len(); i++ {
-			values[i] = int64Array.Value(i)
-		}
-		return series.NewSafe(name, values, r.mem)
-
+		return series.NewSafe(name, []int64{}, r.mem)
 	case arrow.INT32:
-		int32Array := arr.(*array.Int32)
-		values := make([]int32, int32Array.Len())
-		for i := 0; i < int32Array.Len(); i++ {
-			values[i] = int32Array.Value(i)
-		}
-		return series.NewSafe(name, values, r.mem)
-
+		return series.NewSafe(name, []int32{}, r.mem)
 	case arrow.FLOAT64:
-		float64Array := arr.(*array.Float64)
-		values := make([]float64, float64Array.Len())
-		for i := 0; i < float64Array.Len(); i++ {
-			values[i] = float64Array.Value(i)
-		}
-		return series.NewSafe(name, values, r.mem)
-
+		return series.NewSafe(name, []float64{}, r.mem)
 	case arrow.FLOAT32:
-		float32Array := arr.(*array.Float32)
-		values := make([]float32, float32Array.Len())
-		for i := 0; i < float32Array.Len(); i++ {
-			values[i] = float32Array.Value(i)
-		}
-		return series.NewSafe(name, values, r.mem)
-
+		return series.NewSafe(name, []float32{}, r.mem)
 	case arrow.STRING:
-		stringArray := arr.(*array.String)
-		values := make([]string, stringArray.Len())
-		for i := 0; i < stringArray.Len(); i++ {
-			values[i] = stringArray.Value(i)
-		}
-		return series.NewSafe(name, values, r.mem)
-
+		return series.NewSafe(name, []string{}, r.mem)
 	case arrow.BOOL:
-		boolArray := arr.(*array.Boolean)
-		values := make([]bool, boolArray.Len())
-		for i := 0; i < boolArray.Len(); i++ {
-			values[i] = boolArray.Value(i)
-		}
-		return series.NewSafe(name, values, r.mem)
+		return series.NewSafe(name, []bool{}, r.mem)
+	default:
+		return series.NewSafe(name, []string{}, r.mem)
+	}
+}
 
+// convertArrowArrayToSeries converts an Arrow array to a Series
+func (r *ParquetReader) convertArrowArrayToSeries(
+	name string, arr arrow.Array, dataType arrow.DataType,
+) (dataframe.ISeries, error) {
+	//nolint:exhaustive // Only handling supported types for now
+	switch dataType.ID() {
+	case arrow.INT64:
+		return r.convertInt64Array(name, arr.(*array.Int64))
+	case arrow.INT32:
+		return r.convertInt32Array(name, arr.(*array.Int32))
+	case arrow.FLOAT64:
+		return r.convertFloat64Array(name, arr.(*array.Float64))
+	case arrow.FLOAT32:
+		return r.convertFloat32Array(name, arr.(*array.Float32))
+	case arrow.STRING:
+		return r.convertStringArray(name, arr.(*array.String))
+	case arrow.BOOL:
+		return r.convertBoolArray(name, arr.(*array.Boolean))
 	default:
 		return nil, fmt.Errorf("unsupported Arrow type: %s", dataType)
 	}
+}
+
+func (r *ParquetReader) convertInt64Array(name string, arr *array.Int64) (dataframe.ISeries, error) {
+	values := make([]int64, arr.Len())
+	for i := 0; i < arr.Len(); i++ {
+		values[i] = arr.Value(i)
+	}
+	return series.NewSafe(name, values, r.mem)
+}
+
+func (r *ParquetReader) convertInt32Array(name string, arr *array.Int32) (dataframe.ISeries, error) {
+	values := make([]int32, arr.Len())
+	for i := 0; i < arr.Len(); i++ {
+		values[i] = arr.Value(i)
+	}
+	return series.NewSafe(name, values, r.mem)
+}
+
+func (r *ParquetReader) convertFloat64Array(name string, arr *array.Float64) (dataframe.ISeries, error) {
+	values := make([]float64, arr.Len())
+	for i := 0; i < arr.Len(); i++ {
+		values[i] = arr.Value(i)
+	}
+	return series.NewSafe(name, values, r.mem)
+}
+
+func (r *ParquetReader) convertFloat32Array(name string, arr *array.Float32) (dataframe.ISeries, error) {
+	values := make([]float32, arr.Len())
+	for i := 0; i < arr.Len(); i++ {
+		values[i] = arr.Value(i)
+	}
+	return series.NewSafe(name, values, r.mem)
+}
+
+func (r *ParquetReader) convertStringArray(name string, arr *array.String) (dataframe.ISeries, error) {
+	values := make([]string, arr.Len())
+	for i := 0; i < arr.Len(); i++ {
+		values[i] = arr.Value(i)
+	}
+	return series.NewSafe(name, values, r.mem)
+}
+
+func (r *ParquetReader) convertBoolArray(name string, arr *array.Boolean) (dataframe.ISeries, error) {
+	values := make([]bool, arr.Len())
+	for i := 0; i < arr.Len(); i++ {
+		values[i] = arr.Value(i)
+	}
+	return series.NewSafe(name, values, r.mem)
 }
 
 // dataFrameToArrowTable converts a DataFrame to an Arrow table
