@@ -804,3 +804,99 @@ func Concat(exprs ...Expr) *FunctionExpr {
 func Case() *CaseExpr {
 	return &CaseExpr{whens: make([]CaseWhen, 0), elseValue: nil}
 }
+
+// Date/Time Functions
+
+// Year creates a YEAR function expression to extract year from date/time
+func (c *ColumnExpr) Year() *FunctionExpr {
+	return &FunctionExpr{name: "year", args: []Expr{c}}
+}
+
+// Month creates a MONTH function expression to extract month from date/time
+func (c *ColumnExpr) Month() *FunctionExpr {
+	return &FunctionExpr{name: "month", args: []Expr{c}}
+}
+
+// Day creates a DAY function expression to extract day from date/time
+func (c *ColumnExpr) Day() *FunctionExpr {
+	return &FunctionExpr{name: "day", args: []Expr{c}}
+}
+
+// Hour creates an HOUR function expression to extract hour from timestamp
+func (c *ColumnExpr) Hour() *FunctionExpr {
+	return &FunctionExpr{name: "hour", args: []Expr{c}}
+}
+
+// Minute creates a MINUTE function expression to extract minute from timestamp
+func (c *ColumnExpr) Minute() *FunctionExpr {
+	return &FunctionExpr{name: "minute", args: []Expr{c}}
+}
+
+// Second creates a SECOND function expression to extract second from timestamp
+func (c *ColumnExpr) Second() *FunctionExpr {
+	return &FunctionExpr{name: "second", args: []Expr{c}}
+}
+
+// Date/Time Functions for FunctionExpr
+
+// Year creates a YEAR function expression to extract year from date/time
+func (f *FunctionExpr) Year() *FunctionExpr {
+	return &FunctionExpr{name: "year", args: []Expr{f}}
+}
+
+// Month creates a MONTH function expression to extract month from date/time
+func (f *FunctionExpr) Month() *FunctionExpr {
+	return &FunctionExpr{name: "month", args: []Expr{f}}
+}
+
+// Day creates a DAY function expression to extract day from date/time
+func (f *FunctionExpr) Day() *FunctionExpr {
+	return &FunctionExpr{name: "day", args: []Expr{f}}
+}
+
+// Hour creates an HOUR function expression to extract hour from timestamp
+func (f *FunctionExpr) Hour() *FunctionExpr {
+	return &FunctionExpr{name: "hour", args: []Expr{f}}
+}
+
+// Minute creates a MINUTE function expression to extract minute from timestamp
+func (f *FunctionExpr) Minute() *FunctionExpr {
+	return &FunctionExpr{name: "minute", args: []Expr{f}}
+}
+
+// Second creates a SECOND function expression to extract second from timestamp
+func (f *FunctionExpr) Second() *FunctionExpr {
+	return &FunctionExpr{name: "second", args: []Expr{f}}
+}
+
+// Date/Time Constructor Functions
+
+// Year creates a YEAR function expression
+func Year(expr Expr) *FunctionExpr {
+	return &FunctionExpr{name: "year", args: []Expr{expr}}
+}
+
+// Month creates a MONTH function expression
+func Month(expr Expr) *FunctionExpr {
+	return &FunctionExpr{name: "month", args: []Expr{expr}}
+}
+
+// Day creates a DAY function expression
+func Day(expr Expr) *FunctionExpr {
+	return &FunctionExpr{name: "day", args: []Expr{expr}}
+}
+
+// Hour creates an HOUR function expression
+func Hour(expr Expr) *FunctionExpr {
+	return &FunctionExpr{name: "hour", args: []Expr{expr}}
+}
+
+// Minute creates a MINUTE function expression
+func Minute(expr Expr) *FunctionExpr {
+	return &FunctionExpr{name: "minute", args: []Expr{expr}}
+}
+
+// Second creates a SECOND function expression
+func Second(expr Expr) *FunctionExpr {
+	return &FunctionExpr{name: "second", args: []Expr{expr}}
+}

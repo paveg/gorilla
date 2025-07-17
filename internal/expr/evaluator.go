@@ -2,6 +2,7 @@ package expr
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
@@ -15,6 +16,9 @@ const (
 	typeFloat32 = "float32"
 	typeFloat64 = "float64"
 	typeDouble  = "double"
+
+	// Time constants
+	nanosPerSecond = 1e9
 )
 
 // Type hierarchy levels
@@ -64,6 +68,8 @@ func (e *Evaluator) Evaluate(expr Expr, columns map[string]arrow.Array) (arrow.A
 		return e.evaluateLiteral(ex, columns)
 	case *BinaryExpr:
 		return e.evaluateBinary(ex, columns)
+	case *FunctionExpr:
+		return e.evaluateFunction(ex, columns)
 	case *InvalidExpr:
 		return nil, fmt.Errorf("invalid expression: %s", ex.Message())
 	default:
@@ -152,6 +158,15 @@ func (e *Evaluator) evaluateLiteral(expr *LiteralExpr, columns map[string]arrow.
 		defer builder.Release()
 		for i := 0; i < length; i++ {
 			builder.Append(val)
+		}
+		return builder.NewArray(), nil
+	case time.Time:
+		// Create a timestamp array from time.Time
+		timestampType := &arrow.TimestampType{Unit: arrow.Nanosecond}
+		builder := array.NewTimestampBuilder(e.mem, timestampType)
+		defer builder.Release()
+		for i := 0; i < length; i++ {
+			builder.Append(arrow.Timestamp(val.UnixNano()))
 		}
 		return builder.NewArray(), nil
 	default:
@@ -968,6 +983,95 @@ func (e *Evaluator) evaluateFloat32Comparison(left, right *array.Float32, op Bin
 			return nil, fmt.Errorf("unsupported comparison operation: %v", op)
 		}
 
+		builder.Append(result)
+	}
+
+	return builder.NewArray(), nil
+}
+
+// evaluateFunction evaluates a function expression
+func (e *Evaluator) evaluateFunction(expr *FunctionExpr, columns map[string]arrow.Array) (arrow.Array, error) {
+	switch expr.name {
+	case "year":
+		return e.evaluateDateTimeFunction(expr, columns, extractYear)
+	case "month":
+		return e.evaluateDateTimeFunction(expr, columns, extractMonth)
+	case "day":
+		return e.evaluateDateTimeFunction(expr, columns, extractDay)
+	case "hour":
+		return e.evaluateDateTimeFunction(expr, columns, extractHour)
+	case "minute":
+		return e.evaluateDateTimeFunction(expr, columns, extractMinute)
+	case "second":
+		return e.evaluateDateTimeFunction(expr, columns, extractSecond)
+	default:
+		return nil, fmt.Errorf("unsupported function: %s", expr.name)
+	}
+}
+
+// Date/time extraction function types
+type dateTimeExtractor func(time.Time) int64
+
+func extractYear(t time.Time) int64 {
+	return int64(t.Year())
+}
+
+func extractMonth(t time.Time) int64 {
+	return int64(t.Month())
+}
+
+func extractDay(t time.Time) int64 {
+	return int64(t.Day())
+}
+
+func extractHour(t time.Time) int64 {
+	return int64(t.Hour())
+}
+
+func extractMinute(t time.Time) int64 {
+	return int64(t.Minute())
+}
+
+func extractSecond(t time.Time) int64 {
+	return int64(t.Second())
+}
+
+// evaluateDateTimeFunction evaluates date/time extraction functions
+func (e *Evaluator) evaluateDateTimeFunction(expr *FunctionExpr, columns map[string]arrow.Array, extractor dateTimeExtractor) (arrow.Array, error) {
+	if len(expr.args) != 1 {
+		return nil, fmt.Errorf("date/time function %s requires exactly 1 argument, got %d", expr.name, len(expr.args))
+	}
+
+	// Evaluate the argument
+	arg, err := e.Evaluate(expr.args[0], columns)
+	if err != nil {
+		return nil, fmt.Errorf("evaluating argument for %s: %w", expr.name, err)
+	}
+	defer arg.Release()
+
+	// Check if the argument is a timestamp array
+	timestampArr, ok := arg.(*array.Timestamp)
+	if !ok {
+		return nil, fmt.Errorf("date/time function %s requires a timestamp argument, got %T", expr.name, arg)
+	}
+
+	// Build the result array
+	builder := array.NewInt64Builder(e.mem)
+	defer builder.Release()
+
+	for i := 0; i < timestampArr.Len(); i++ {
+		if timestampArr.IsNull(i) {
+			builder.AppendNull()
+			continue
+		}
+
+		// Convert Arrow timestamp to Go time.Time
+		tsValue := timestampArr.Value(i)
+		nanos := int64(tsValue)
+		t := time.Unix(nanos/nanosPerSecond, nanos%nanosPerSecond).UTC() // Arrow timestamp is in nanoseconds
+
+		// Apply the extractor function
+		result := extractor(t)
 		builder.Append(result)
 	}
 
