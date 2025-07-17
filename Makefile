@@ -67,13 +67,6 @@ run-demo: build
 	@echo "Running demo..."
 	@./${BINARY_NAME} --demo
 
-install-tools:
-	@echo "Installing Go development tools..."
-	@go install github.com/evilmartians/lefthook@latest
-	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-	@echo "\nNOTE: Please install markdownlint-cli separately if you haven't already."
-	@echo "e.g., 'npm install -g markdownlint-cli' or 'brew install markdownlint-cli'"
-
 coverage:
 	@echo "Running tests with coverage..."
 	@./scripts/coverage.sh
