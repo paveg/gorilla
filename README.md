@@ -1,6 +1,7 @@
 # Gorilla 🦍
 
 [![Go CI](https://github.com/paveg/gorilla/actions/workflows/ci.yml/badge.svg)](https://github.com/paveg/gorilla/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/paveg/gorilla/graph/badge.svg?token=0V6SRFOKHO)](https://codecov.io/gh/paveg/gorilla)
 
 Gorilla is a high-performance, in-memory DataFrame library for Go. Inspired
 by libraries like Pandas and Polars, it is designed for fast and efficient data

@@ -11,6 +11,10 @@ make test           # Run all tests with race detection
 make lint           # Run golangci-lint (pre-commit runs --fix)
 make run-demo       # Build and run interactive demo
 
+# Coverage reporting
+make coverage       # Run tests with coverage and generate report
+make coverage-html  # Run tests with coverage and open HTML report
+
 # Development
 go test ./dataframe -v              # Test specific package
 go test -bench=. ./dataframe        # Run benchmarks
