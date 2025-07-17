@@ -1,6 +1,6 @@
 # Makefile for the Gorilla project
 
-.PHONY: help build test lint fmt vet run-demo install-tools setup
+.PHONY: help build test lint fmt vet run-demo install-tools setup coverage coverage-html
 
 # Variables
 BINARY_NAME=gorilla-cli
@@ -34,6 +34,8 @@ help:
 	@echo "  fmt              Format Go source files with gofmt."
 	@echo "  vet              Run go vet to inspect the code."
 	@echo "  run-demo         Build and run the CLI with the --demo flag."
+	@echo "  coverage         Run tests with coverage and generate report."
+	@echo "  coverage-html    Run tests with coverage and open HTML report."
 	@echo "  install-tools    Install required development tools (lefthook, golangci-lint)."
 	@echo "  setup            Install tools and set up git hooks using lefthook."
 
@@ -69,6 +71,28 @@ install-tools:
 	@echo "Installing Go development tools..."
 	@go install github.com/evilmartians/lefthook@latest
 	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	@echo "\nNOTE: Please install markdownlint-cli separately if you haven't already."
+	@echo "e.g., 'npm install -g markdownlint-cli' or 'brew install markdownlint-cli'"
+
+coverage:
+	@echo "Running tests with coverage..."
+	@./scripts/coverage.sh
+
+coverage-html: coverage
+	@echo "Opening coverage report in browser..."
+	@if command -v open >/dev/null 2>&1; then \
+		open coverage.html; \
+	elif command -v xdg-open >/dev/null 2>&1; then \
+		xdg-open coverage.html; \
+	else \
+		echo "Please open coverage.html in your browser"; \
+	fi
+
+install-tools:
+	@echo "Installing Go development tools..."
+	@go install github.com/evilmartians/lefthook@latest
+	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	@go install github.com/wadey/gocovmerge@latest
 	@echo "\nNOTE: Please install markdownlint-cli separately if you haven't already."
 	@echo "e.g., 'npm install -g markdownlint-cli' or 'brew install markdownlint-cli'"
 

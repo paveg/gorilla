@@ -48,6 +48,8 @@ basic_usage
 coverage.txt
 coverage.html
 coverage.out
+unit-coverage.out
+integration-coverage.out
 
 # Benchmarking results
 *.bench

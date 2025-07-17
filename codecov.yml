@@ -1,0 +1,76 @@
+# Codecov configuration
+# https://docs.codecov.com/docs/codecov-yaml
+
+codecov:
+  require_ci_to_pass: true
+  notify:
+    wait_for_ci: true
+
+coverage:
+  precision: 2
+  round: down
+  range: "70...100"
+
+  status:
+    project:
+      default:
+        # Adjust target coverage based on your project needs
+        target: 80%
+        threshold: 1%
+        base: auto
+        if_not_found: success
+        if_ci_failed: error
+        informational: false
+        only_pulls: false
+
+    patch:
+      default:
+        # Require new code to have at least 80% coverage
+        target: 80%
+        threshold: 1%
+        base: auto
+        if_not_found: success
+        if_ci_failed: error
+        informational: false
+        only_pulls: false
+
+parsers:
+  gcov:
+    branch_detection:
+      conditional: yes
+      loop: yes
+      method: no
+      macro: no
+
+comment:
+  layout: "reach,diff,flags,files,footer"
+  behavior: default
+  require_changes: false
+  require_base: false
+  require_head: true
+
+ignore:
+  # Ignore generated files and examples
+  - "**/*_gen.go"
+  - "**/*_test.go"
+  - "**/testdata"
+  - "examples/**"
+  - "cmd/gorilla-cli/main.go"
+  - "internal/version/version.go"  # Build-time injected variables
+
+# Flag configuration for different test types
+flags:
+  unit:
+    paths:
+      - "internal/"
+      - "!internal/integration/"
+    carryforward: false
+  
+  integration:
+    paths:
+      - "internal/integration/"
+    carryforward: false
+
+# GitHub integration
+github_checks:
+  annotations: true
