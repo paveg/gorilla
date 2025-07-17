@@ -52,6 +52,13 @@ func TestEvaluateWindowFunction(t *testing.T) {
 			),
 			expectedValues: []interface{}{int64(2), int64(1), int64(2), int64(1), int64(1)}, // Same as ROW_NUMBER for this data
 		},
+		{
+			name: "DENSE_RANK with partition",
+			windowExpr: DenseRank().Over(
+				NewWindow().PartitionBy("department").OrderBy("salary", false),
+			),
+			expectedValues: []interface{}{int64(2), int64(1), int64(2), int64(1), int64(1)}, // No gaps in DENSE_RANK
+		},
 		// TODO: Implement LAG function in future phase
 		// {
 		// 	name: "LAG with partition",
@@ -156,6 +163,67 @@ func TestEvaluateWindowAggregation(t *testing.T) {
 			int64Array := result.(*array.Int64)
 			for i, expectedValue := range tt.expectedValues {
 				assert.Equal(t, expectedValue, int64Array.Value(i))
+			}
+		})
+	}
+}
+
+func TestWindowFunctions_DuplicateValues(t *testing.T) {
+	mem := memory.NewGoAllocator()
+
+	// Create test data with duplicate values to show difference between RANK and DENSE_RANK
+	salaries := []int64{50000, 60000, 60000, 70000, 70000, 80000}
+	departments := []string{"HR", "HR", "HR", "Engineering", "Engineering", "Engineering"}
+
+	salarySeries, err := series.NewSafe[int64]("salary", salaries, mem)
+	require.NoError(t, err)
+	defer salarySeries.Release()
+
+	deptSeries, err := series.NewSafe[string]("department", departments, mem)
+	require.NoError(t, err)
+	defer deptSeries.Release()
+
+	columns := map[string]arrow.Array{
+		"salary":     salarySeries.Array(),
+		"department": deptSeries.Array(),
+	}
+
+	evaluator := NewEvaluator(mem)
+
+	tests := []struct {
+		name           string
+		windowExpr     *WindowExpr
+		expectedValues []interface{}
+	}{
+		{
+			name: "RANK with duplicate values",
+			windowExpr: Rank().Over(
+				NewWindow().PartitionBy("department").OrderBy("salary", true),
+			),
+			expectedValues: []interface{}{int64(1), int64(2), int64(2), int64(1), int64(1), int64(3)}, // RANK has gaps
+		},
+		{
+			name: "DENSE_RANK with duplicate values",
+			windowExpr: DenseRank().Over(
+				NewWindow().PartitionBy("department").OrderBy("salary", true),
+			),
+			expectedValues: []interface{}{int64(1), int64(2), int64(2), int64(1), int64(1), int64(2)}, // DENSE_RANK has no gaps
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := evaluator.EvaluateWindow(tt.windowExpr, columns)
+			require.NoError(t, err)
+			defer result.Release()
+
+			// Check result length
+			assert.Equal(t, len(tt.expectedValues), result.Len())
+
+			// Check values
+			int64Array := result.(*array.Int64)
+			for i, expectedValue := range tt.expectedValues {
+				assert.Equal(t, expectedValue.(int64), int64Array.Value(i))
 			}
 		})
 	}
