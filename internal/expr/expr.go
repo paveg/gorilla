@@ -344,6 +344,15 @@ const (
 	AggMax
 )
 
+// Aggregation function name constants
+const (
+	AggNameSum   = "sum"
+	AggNameCount = "count"
+	AggNameMean  = "mean"
+	AggNameMin   = "min"
+	AggNameMax   = "max"
+)
+
 // FunctionExpr represents a function call expression
 type FunctionExpr struct {
 	name string
@@ -398,15 +407,15 @@ func (a *AggregationExpr) String() string {
 	var aggName string
 	switch a.aggType {
 	case AggSum:
-		aggName = "sum"
+		aggName = AggNameSum
 	case AggCount:
-		aggName = "count"
+		aggName = AggNameCount
 	case AggMean:
-		aggName = "mean"
+		aggName = AggNameMean
 	case AggMin:
-		aggName = "min"
+		aggName = AggNameMin
 	case AggMax:
-		aggName = "max"
+		aggName = AggNameMax
 	}
 	return fmt.Sprintf("%s(%s)", aggName, a.column.String())
 }

@@ -2,13 +2,18 @@ package expr
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 )
 
 // evaluateRank implements RANK() window function
-func (e *Evaluator) evaluateRank(window *WindowSpec, columns map[string]arrow.Array, dataLength int) (arrow.Array, error) {
+func (e *Evaluator) evaluateRank(
+	window *WindowSpec,
+	columns map[string]arrow.Array,
+	dataLength int,
+) (arrow.Array, error) {
 	// Get partitions
 	partitions, err := e.getPartitions(window, columns, dataLength)
 	if err != nil {
@@ -54,7 +59,11 @@ func (e *Evaluator) evaluateRank(window *WindowSpec, columns map[string]arrow.Ar
 }
 
 // evaluateDenseRank implements DENSE_RANK() window function
-func (e *Evaluator) evaluateDenseRank(window *WindowSpec, columns map[string]arrow.Array, dataLength int) (arrow.Array, error) {
+func (e *Evaluator) evaluateDenseRank(
+	window *WindowSpec,
+	columns map[string]arrow.Array,
+	dataLength int,
+) (arrow.Array, error) {
 	// Similar to RANK but without gaps
 	partitions, err := e.getPartitions(window, columns, dataLength)
 	if err != nil {
@@ -94,7 +103,12 @@ func (e *Evaluator) evaluateDenseRank(window *WindowSpec, columns map[string]arr
 }
 
 // evaluateLag implements LAG() window function
-func (e *Evaluator) evaluateLag(expr *WindowFunctionExpr, window *WindowSpec, columns map[string]arrow.Array, dataLength int) (arrow.Array, error) {
+func (e *Evaluator) evaluateLag(
+	expr *WindowFunctionExpr,
+	window *WindowSpec,
+	columns map[string]arrow.Array,
+	dataLength int,
+) (arrow.Array, error) {
 	if len(expr.args) < 1 {
 		return nil, fmt.Errorf("LAG function requires at least 1 argument")
 	}
@@ -131,7 +145,12 @@ func (e *Evaluator) evaluateLag(expr *WindowFunctionExpr, window *WindowSpec, co
 }
 
 // evaluateLead implements LEAD() window function
-func (e *Evaluator) evaluateLead(expr *WindowFunctionExpr, window *WindowSpec, columns map[string]arrow.Array, dataLength int) (arrow.Array, error) {
+func (e *Evaluator) evaluateLead(
+	expr *WindowFunctionExpr,
+	window *WindowSpec,
+	columns map[string]arrow.Array,
+	dataLength int,
+) (arrow.Array, error) {
 	if len(expr.args) < 1 {
 		return nil, fmt.Errorf("LEAD function requires at least 1 argument")
 	}
@@ -168,51 +187,36 @@ func (e *Evaluator) evaluateLead(expr *WindowFunctionExpr, window *WindowSpec, c
 }
 
 // evaluateFirstValue implements FIRST_VALUE() window function
-func (e *Evaluator) evaluateFirstValue(expr *WindowFunctionExpr, window *WindowSpec, columns map[string]arrow.Array, dataLength int) (arrow.Array, error) {
-	if len(expr.args) != 1 {
-		return nil, fmt.Errorf("FIRST_VALUE function requires exactly 1 argument")
-	}
-
-	// Get the column
-	columnExpr, err := e.Evaluate(expr.args[0], columns)
-	if err != nil {
-		return nil, fmt.Errorf("evaluating FIRST_VALUE column: %w", err)
-	}
-	defer columnExpr.Release()
-
-	// Get partitions
-	partitions, err := e.getPartitions(window, columns, dataLength)
-	if err != nil {
-		return nil, fmt.Errorf("getting partitions: %w", err)
-	}
-
-	return e.createFirstLastResult(columnExpr, partitions, window, columns, true)
+func (e *Evaluator) evaluateFirstValue(
+	expr *WindowFunctionExpr,
+	window *WindowSpec,
+	columns map[string]arrow.Array,
+	dataLength int,
+) (arrow.Array, error) {
+	return e.evaluateWindowValueFunction(
+		expr, window, columns, dataLength, "FIRST_VALUE", true,
+	)
 }
 
 // evaluateLastValue implements LAST_VALUE() window function
-func (e *Evaluator) evaluateLastValue(expr *WindowFunctionExpr, window *WindowSpec, columns map[string]arrow.Array, dataLength int) (arrow.Array, error) {
-	if len(expr.args) != 1 {
-		return nil, fmt.Errorf("LAST_VALUE function requires exactly 1 argument")
-	}
-
-	// Get the column
-	columnExpr, err := e.Evaluate(expr.args[0], columns)
-	if err != nil {
-		return nil, fmt.Errorf("evaluating LAST_VALUE column: %w", err)
-	}
-	defer columnExpr.Release()
-
-	// Get partitions
-	partitions, err := e.getPartitions(window, columns, dataLength)
-	if err != nil {
-		return nil, fmt.Errorf("getting partitions: %w", err)
-	}
-
-	return e.createFirstLastResult(columnExpr, partitions, window, columns, false)
+func (e *Evaluator) evaluateLastValue(
+	expr *WindowFunctionExpr,
+	window *WindowSpec,
+	columns map[string]arrow.Array,
+	dataLength int,
+) (arrow.Array, error) {
+	return e.evaluateWindowValueFunction(
+		expr, window, columns, dataLength, "LAST_VALUE", false,
+	)
 }
 
 // evaluateWindowSum implements SUM() with OVER clause
-func (e *Evaluator) evaluateWindowSum(expr *AggregationExpr, window *WindowSpec, columns map[string]arrow.Array, dataLength int) (arrow.Array, error) {
+func (e *Evaluator) evaluateWindowSum(
+	expr *AggregationExpr,
+	window *WindowSpec,
+	columns map[string]arrow.Array,
+	dataLength int,
+) (arrow.Array, error) {
 	// Get the column to sum
 	columnExpr, err := e.Evaluate(expr.column, columns)
 	if err != nil {
@@ -226,11 +230,16 @@ func (e *Evaluator) evaluateWindowSum(expr *AggregationExpr, window *WindowSpec,
 		return nil, fmt.Errorf("getting partitions: %w", err)
 	}
 
-	return e.createWindowAggregationResult(columnExpr, partitions, window, columns, "sum")
+	return e.createWindowAggregationResult(columnExpr, partitions, window, columns, AggNameSum)
 }
 
 // evaluateWindowCount implements COUNT() with OVER clause
-func (e *Evaluator) evaluateWindowCount(expr *AggregationExpr, window *WindowSpec, columns map[string]arrow.Array, dataLength int) (arrow.Array, error) {
+func (e *Evaluator) evaluateWindowCount(
+	expr *AggregationExpr,
+	window *WindowSpec,
+	columns map[string]arrow.Array,
+	dataLength int,
+) (arrow.Array, error) {
 	// Get the column to count
 	columnExpr, err := e.Evaluate(expr.column, columns)
 	if err != nil {
@@ -244,11 +253,16 @@ func (e *Evaluator) evaluateWindowCount(expr *AggregationExpr, window *WindowSpe
 		return nil, fmt.Errorf("getting partitions: %w", err)
 	}
 
-	return e.createWindowAggregationResult(columnExpr, partitions, window, columns, "count")
+	return e.createWindowAggregationResult(columnExpr, partitions, window, columns, AggNameCount)
 }
 
 // evaluateWindowMean implements MEAN() with OVER clause
-func (e *Evaluator) evaluateWindowMean(expr *AggregationExpr, window *WindowSpec, columns map[string]arrow.Array, dataLength int) (arrow.Array, error) {
+func (e *Evaluator) evaluateWindowMean(
+	expr *AggregationExpr,
+	window *WindowSpec,
+	columns map[string]arrow.Array,
+	dataLength int,
+) (arrow.Array, error) {
 	// Get the column to average
 	columnExpr, err := e.Evaluate(expr.column, columns)
 	if err != nil {
@@ -262,11 +276,16 @@ func (e *Evaluator) evaluateWindowMean(expr *AggregationExpr, window *WindowSpec
 		return nil, fmt.Errorf("getting partitions: %w", err)
 	}
 
-	return e.createWindowAggregationResult(columnExpr, partitions, window, columns, "mean")
+	return e.createWindowAggregationResult(columnExpr, partitions, window, columns, AggNameMean)
 }
 
 // evaluateWindowMin implements MIN() with OVER clause
-func (e *Evaluator) evaluateWindowMin(expr *AggregationExpr, window *WindowSpec, columns map[string]arrow.Array, dataLength int) (arrow.Array, error) {
+func (e *Evaluator) evaluateWindowMin(
+	expr *AggregationExpr,
+	window *WindowSpec,
+	columns map[string]arrow.Array,
+	dataLength int,
+) (arrow.Array, error) {
 	// Get the column to find minimum
 	columnExpr, err := e.Evaluate(expr.column, columns)
 	if err != nil {
@@ -280,11 +299,16 @@ func (e *Evaluator) evaluateWindowMin(expr *AggregationExpr, window *WindowSpec,
 		return nil, fmt.Errorf("getting partitions: %w", err)
 	}
 
-	return e.createWindowAggregationResult(columnExpr, partitions, window, columns, "min")
+	return e.createWindowAggregationResult(columnExpr, partitions, window, columns, AggNameMin)
 }
 
 // evaluateWindowMax implements MAX() with OVER clause
-func (e *Evaluator) evaluateWindowMax(expr *AggregationExpr, window *WindowSpec, columns map[string]arrow.Array, dataLength int) (arrow.Array, error) {
+func (e *Evaluator) evaluateWindowMax(
+	expr *AggregationExpr,
+	window *WindowSpec,
+	columns map[string]arrow.Array,
+	dataLength int,
+) (arrow.Array, error) {
 	// Get the column to find maximum
 	columnExpr, err := e.Evaluate(expr.column, columns)
 	if err != nil {
@@ -298,11 +322,15 @@ func (e *Evaluator) evaluateWindowMax(expr *AggregationExpr, window *WindowSpec,
 		return nil, fmt.Errorf("getting partitions: %w", err)
 	}
 
-	return e.createWindowAggregationResult(columnExpr, partitions, window, columns, "max")
+	return e.createWindowAggregationResult(columnExpr, partitions, window, columns, AggNameMax)
 }
 
 // sortPartition sorts a partition based on ORDER BY clause
-func (e *Evaluator) sortPartition(partition []int, orderBy []OrderByExpr, columns map[string]arrow.Array) ([]int, error) {
+func (e *Evaluator) sortPartition(
+	partition []int,
+	orderBy []OrderByExpr,
+	columns map[string]arrow.Array,
+) ([]int, error) {
 	if len(orderBy) == 0 {
 		return partition, nil
 	}
@@ -311,24 +339,28 @@ func (e *Evaluator) sortPartition(partition []int, orderBy []OrderByExpr, column
 	sortedIndices := make([]int, len(partition))
 	copy(sortedIndices, partition)
 
-	// Simple bubble sort for now (could be optimized)
-	for i := 0; i < len(sortedIndices); i++ {
-		for j := i + 1; j < len(sortedIndices); j++ {
-			shouldSwap, err := e.compareRows(sortedIndices[i], sortedIndices[j], orderBy, columns)
-			if err != nil {
-				return nil, fmt.Errorf("comparing rows: %w", err)
-			}
-			if shouldSwap {
-				sortedIndices[i], sortedIndices[j] = sortedIndices[j], sortedIndices[i]
-			}
+	// Use Go's efficient sort.Slice (O(n log n)) instead of bubble sort (O(n²))
+	sort.Slice(sortedIndices, func(i, j int) bool {
+		shouldSwap, err := e.compareRows(sortedIndices[i], sortedIndices[j], orderBy, columns)
+		if err != nil {
+			// In case of error, maintain original order
+			return false
 		}
-	}
+		// The compareRows function returns true if row i should come after row j (swap needed)
+		// But sort.Slice expects true if element i should come before element j
+		// So we need to reverse the logic
+		return !shouldSwap
+	})
 
 	return sortedIndices, nil
 }
 
 // compareRows compares two rows based on ORDER BY clause
-func (e *Evaluator) compareRows(row1, row2 int, orderBy []OrderByExpr, columns map[string]arrow.Array) (bool, error) {
+func (e *Evaluator) compareRows(
+	row1, row2 int,
+	orderBy []OrderByExpr,
+	columns map[string]arrow.Array,
+) (bool, error) {
 	for _, order := range orderBy {
 		arr, exists := columns[order.column]
 		if !exists {
@@ -402,7 +434,11 @@ func (e *Evaluator) compareValues(arr arrow.Array, idx1, idx2 int) (int, error) 
 }
 
 // rowsEqual checks if two rows have equal values for specified columns
-func (e *Evaluator) rowsEqual(row1, row2 int, orderBy []OrderByExpr, columns map[string]arrow.Array) bool {
+func (e *Evaluator) rowsEqual(
+	row1, row2 int,
+	orderBy []OrderByExpr,
+	columns map[string]arrow.Array,
+) bool {
 	for _, order := range orderBy {
 		arr, exists := columns[order.column]
 		if !exists {
@@ -418,7 +454,13 @@ func (e *Evaluator) rowsEqual(row1, row2 int, orderBy []OrderByExpr, columns map
 }
 
 // createLagResult creates result array for LAG/LEAD functions
-func (e *Evaluator) createLagResult(columnExpr arrow.Array, partitions [][]int, window *WindowSpec, columns map[string]arrow.Array, offset int64) (arrow.Array, error) {
+func (e *Evaluator) createLagResult(
+	columnExpr arrow.Array,
+	partitions [][]int,
+	window *WindowSpec,
+	columns map[string]arrow.Array,
+	offset int64,
+) (arrow.Array, error) {
 	dataLength := columnExpr.Len()
 
 	// Create result array based on column type
@@ -510,8 +552,43 @@ func (e *Evaluator) createLagResult(columnExpr arrow.Array, partitions [][]int, 
 	}
 }
 
+// evaluateWindowValueFunction helper for FIRST_VALUE/LAST_VALUE functions
+func (e *Evaluator) evaluateWindowValueFunction(
+	expr *WindowFunctionExpr,
+	window *WindowSpec,
+	columns map[string]arrow.Array,
+	dataLength int,
+	funcName string,
+	isFirst bool,
+) (arrow.Array, error) {
+	if len(expr.args) != 1 {
+		return nil, fmt.Errorf("%s function requires exactly 1 argument", funcName)
+	}
+
+	// Get the column
+	columnExpr, err := e.Evaluate(expr.args[0], columns)
+	if err != nil {
+		return nil, fmt.Errorf("evaluating %s column: %w", funcName, err)
+	}
+	defer columnExpr.Release()
+
+	// Get partitions
+	partitions, err := e.getPartitions(window, columns, dataLength)
+	if err != nil {
+		return nil, fmt.Errorf("getting partitions: %w", err)
+	}
+
+	return e.createFirstLastResult(columnExpr, partitions, window, columns, isFirst)
+}
+
 // createFirstLastResult creates result array for FIRST_VALUE/LAST_VALUE functions
-func (e *Evaluator) createFirstLastResult(columnExpr arrow.Array, partitions [][]int, window *WindowSpec, columns map[string]arrow.Array, isFirst bool) (arrow.Array, error) {
+func (e *Evaluator) createFirstLastResult(
+	columnExpr arrow.Array,
+	partitions [][]int,
+	window *WindowSpec,
+	columns map[string]arrow.Array,
+	isFirst bool,
+) (arrow.Array, error) {
 	dataLength := columnExpr.Len()
 
 	// Create result array based on column type
@@ -616,7 +693,13 @@ func (e *Evaluator) createFirstLastResult(columnExpr arrow.Array, partitions [][
 }
 
 // createWindowAggregationResult creates result array for window aggregation functions
-func (e *Evaluator) createWindowAggregationResult(columnExpr arrow.Array, partitions [][]int, window *WindowSpec, columns map[string]arrow.Array, aggType string) (arrow.Array, error) {
+func (e *Evaluator) createWindowAggregationResult(
+	columnExpr arrow.Array,
+	partitions [][]int,
+	window *WindowSpec,
+	columns map[string]arrow.Array,
+	aggType string,
+) (arrow.Array, error) {
 	dataLength := columnExpr.Len()
 
 	// For now, implement simple partition-based aggregation
@@ -638,19 +721,19 @@ func (e *Evaluator) createWindowAggregationResult(columnExpr arrow.Array, partit
 				if !arr.IsNull(idx) {
 					val := arr.Value(idx)
 					switch aggType {
-					case "sum":
+					case AggNameSum:
 						aggValue += val
-					case "count":
+					case AggNameCount:
 						count++
-					case "mean":
+					case AggNameMean:
 						aggValue += val
 						count++
-					case "min":
+					case AggNameMin:
 						if count == 0 || val < aggValue {
 							aggValue = val
 						}
 						count++
-					case "max":
+					case AggNameMax:
 						if count == 0 || val > aggValue {
 							aggValue = val
 						}
@@ -659,10 +742,10 @@ func (e *Evaluator) createWindowAggregationResult(columnExpr arrow.Array, partit
 				}
 			}
 
-			if aggType == "mean" && count > 0 {
-				aggValue = aggValue / count
+			if aggType == AggNameMean && count > 0 {
+				aggValue /= count
 			}
-			if aggType == "count" {
+			if aggType == AggNameCount {
 				aggValue = count
 			}
 
@@ -693,19 +776,19 @@ func (e *Evaluator) createWindowAggregationResult(columnExpr arrow.Array, partit
 				if !arr.IsNull(idx) {
 					val := arr.Value(idx)
 					switch aggType {
-					case "sum":
+					case AggNameSum:
 						aggValue += val
-					case "count":
+					case AggNameCount:
 						count++
-					case "mean":
+					case AggNameMean:
 						aggValue += val
 						count++
-					case "min":
+					case AggNameMin:
 						if count == 0 || val < aggValue {
 							aggValue = val
 						}
 						count++
-					case "max":
+					case AggNameMax:
 						if count == 0 || val > aggValue {
 							aggValue = val
 						}
@@ -714,10 +797,10 @@ func (e *Evaluator) createWindowAggregationResult(columnExpr arrow.Array, partit
 				}
 			}
 
-			if aggType == "mean" && count > 0 {
-				aggValue = aggValue / float64(count)
+			if aggType == AggNameMean && count > 0 {
+				aggValue /= float64(count)
 			}
-			if aggType == "count" {
+			if aggType == AggNameCount {
 				aggValue = float64(count)
 			}
 

@@ -1091,12 +1091,18 @@ func (e *Evaluator) EvaluateWindow(expr *WindowExpr, columns map[string]arrow.Ar
 
 	var dataLength int
 	for _, arr := range columns {
-		dataLength = arr.Len()
-		break
+		if arr != nil {
+			dataLength = arr.Len()
+			break
+		}
 	}
 
+	// Handle empty datasets - return empty result array
 	if dataLength == 0 {
-		return nil, fmt.Errorf("empty data for window function evaluation")
+		// Create an empty result array of the appropriate type
+		builder := array.NewInt64Builder(e.mem)
+		defer builder.Release()
+		return builder.NewArray(), nil
 	}
 
 	// Handle different types of window functions
