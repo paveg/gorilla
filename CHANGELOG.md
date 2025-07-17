@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Comprehensive package-level documentation for pkg.go.dev discoverability
 - Example functions demonstrating basic usage, GroupBy, and Join operations
 - Enhanced documentation for internal packages (io, parallel)
+- Parquet I/O support with compression options (Snappy, GZIP, LZ4, ZSTD)
+- Date/time extraction functions (Year, Month, Day, Hour, Minute, Second)
+- Semantic versioning infrastructure and release management tools
+- CLI version command with detailed build information
+- Version information accessible via library API
 
 ## [0.1.0] - 2025-07-16
 

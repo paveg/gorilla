@@ -1,0 +1,138 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          
+      - name: Setup Node.js for changelog tools
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          
+      - name: Install changelog tools
+        run: |
+          npm install -g conventional-changelog-cli
+          
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+          
+      - name: Run tests
+        run: make test
+        
+      - name: Run linting
+        run: make lint
+        
+      - name: Build CLI with version info
+        run: |
+          VERSION=${{ steps.version.outputs.version }} make release
+          
+      - name: Generate changelog
+        run: |
+          # Extract changelog for this version
+          if [ -f CHANGELOG.md ]; then
+            # Get the section between the first two version headers
+            awk '/^## \[Unreleased\]/{flag=1; next} /^## \[/{if(flag) exit} flag' CHANGELOG.md > RELEASE_NOTES.md
+            
+            # If release notes are empty, create a basic one
+            if [ ! -s RELEASE_NOTES.md ]; then
+              echo "### Changes" > RELEASE_NOTES.md
+              echo "- Bug fixes and improvements" >> RELEASE_NOTES.md
+            fi
+          else
+            echo "### Changes" > RELEASE_NOTES.md
+            echo "- Bug fixes and improvements" >> RELEASE_NOTES.md
+          fi
+          
+          # Add version information
+          echo "" >> RELEASE_NOTES.md
+          echo "### Build Information" >> RELEASE_NOTES.md
+          echo "- Version: ${{ steps.version.outputs.version }}" >> RELEASE_NOTES.md
+          echo "- Build Date: $(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> RELEASE_NOTES.md
+          echo "- Git Commit: $(git rev-parse --short HEAD)" >> RELEASE_NOTES.md
+          echo "- Go Version: $(go version | cut -d' ' -f3)" >> RELEASE_NOTES.md
+          
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          release_name: Release ${{ steps.version.outputs.version }}
+          body_path: RELEASE_NOTES.md
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, '-alpha') || contains(steps.version.outputs.version, '-beta') || contains(steps.version.outputs.version, '-rc') }}
+          
+      - name: Upload CLI Binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./gorilla-cli
+          asset_name: gorilla-cli-linux-amd64
+          asset_content_type: application/octet-stream
+          
+      - name: Build and upload additional platforms
+        run: |
+          # Build for different platforms
+          GOOS=darwin GOARCH=amd64 VERSION=${{ steps.version.outputs.version }} go build $(make -f Makefile -p | grep LDFLAGS | head -1 | cut -d'=' -f2-) -o gorilla-cli-darwin-amd64 ./cmd/gorilla-cli
+          GOOS=darwin GOARCH=arm64 VERSION=${{ steps.version.outputs.version }} go build $(make -f Makefile -p | grep LDFLAGS | head -1 | cut -d'=' -f2-) -o gorilla-cli-darwin-arm64 ./cmd/gorilla-cli
+          GOOS=windows GOARCH=amd64 VERSION=${{ steps.version.outputs.version }} go build $(make -f Makefile -p | grep LDFLAGS | head -1 | cut -d'=' -f2-) -o gorilla-cli-windows-amd64.exe ./cmd/gorilla-cli
+          
+      - name: Upload macOS AMD64 Binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./gorilla-cli-darwin-amd64
+          asset_name: gorilla-cli-darwin-amd64
+          asset_content_type: application/octet-stream
+          
+      - name: Upload macOS ARM64 Binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./gorilla-cli-darwin-arm64
+          asset_name: gorilla-cli-darwin-arm64
+          asset_content_type: application/octet-stream
+          
+      - name: Upload Windows Binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./gorilla-cli-windows-amd64.exe
+          asset_name: gorilla-cli-windows-amd64.exe
+          asset_content_type: application/octet-stream
+          
+      - name: Verify pkg.go.dev update
+        run: |
+          echo "Release ${{ steps.version.outputs.version }} has been created!"
+          echo "pkg.go.dev should automatically update within a few minutes."
+          echo "Check: https://pkg.go.dev/github.com/paveg/gorilla@${{ steps.version.outputs.version }}"
