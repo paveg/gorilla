@@ -1,0 +1,120 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          
+      - name: Setup Node.js for changelog tools
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          
+      - name: Install changelog tools
+        run: |
+          npm install -g conventional-changelog-cli
+          
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+          
+      - name: Run tests
+        run: make test
+        
+      - name: Run linting
+        run: make lint
+        
+      - name: Build CLI with version info
+        run: |
+          VERSION=${{ steps.version.outputs.version }} make release
+          
+      - name: Generate changelog
+        run: |
+          # Extract changelog for this version
+          if [ -f CHANGELOG.md ]; then
+            # Get the section between the first two version headers
+            awk '/^## \[Unreleased\]/{flag=1; next} /^## \[/{if(flag) exit} flag' CHANGELOG.md > RELEASE_NOTES.md
+            
+            # If release notes are empty, create a basic one
+            if [ ! -s RELEASE_NOTES.md ]; then
+              echo "### Changes" > RELEASE_NOTES.md
+              echo "- Bug fixes and improvements" >> RELEASE_NOTES.md
+            fi
+          else
+            echo "### Changes" > RELEASE_NOTES.md
+            echo "- Bug fixes and improvements" >> RELEASE_NOTES.md
+          fi
+          
+          # Add version information
+          echo "" >> RELEASE_NOTES.md
+          echo "### Build Information" >> RELEASE_NOTES.md
+          echo "- Version: ${{ steps.version.outputs.version }}" >> RELEASE_NOTES.md
+          echo "- Build Date: $(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> RELEASE_NOTES.md
+          echo "- Git Commit: $(git rev-parse --short HEAD)" >> RELEASE_NOTES.md
+          echo "- Go Version: $(go version | cut -d' ' -f3)" >> RELEASE_NOTES.md
+          
+      - name: Create GitHub Release
+        run: |
+          # Create release with gh CLI
+          PRERELEASE_FLAG=""
+          if [[ "${{ steps.version.outputs.version }}" == *"-alpha"* ]] || [[ "${{ steps.version.outputs.version }}" == *"-beta"* ]] || [[ "${{ steps.version.outputs.version }}" == *"-rc"* ]]; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
+          
+          gh release create "${{ steps.version.outputs.version }}" \
+            --title "Release ${{ steps.version.outputs.version }}" \
+            --notes-file RELEASE_NOTES.md \
+            $PRERELEASE_FLAG \
+            ./gorilla-cli#gorilla-cli-linux-amd64
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Build additional platforms
+        run: |
+          # Build for different platforms with direct ldflags
+          VERSION=${{ steps.version.outputs.version }}
+          BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          GIT_COMMIT=$(git rev-parse --short HEAD)
+          GO_VERSION=$(go version | cut -d' ' -f3)
+          
+          LDFLAGS="-X github.com/paveg/gorilla/internal/version.Version=${VERSION} -X github.com/paveg/gorilla/internal/version.BuildDate=${BUILD_DATE} -X github.com/paveg/gorilla/internal/version.GitCommit=${GIT_COMMIT} -X github.com/paveg/gorilla/internal/version.GitTag=${VERSION} -X github.com/paveg/gorilla/internal/version.GoVersion=${GO_VERSION}"
+          
+          GOOS=darwin GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o gorilla-cli-darwin-amd64 ./cmd/gorilla-cli
+          GOOS=darwin GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o gorilla-cli-darwin-arm64 ./cmd/gorilla-cli
+          GOOS=windows GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o gorilla-cli-windows-amd64.exe ./cmd/gorilla-cli
+          
+      - name: Upload additional platform binaries
+        run: |
+          # Upload additional platform binaries to release
+          gh release upload "${{ steps.version.outputs.version }}" \
+            ./gorilla-cli-darwin-amd64#gorilla-cli-darwin-amd64 \
+            ./gorilla-cli-darwin-arm64#gorilla-cli-darwin-arm64 \
+            ./gorilla-cli-windows-amd64.exe#gorilla-cli-windows-amd64.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Verify pkg.go.dev update
+        run: |
+          echo "Release ${{ steps.version.outputs.version }} has been created!"
+          echo "pkg.go.dev should automatically update within a few minutes."
+          echo "Check: https://pkg.go.dev/github.com/paveg/gorilla@${{ steps.version.outputs.version }}"

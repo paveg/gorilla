@@ -6,6 +6,20 @@
 BINARY_NAME=gorilla-cli
 CLI_PATH=./cmd/gorilla-cli
 
+# Version information
+VERSION ?= dev
+BUILD_DATE ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+GIT_COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+GIT_TAG ?= $(shell git describe --tags --exact-match 2>/dev/null || echo "unknown")
+GO_VERSION ?= $(shell go version | cut -d' ' -f3)
+
+# Build flags
+LDFLAGS := -ldflags "-X github.com/paveg/gorilla/internal/version.Version=$(VERSION) \
+	-X github.com/paveg/gorilla/internal/version.BuildDate=$(BUILD_DATE) \
+	-X github.com/paveg/gorilla/internal/version.GitCommit=$(GIT_COMMIT) \
+	-X github.com/paveg/gorilla/internal/version.GitTag=$(GIT_TAG) \
+	-X github.com/paveg/gorilla/internal/version.GoVersion=$(GO_VERSION)"
+
 # Default target executed when you run `make`
 all: help
 
@@ -14,6 +28,7 @@ help:
 	@echo ""
 	@echo "Targets:"
 	@echo "  build            Build the ${BINARY_NAME} binary to the project root."
+	@echo "  release          Build a release binary with version information."
 	@echo "  test             Run all Go tests."
 	@echo "  lint             Run golangci-lint to check the code."
 	@echo "  fmt              Format Go source files with gofmt."
@@ -25,6 +40,10 @@ help:
 build:
 	@echo "Building ${BINARY_NAME}..."
 	@go build -o ${BINARY_NAME} ${CLI_PATH}
+
+release:
+	@echo "Building release ${BINARY_NAME} with version information..."
+	@go build $(LDFLAGS) -o ${BINARY_NAME} ${CLI_PATH}
 
 test:
 	@echo "Running tests..."

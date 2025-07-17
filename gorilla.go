@@ -74,6 +74,7 @@ import (
 	"github.com/paveg/gorilla/internal/dataframe"
 	"github.com/paveg/gorilla/internal/expr"
 	"github.com/paveg/gorilla/internal/series"
+	"github.com/paveg/gorilla/internal/version"
 )
 
 // ISeries provides a type-erased interface for Series of any supported type.
@@ -618,6 +619,35 @@ func Concat(exprs ...expr.Expr) *expr.FunctionExpr {
 // Returns a concrete *expr.CaseExpr for optimal performance and type safety.
 func Case() *expr.CaseExpr {
 	return expr.Case()
+}
+
+// Version returns the current library version.
+//
+// This returns the semantic version of the Gorilla DataFrame library.
+// During development, this may return "dev". In releases, it returns
+// the tagged version (e.g., "v1.0.0").
+//
+// Example:
+//
+//	fmt.Printf("Using Gorilla DataFrame Library %s\n", gorilla.Version())
+func Version() string {
+	return version.Version
+}
+
+// BuildInfo returns detailed build information.
+//
+// This includes version, build date, Git commit, Go version, and
+// dependency information. Useful for debugging and support.
+//
+// Example:
+//
+//	info := gorilla.BuildInfo()
+//	fmt.Printf("Version: %s\n", info.Version)
+//	fmt.Printf("Build Date: %s\n", info.BuildDate)
+//	fmt.Printf("Git Commit: %s\n", info.GitCommit)
+//	fmt.Printf("Go Version: %s\n", info.GoVersion)
+func BuildInfo() version.BuildInfo {
+	return version.Info()
 }
 
 // Expression methods are now available directly on the concrete expression types

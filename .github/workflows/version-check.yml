@@ -1,0 +1,89 @@
+name: Version Check
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  version-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          
+      - name: Check for version changes
+        run: |
+          echo "Checking for version-related changes..."
+          
+          # Check if this is a release PR (has version tag changes)
+          if git diff --name-only HEAD~1 HEAD | grep -E "(CHANGELOG\.md|version\.go|go\.mod)" > /dev/null; then
+            echo "✓ Version-related files changed"
+            
+            # Check if CHANGELOG.md was updated
+            if git diff --name-only HEAD~1 HEAD | grep "CHANGELOG.md" > /dev/null; then
+              echo "✓ CHANGELOG.md updated"
+            else
+              echo "⚠️  CHANGELOG.md not updated - consider adding changelog entry"
+            fi
+          else
+            echo "No version-related changes detected"
+          fi
+          
+      - name: Check for breaking changes
+        run: |
+          echo "Checking for potential breaking changes..."
+          
+          # Check for removed or changed public APIs
+          if git diff --name-only HEAD~1 HEAD | grep -E "\.go$" | grep -v "_test.go" > /dev/null; then
+            echo "Go source files changed - reviewing for breaking changes"
+            
+            # Look for removed or changed public functions/types
+            if git diff HEAD~1 HEAD -- "*.go" | grep -E "^-.*func.*[A-Z]" > /dev/null; then
+              echo "⚠️  Potential breaking change detected - public function removed/changed"
+              echo "If this is a breaking change, ensure major version is bumped"
+            fi
+            
+            if git diff HEAD~1 HEAD -- "*.go" | grep -E "^-.*type.*[A-Z]" > /dev/null; then
+              echo "⚠️  Potential breaking change detected - public type removed/changed"
+              echo "If this is a breaking change, ensure major version is bumped"
+            fi
+          fi
+          
+      - name: Test version functionality
+        run: |
+          echo "Testing version functionality..."
+          
+          # Build CLI and test version command
+          make build
+          
+          # Test version command
+          ./gorilla-cli --version
+          
+          # Test that version package works
+          mkdir -p /tmp/version_test
+          echo 'package main; import "github.com/paveg/gorilla"; func main() { println(gorilla.Version()) }' > /tmp/version_test/test_version.go
+          cd /tmp/version_test && go mod init test_version && go mod edit -replace=github.com/paveg/gorilla=/home/runner/work/gorilla/gorilla && go get github.com/paveg/gorilla && go run test_version.go
+          
+      - name: Check conventional commits
+        run: |
+          echo "Checking commit message format..."
+          
+          # Get the PR commits
+          COMMITS=$(git log --oneline HEAD~1..HEAD --pretty=format:"%s")
+          
+          # Check if commits follow conventional format
+          echo "$COMMITS" | while read commit; do
+            if echo "$commit" | grep -E "^(feat|fix|docs|style|refactor|test|chore)(\(.+\))?: .+" > /dev/null; then
+              echo "✓ Conventional commit: $commit"
+            else
+              echo "⚠️  Non-conventional commit: $commit"
+              echo "Consider using conventional commit format: type(scope): description"
+            fi
+          done

@@ -9,9 +9,10 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/paveg/gorilla"
+	"github.com/paveg/gorilla/internal/version"
 )
 
-const version = "0.1.0"
+// Remove hardcoded version - use version package instead
 
 func main() {
 	// Define flags
@@ -22,7 +23,7 @@ func main() {
 
 	// Customize usage message for -h, --help
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Gorilla DataFrame Library CLI (version %s)\n\n", version)
+		fmt.Fprintf(os.Stderr, "Gorilla DataFrame Library CLI (version %s)\n\n", version.Version)
 		fmt.Fprintf(os.Stderr, "Usage: gorilla-cli [options]\n\n")
 		fmt.Fprintf(os.Stderr, "Options:\n")
 		fmt.Fprintf(os.Stderr, "  --demo\n\t\tRun basic demo\n")
@@ -35,7 +36,7 @@ func main() {
 
 	// Handle version flag
 	if *versionFlag {
-		fmt.Printf("gorilla-cli version %s\n", version)
+		fmt.Print(version.Info().String())
 		return
 	}
 
