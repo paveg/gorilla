@@ -393,9 +393,10 @@ func TestExampleDataFrameJoin(t *testing.T) {
 func TestLazyFrame_String(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
-	df := gorilla.NewDataFrame(
-		gorilla.NewSeries("a", []int64{1, 2, 3}, mem),
-	)
+	series := gorilla.NewSeries("a", []int64{1, 2, 3}, mem)
+	defer series.Release()
+
+	df := gorilla.NewDataFrame(series)
 	defer df.Release()
 
 	lf := df.Lazy().Filter(gorilla.Col("a").Gt(gorilla.Lit(1)))
