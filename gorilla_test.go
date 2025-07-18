@@ -566,17 +566,36 @@ func TestExpression_Mean(t *testing.T) {
 		t.Errorf("Expected 2 rows, got %d", result.Len())
 	}
 
-	// Check average for Eng department (should be 110)
+	// Check averages for both departments
 	deptCol, _ := result.Column("dept")
 	avgCol, _ := result.Column("avg_salary")
 	deptArr := deptCol.Array().(*array.String)
 	avgArr := avgCol.Array().(*array.Float64)
 
+	expectedAvgs := map[string]float64{
+		"Eng":   110.0, // (100 + 120) / 2
+		"Sales": 85.0,  // (80 + 90) / 2
+	}
+
+	foundDepts := make(map[string]bool)
 	for i := 0; i < result.Len(); i++ {
-		if deptArr.Value(i) == "Eng" {
-			if avgArr.Value(i) != 110.0 {
-				t.Errorf("Expected avg salary for Eng to be 110, got %f", avgArr.Value(i))
+		dept := deptArr.Value(i)
+		avg := avgArr.Value(i)
+		
+		if expectedAvg, exists := expectedAvgs[dept]; exists {
+			foundDepts[dept] = true
+			if avg != expectedAvg {
+				t.Errorf("Expected avg salary for %s to be %f, got %f", dept, expectedAvg, avg)
 			}
+		} else {
+			t.Errorf("Unexpected department: %s", dept)
+		}
+	}
+
+	// Ensure both departments were found
+	for dept := range expectedAvgs {
+		if !foundDepts[dept] {
+			t.Errorf("Department %s not found in results", dept)
 		}
 	}
 }
