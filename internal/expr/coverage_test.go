@@ -13,7 +13,7 @@ import (
 // TestColumnExpr_ArithmeticOperations tests arithmetic operations on ColumnExpr
 func TestColumnExpr_ArithmeticOperations(t *testing.T) {
 	col := Col("value")
-	
+
 	tests := []struct {
 		name     string
 		expr     *BinaryExpr
@@ -30,7 +30,7 @@ func TestColumnExpr_ArithmeticOperations(t *testing.T) {
 			expected: OpDiv,
 		},
 		{
-			name:     "column multiplication", 
+			name:     "column multiplication",
 			expr:     col.Mul(Lit(6)),
 			expected: OpMul,
 		},
@@ -53,11 +53,11 @@ func TestColumnExpr_ArithmeticOperations(t *testing.T) {
 // TestColumnExpr_ComparisonOperations tests comparison operations on ColumnExpr
 func TestColumnExpr_ComparisonOperations(t *testing.T) {
 	col := Col("value")
-	
+
 	tests := []struct {
-		name  string
-		expr  *BinaryExpr
-		op    BinaryOp
+		name string
+		expr *BinaryExpr
+		op   BinaryOp
 	}{
 		{
 			name: "column equals",
@@ -206,7 +206,7 @@ func TestEvaluator_BooleanOperations(t *testing.T) {
 	// Create test data
 	boolBuilder := array.NewBooleanBuilder(mem)
 	defer boolBuilder.Release()
-	
+
 	boolBuilder.AppendValues([]bool{true, false, true, false}, nil)
 	boolArray := boolBuilder.NewArray()
 	defer boolArray.Release()

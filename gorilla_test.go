@@ -571,7 +571,7 @@ func TestExpression_Mean(t *testing.T) {
 	avgCol, _ := result.Column("avg_salary")
 	deptArr := deptCol.Array().(*array.String)
 	avgArr := avgCol.Array().(*array.Float64)
-	
+
 	for i := 0; i < result.Len(); i++ {
 		if deptArr.Value(i) == "Eng" {
 			if avgArr.Value(i) != 110.0 {
@@ -606,7 +606,7 @@ func TestExpression_Min(t *testing.T) {
 	minCol, _ := result.Column("min_salary")
 	deptArr := deptCol.Array().(*array.String)
 	minArr := minCol.Array().(*array.Float64)
-	
+
 	for i := 0; i < result.Len(); i++ {
 		if deptArr.Value(i) == "Sales" {
 			if minArr.Value(i) != 80.0 {
@@ -641,7 +641,7 @@ func TestExpression_Max(t *testing.T) {
 	maxCol, _ := result.Column("max_salary")
 	deptArr := deptCol.Array().(*array.String)
 	maxArr := maxCol.Array().(*array.Float64)
-	
+
 	for i := 0; i < result.Len(); i++ {
 		if deptArr.Value(i) == "Eng" {
 			if maxArr.Value(i) != 120.0 {
