@@ -835,8 +835,16 @@ func (gb *GroupBy) extractGroupColumnValues(series ISeries) []string {
 	originalArray := series.Array()
 	defer originalArray.Release()
 
+	// Get sorted group keys to ensure deterministic order
+	var groupKeys []string
+	for key := range gb.groups {
+		groupKeys = append(groupKeys, key)
+	}
+	sort.Strings(groupKeys)
+
 	// Extract first value from each group (all values in a group are the same)
-	for _, indices := range gb.groups {
+	for _, key := range groupKeys {
+		indices := gb.groups[key]
 		if len(indices) > 0 {
 			rowIdx := indices[0]
 			if rowIdx < originalArray.Len() && !originalArray.IsNull(rowIdx) {
@@ -867,7 +875,15 @@ func (gb *GroupBy) performAggregation(series ISeries, agg *expr.AggregationExpr)
 	originalArray := series.Array()
 	defer originalArray.Release()
 
-	for _, indices := range gb.groups {
+	// Get sorted group keys to ensure deterministic order
+	var groupKeys []string
+	for key := range gb.groups {
+		groupKeys = append(groupKeys, key)
+	}
+	sort.Strings(groupKeys)
+
+	for _, key := range groupKeys {
+		indices := gb.groups[key]
 		result := gb.aggregateGroup(originalArray, indices, agg.AggType())
 		results = append(results, result)
 	}
