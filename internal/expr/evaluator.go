@@ -1120,12 +1120,21 @@ func (e *Evaluator) EvaluateWindow(expr *WindowExpr, columns map[string]arrow.Ar
 func (e *Evaluator) evaluateWindowFunction(expr *WindowFunctionExpr, window *WindowSpec, columns map[string]arrow.Array) (arrow.Array, error) {
 	dataLength := getDataLength(columns)
 
+	// Try parallel execution for supported functions
 	switch expr.funcName {
 	case "ROW_NUMBER":
 		return e.evaluateRowNumber(window, columns, dataLength)
 	case "RANK":
+		// Try parallel execution first, fall back to sequential if needed
+		if e.shouldUseWindowParallelExecution(window, columns, dataLength) {
+			return e.evaluateRankParallel(window, columns, dataLength)
+		}
 		return e.evaluateRank(window, columns, dataLength)
 	case "DENSE_RANK":
+		// Try parallel execution first, fall back to sequential if needed
+		if e.shouldUseWindowParallelExecution(window, columns, dataLength) {
+			return e.evaluateDenseRankParallel(window, columns, dataLength)
+		}
 		return e.evaluateDenseRank(window, columns, dataLength)
 	case "LAG":
 		return e.evaluateLag(expr, window, columns, dataLength)
