@@ -134,7 +134,7 @@ func (e *Evaluator) evaluateWindowFunctionParallel(
 	}
 
 	// Build the final result array
-	return e.buildWindowResult(results, dataLength, "int64")
+	return e.buildWindowResult(results, dataLength, typeInt64)
 }
 
 // executePartitionsParallel executes window function partitions in parallel
@@ -279,7 +279,7 @@ func (e *Evaluator) processDenseRankPartition(
 	return results, nil
 }
 
-// sortPartitionParallel sorts a partition using parallel merge sort for large partitions
+// sortPartitionParallel sorts a partition with adaptive threshold for parallelization
 func (e *Evaluator) sortPartitionParallel(
 	partition []int,
 	orderBy []OrderByExpr,
@@ -291,21 +291,20 @@ func (e *Evaluator) sortPartitionParallel(
 		return e.sortPartition(partition, orderBy, columns)
 	}
 
-	// For very large partitions, use parallel merge sort
-	// This is a simplified implementation - in production you might want
-	// a more sophisticated parallel sorting algorithm
-	return e.parallelMergeSort(partition, orderBy, columns)
+	// For very large partitions, attempt parallel sort
+	// Currently falls back to sequential sort
+	return e.sortPartitionWithFallback(partition, orderBy, columns)
 }
 
-// parallelMergeSort implements a basic parallel merge sort
-func (e *Evaluator) parallelMergeSort(
+// sortPartitionWithFallback performs a sequential sort as a fallback mechanism
+func (e *Evaluator) sortPartitionWithFallback(
 	partition []int,
 	orderBy []OrderByExpr,
 	columns map[string]arrow.Array,
 ) []int {
-	// For now, fall back to standard sort - parallel merge sort is complex
-	// and might be overkill for most use cases
-	// TODO: Implement true parallel merge sort if benchmarks show benefit
+	// This function currently uses a standard sequential sort.
+	// Implementing a parallel merge sort could be considered in the future
+	// if benchmarks demonstrate significant performance benefits.
 	return e.sortPartition(partition, orderBy, columns)
 }
 
@@ -374,7 +373,10 @@ func (e *Evaluator) shouldUseWindowParallelExecution(
 
 // getWindowParallelConfig returns the parallel configuration for window functions
 func (e *Evaluator) getWindowParallelConfig() *WindowParallelConfig {
-	// For now, return default config
-	// TODO: Integrate with global configuration system
+	// Currently, this function returns a default configuration for parallel execution.
+	// TODO: Integrate with global configuration system to allow dynamic configuration.
+	// Implications: Until integration is complete, any changes to the global configuration
+	// will not affect the behavior of this function. Developers should ensure that the
+	// default configuration is suitable for their use cases.
 	return DefaultWindowParallelConfig()
 }
