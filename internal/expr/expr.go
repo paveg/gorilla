@@ -909,3 +909,120 @@ func Minute(expr Expr) *FunctionExpr {
 func Second(expr Expr) *FunctionExpr {
 	return &FunctionExpr{name: "second", args: []Expr{expr}}
 }
+
+// Date/Time Interval Types
+
+// IntervalType represents different types of time intervals
+type IntervalType int
+
+const (
+	IntervalDays IntervalType = iota
+	IntervalHours
+	IntervalMinutes
+	IntervalMonths
+	IntervalYears
+)
+
+// IntervalExpr represents a time interval value and type
+type IntervalExpr struct {
+	value        int64
+	intervalType IntervalType
+}
+
+func (i *IntervalExpr) Type() ExprType {
+	return ExprLiteral // Intervals are treated as literals
+}
+
+func (i *IntervalExpr) String() string {
+	var unit string
+	switch i.intervalType {
+	case IntervalDays:
+		unit = "days"
+	case IntervalHours:
+		unit = "hours"
+	case IntervalMinutes:
+		unit = "minutes"
+	case IntervalMonths:
+		unit = "months"
+	case IntervalYears:
+		unit = "years"
+	}
+	return fmt.Sprintf("interval(%d %s)", i.value, unit)
+}
+
+func (i *IntervalExpr) Value() int64 {
+	return i.value
+}
+
+func (i *IntervalExpr) IntervalType() IntervalType {
+	return i.intervalType
+}
+
+// Interval constructor functions
+
+// Days creates an interval representing days
+func Days(value int64) *IntervalExpr {
+	return &IntervalExpr{value: value, intervalType: IntervalDays}
+}
+
+// Hours creates an interval representing hours
+func Hours(value int64) *IntervalExpr {
+	return &IntervalExpr{value: value, intervalType: IntervalHours}
+}
+
+// Minutes creates an interval representing minutes
+func Minutes(value int64) *IntervalExpr {
+	return &IntervalExpr{value: value, intervalType: IntervalMinutes}
+}
+
+// Months creates an interval representing months
+func Months(value int64) *IntervalExpr {
+	return &IntervalExpr{value: value, intervalType: IntervalMonths}
+}
+
+// Years creates an interval representing years
+func Years(value int64) *IntervalExpr {
+	return &IntervalExpr{value: value, intervalType: IntervalYears}
+}
+
+// Date/Time Arithmetic Functions
+
+// DateAdd creates a DATE_ADD function expression to add interval to date/time
+func DateAdd(dateExpr Expr, intervalExpr *IntervalExpr) *FunctionExpr {
+	return &FunctionExpr{name: "date_add", args: []Expr{dateExpr, intervalExpr}}
+}
+
+// DateSub creates a DATE_SUB function expression to subtract interval from date/time
+func DateSub(dateExpr Expr, intervalExpr *IntervalExpr) *FunctionExpr {
+	return &FunctionExpr{name: "date_sub", args: []Expr{dateExpr, intervalExpr}}
+}
+
+// DateDiff creates a DATE_DIFF function expression to calculate difference between dates
+func DateDiff(startDate, endDate Expr, unit string) *FunctionExpr {
+	unitLiteral := &LiteralExpr{value: unit}
+	return &FunctionExpr{name: "date_diff", args: []Expr{startDate, endDate, unitLiteral}}
+}
+
+// Date/Time Arithmetic methods for ColumnExpr
+
+// DateAdd adds an interval to a date/time column
+func (c *ColumnExpr) DateAdd(intervalExpr *IntervalExpr) *FunctionExpr {
+	return DateAdd(c, intervalExpr)
+}
+
+// DateSub subtracts an interval from a date/time column
+func (c *ColumnExpr) DateSub(intervalExpr *IntervalExpr) *FunctionExpr {
+	return DateSub(c, intervalExpr)
+}
+
+// Date/Time Arithmetic methods for FunctionExpr
+
+// DateAdd adds an interval to a date/time function result
+func (f *FunctionExpr) DateAdd(intervalExpr *IntervalExpr) *FunctionExpr {
+	return DateAdd(f, intervalExpr)
+}
+
+// DateSub subtracts an interval from a date/time function result
+func (f *FunctionExpr) DateSub(intervalExpr *IntervalExpr) *FunctionExpr {
+	return DateSub(f, intervalExpr)
+}

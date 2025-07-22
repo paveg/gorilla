@@ -19,6 +19,21 @@ const (
 
 	// Time constants
 	nanosPerSecond = 1e9
+
+	// Date/time arithmetic constants
+	dateAddArgsCount  = 2
+	dateSubArgsCount  = 2
+	dateDiffArgsCount = 3
+	hoursPerDay       = 24
+	monthsPerYear     = 12
+
+	// Date/time unit constants
+	unitDays    = "days"
+	unitHours   = "hours"
+	unitMinutes = "minutes"
+	unitSeconds = "seconds"
+	unitMonths  = "months"
+	unitYears   = "years"
 )
 
 // Type hierarchy levels
@@ -1008,6 +1023,12 @@ func (e *Evaluator) evaluateFunction(expr *FunctionExpr, columns map[string]arro
 		return e.evaluateDateTimeFunction(expr, columns, extractMinute)
 	case "second":
 		return e.evaluateDateTimeFunction(expr, columns, extractSecond)
+	case "date_add":
+		return e.evaluateDateAdd(expr, columns)
+	case "date_sub":
+		return e.evaluateDateSub(expr, columns)
+	case "date_diff":
+		return e.evaluateDateDiff(expr, columns)
 	default:
 		return nil, fmt.Errorf("unsupported function: %s", expr.name)
 	}
@@ -1080,6 +1101,302 @@ func (e *Evaluator) evaluateDateTimeFunction(expr *FunctionExpr, columns map[str
 	}
 
 	return builder.NewArray(), nil
+}
+
+// evaluateDateAdd evaluates DATE_ADD function to add interval to date/time
+func (e *Evaluator) evaluateDateAdd(expr *FunctionExpr, columns map[string]arrow.Array) (arrow.Array, error) {
+	if len(expr.args) != dateAddArgsCount {
+		return nil, fmt.Errorf("date_add function requires exactly %d arguments, got %d", dateAddArgsCount, len(expr.args))
+	}
+
+	// Evaluate the date argument
+	dateArg, err := e.Evaluate(expr.args[0], columns)
+	if err != nil {
+		return nil, fmt.Errorf("evaluating date argument for date_add: %w", err)
+	}
+	defer dateArg.Release()
+
+	// Check if the date argument is a timestamp array
+	timestampArr, ok := dateArg.(*array.Timestamp)
+	if !ok {
+		return nil, fmt.Errorf("date_add function requires a timestamp argument, got %T", dateArg)
+	}
+
+	// Get the interval argument - should be an IntervalExpr
+	intervalArg := expr.args[1]
+	intervalExpr, ok := intervalArg.(*IntervalExpr)
+	if !ok {
+		return nil, fmt.Errorf("date_add function requires an interval argument, got %T", intervalArg)
+	}
+
+	// Validate the interval type is supported
+	if !e.isValidIntervalType(intervalExpr.IntervalType()) {
+		return nil, fmt.Errorf("date_add function unsupported interval type: %v", intervalExpr.IntervalType())
+	}
+
+	// Build the result array
+	builder := array.NewTimestampBuilder(e.mem, &arrow.TimestampType{Unit: arrow.Nanosecond})
+	defer builder.Release()
+
+	for i := 0; i < timestampArr.Len(); i++ {
+		if timestampArr.IsNull(i) {
+			builder.AppendNull()
+			continue
+		}
+
+		// Convert Arrow timestamp to Go time.Time
+		tsValue := timestampArr.Value(i)
+		nanos := int64(tsValue)
+		t := time.Unix(nanos/nanosPerSecond, nanos%nanosPerSecond).UTC()
+
+		// Add the interval
+		result := e.addInterval(t, intervalExpr)
+
+		// Convert back to nanoseconds and append
+		resultNanos := result.UnixNano()
+		builder.Append(arrow.Timestamp(resultNanos))
+	}
+
+	return builder.NewArray(), nil
+}
+
+// evaluateDateSub evaluates DATE_SUB function to subtract interval from date/time
+func (e *Evaluator) evaluateDateSub(expr *FunctionExpr, columns map[string]arrow.Array) (arrow.Array, error) {
+	if len(expr.args) != dateSubArgsCount {
+		return nil, fmt.Errorf("date_sub function requires exactly %d arguments, got %d", dateSubArgsCount, len(expr.args))
+	}
+
+	// Evaluate the date argument
+	dateArg, err := e.Evaluate(expr.args[0], columns)
+	if err != nil {
+		return nil, fmt.Errorf("evaluating date argument for date_sub: %w", err)
+	}
+	defer dateArg.Release()
+
+	// Check if the date argument is a timestamp array
+	timestampArr, ok := dateArg.(*array.Timestamp)
+	if !ok {
+		return nil, fmt.Errorf("date_sub function requires a timestamp argument, got %T", dateArg)
+	}
+
+	// Get the interval argument - should be an IntervalExpr
+	intervalArg := expr.args[1]
+	intervalExpr, ok := intervalArg.(*IntervalExpr)
+	if !ok {
+		return nil, fmt.Errorf("date_sub function requires an interval argument, got %T", intervalArg)
+	}
+
+	// Validate the interval type is supported
+	if !e.isValidIntervalType(intervalExpr.IntervalType()) {
+		return nil, fmt.Errorf("date_sub function unsupported interval type: %v", intervalExpr.IntervalType())
+	}
+
+	// Build the result array
+	builder := array.NewTimestampBuilder(e.mem, &arrow.TimestampType{Unit: arrow.Nanosecond})
+	defer builder.Release()
+
+	for i := 0; i < timestampArr.Len(); i++ {
+		if timestampArr.IsNull(i) {
+			builder.AppendNull()
+			continue
+		}
+
+		// Convert Arrow timestamp to Go time.Time
+		tsValue := timestampArr.Value(i)
+		nanos := int64(tsValue)
+		t := time.Unix(nanos/nanosPerSecond, nanos%nanosPerSecond).UTC()
+
+		// Subtract the interval (add negative)
+		result := e.subtractInterval(t, intervalExpr)
+
+		// Convert back to nanoseconds and append
+		resultNanos := result.UnixNano()
+		builder.Append(arrow.Timestamp(resultNanos))
+	}
+
+	return builder.NewArray(), nil
+}
+
+// evaluateDateDiff evaluates DATE_DIFF function to calculate difference between dates
+func (e *Evaluator) evaluateDateDiff(expr *FunctionExpr, columns map[string]arrow.Array) (arrow.Array, error) {
+	if len(expr.args) != dateDiffArgsCount {
+		return nil, fmt.Errorf("date_diff function requires exactly %d arguments, got %d", dateDiffArgsCount, len(expr.args))
+	}
+
+	// Evaluate the start date argument
+	startArg, err := e.Evaluate(expr.args[0], columns)
+	if err != nil {
+		return nil, fmt.Errorf("evaluating start date argument for date_diff: %w", err)
+	}
+	defer startArg.Release()
+
+	// Evaluate the end date argument
+	endArg, err := e.Evaluate(expr.args[1], columns)
+	if err != nil {
+		return nil, fmt.Errorf("evaluating end date argument for date_diff: %w", err)
+	}
+	defer endArg.Release()
+
+	// Check if both date arguments are timestamp arrays
+	startTimestampArr, ok := startArg.(*array.Timestamp)
+	if !ok {
+		return nil, fmt.Errorf("date_diff function requires timestamp arguments, got start: %T", startArg)
+	}
+
+	endTimestampArr, ok := endArg.(*array.Timestamp)
+	if !ok {
+		return nil, fmt.Errorf("date_diff function requires timestamp arguments, got end: %T", endArg)
+	}
+
+	// Get the unit argument - should be a string literal
+	unitArg := expr.args[2]
+	unitLiteral, ok := unitArg.(*LiteralExpr)
+	if !ok {
+		return nil, fmt.Errorf("date_diff function requires a string unit argument, got %T", unitArg)
+	}
+
+	unit, ok := unitLiteral.Value().(string)
+	if !ok {
+		return nil, fmt.Errorf("date_diff function unit must be a string, got %T", unitLiteral.Value())
+	}
+
+	// Validate the unit is supported
+	if !e.isValidDateDiffUnit(unit) {
+		return nil, fmt.Errorf("date_diff function unsupported unit: %s (supported units: %s, %s, %s, %s, %s, %s)",
+			unit, unitDays, unitHours, unitMinutes, unitSeconds, unitMonths, unitYears)
+	}
+
+	// Ensure both arrays have the same length
+	if startTimestampArr.Len() != endTimestampArr.Len() {
+		return nil, fmt.Errorf("date_diff function requires arrays of equal length: start=%d, end=%d",
+			startTimestampArr.Len(), endTimestampArr.Len())
+	}
+
+	// Build the result array
+	builder := array.NewInt64Builder(e.mem)
+	defer builder.Release()
+
+	for i := 0; i < startTimestampArr.Len(); i++ {
+		if startTimestampArr.IsNull(i) || endTimestampArr.IsNull(i) {
+			builder.AppendNull()
+			continue
+		}
+
+		// Convert Arrow timestamps to Go time.Time
+		startNanos := int64(startTimestampArr.Value(i))
+		endNanos := int64(endTimestampArr.Value(i))
+
+		startTime := time.Unix(startNanos/nanosPerSecond, startNanos%nanosPerSecond).UTC()
+		endTime := time.Unix(endNanos/nanosPerSecond, endNanos%nanosPerSecond).UTC()
+
+		// Calculate the difference based on unit
+		diff := e.calculateDateDiff(startTime, endTime, unit)
+		builder.Append(diff)
+	}
+
+	return builder.NewArray(), nil
+}
+
+// addInterval adds an interval to a time value
+func (e *Evaluator) addInterval(t time.Time, interval *IntervalExpr) time.Time {
+	value := interval.Value()
+
+	switch interval.IntervalType() {
+	case IntervalDays:
+		return t.AddDate(0, 0, int(value))
+	case IntervalHours:
+		return t.Add(time.Duration(value) * time.Hour)
+	case IntervalMinutes:
+		return t.Add(time.Duration(value) * time.Minute)
+	case IntervalMonths:
+		return t.AddDate(0, int(value), 0)
+	case IntervalYears:
+		return t.AddDate(int(value), 0, 0)
+	default:
+		// This should never happen due to validation, but being explicit
+		return t
+	}
+}
+
+// subtractInterval subtracts an interval from a time value
+func (e *Evaluator) subtractInterval(t time.Time, interval *IntervalExpr) time.Time {
+	value := interval.Value()
+
+	switch interval.IntervalType() {
+	case IntervalDays:
+		return t.AddDate(0, 0, -int(value))
+	case IntervalHours:
+		return t.Add(-time.Duration(value) * time.Hour)
+	case IntervalMinutes:
+		return t.Add(-time.Duration(value) * time.Minute)
+	case IntervalMonths:
+		return t.AddDate(0, -int(value), 0)
+	case IntervalYears:
+		return t.AddDate(-int(value), 0, 0)
+	default:
+		// This should never happen due to validation, but being explicit
+		return t
+	}
+}
+
+// isValidDateDiffUnit validates if a date diff unit is supported
+func (e *Evaluator) isValidDateDiffUnit(unit string) bool {
+	switch unit {
+	case unitDays, unitHours, unitMinutes, unitSeconds, unitMonths, unitYears:
+		return true
+	default:
+		return false
+	}
+}
+
+// isValidIntervalType validates if an interval type is supported
+func (e *Evaluator) isValidIntervalType(intervalType IntervalType) bool {
+	switch intervalType {
+	case IntervalDays, IntervalHours, IntervalMinutes, IntervalMonths, IntervalYears:
+		return true
+	default:
+		return false
+	}
+}
+
+// calculateDateDiff calculates the difference between two dates in the specified unit
+func (e *Evaluator) calculateDateDiff(startTime, endTime time.Time, unit string) int64 {
+	switch unit {
+	case unitDays:
+		diff := endTime.Sub(startTime)
+		return int64(diff / (hoursPerDay * time.Hour))
+	case unitHours:
+		diff := endTime.Sub(startTime)
+		return int64(diff / time.Hour)
+	case unitMinutes:
+		diff := endTime.Sub(startTime)
+		return int64(diff / time.Minute)
+	case unitSeconds:
+		diff := endTime.Sub(startTime)
+		return int64(diff / time.Second)
+	case unitMonths:
+		years := endTime.Year() - startTime.Year()
+		months := int(endTime.Month()) - int(startTime.Month())
+		totalMonths := years*monthsPerYear + months
+
+		// Adjust if end day is before start day in the month
+		if endTime.Day() < startTime.Day() {
+			totalMonths--
+		}
+		return int64(totalMonths)
+	case unitYears:
+		years := endTime.Year() - startTime.Year()
+
+		// Adjust if end date is before start date in the year
+		if endTime.Month() < startTime.Month() ||
+			(endTime.Month() == startTime.Month() && endTime.Day() < startTime.Day()) {
+			years--
+		}
+		return int64(years)
+	default:
+		// This should never happen due to validation, but being explicit
+		return 0
+	}
 }
 
 // EvaluateWindow evaluates a window expression
