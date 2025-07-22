@@ -26,6 +26,14 @@ const (
 	dateDiffArgsCount = 3
 	hoursPerDay       = 24
 	monthsPerYear     = 12
+
+	// Date/time unit constants
+	unitDays    = "days"
+	unitHours   = "hours"
+	unitMinutes = "minutes"
+	unitSeconds = "seconds"
+	unitMonths  = "months"
+	unitYears   = "years"
 )
 
 // Type hierarchy levels
@@ -1121,6 +1129,11 @@ func (e *Evaluator) evaluateDateAdd(expr *FunctionExpr, columns map[string]arrow
 		return nil, fmt.Errorf("date_add function requires an interval argument, got %T", intervalArg)
 	}
 
+	// Validate the interval type is supported
+	if !e.isValidIntervalType(intervalExpr.IntervalType()) {
+		return nil, fmt.Errorf("date_add function unsupported interval type: %v", intervalExpr.IntervalType())
+	}
+
 	// Build the result array
 	builder := array.NewTimestampBuilder(e.mem, &arrow.TimestampType{Unit: arrow.Nanosecond})
 	defer builder.Release()
@@ -1171,6 +1184,11 @@ func (e *Evaluator) evaluateDateSub(expr *FunctionExpr, columns map[string]arrow
 	intervalExpr, ok := intervalArg.(*IntervalExpr)
 	if !ok {
 		return nil, fmt.Errorf("date_sub function requires an interval argument, got %T", intervalArg)
+	}
+
+	// Validate the interval type is supported
+	if !e.isValidIntervalType(intervalExpr.IntervalType()) {
+		return nil, fmt.Errorf("date_sub function unsupported interval type: %v", intervalExpr.IntervalType())
 	}
 
 	// Build the result array
@@ -1242,6 +1260,12 @@ func (e *Evaluator) evaluateDateDiff(expr *FunctionExpr, columns map[string]arro
 		return nil, fmt.Errorf("date_diff function unit must be a string, got %T", unitLiteral.Value())
 	}
 
+	// Validate the unit is supported
+	if !e.isValidDateDiffUnit(unit) {
+		return nil, fmt.Errorf("date_diff function unsupported unit: %s (supported units: %s, %s, %s, %s, %s, %s)",
+			unit, unitDays, unitHours, unitMinutes, unitSeconds, unitMonths, unitYears)
+	}
+
 	// Ensure both arrays have the same length
 	if startTimestampArr.Len() != endTimestampArr.Len() {
 		return nil, fmt.Errorf("date_diff function requires arrays of equal length: start=%d, end=%d",
@@ -1289,7 +1313,8 @@ func (e *Evaluator) addInterval(t time.Time, interval *IntervalExpr) time.Time {
 	case IntervalYears:
 		return t.AddDate(int(value), 0, 0)
 	default:
-		return t // Invalid interval type, return original time
+		// This should never happen due to validation, but being explicit
+		return t
 	}
 }
 
@@ -1309,26 +1334,47 @@ func (e *Evaluator) subtractInterval(t time.Time, interval *IntervalExpr) time.T
 	case IntervalYears:
 		return t.AddDate(-int(value), 0, 0)
 	default:
-		return t // Invalid interval type, return original time
+		// This should never happen due to validation, but being explicit
+		return t
+	}
+}
+
+// isValidDateDiffUnit validates if a date diff unit is supported
+func (e *Evaluator) isValidDateDiffUnit(unit string) bool {
+	switch unit {
+	case unitDays, unitHours, unitMinutes, unitSeconds, unitMonths, unitYears:
+		return true
+	default:
+		return false
+	}
+}
+
+// isValidIntervalType validates if an interval type is supported
+func (e *Evaluator) isValidIntervalType(intervalType IntervalType) bool {
+	switch intervalType {
+	case IntervalDays, IntervalHours, IntervalMinutes, IntervalMonths, IntervalYears:
+		return true
+	default:
+		return false
 	}
 }
 
 // calculateDateDiff calculates the difference between two dates in the specified unit
 func (e *Evaluator) calculateDateDiff(startTime, endTime time.Time, unit string) int64 {
 	switch unit {
-	case "days":
+	case unitDays:
 		diff := endTime.Sub(startTime)
 		return int64(diff / (hoursPerDay * time.Hour))
-	case "hours":
+	case unitHours:
 		diff := endTime.Sub(startTime)
 		return int64(diff / time.Hour)
-	case "minutes":
+	case unitMinutes:
 		diff := endTime.Sub(startTime)
 		return int64(diff / time.Minute)
-	case "seconds":
+	case unitSeconds:
 		diff := endTime.Sub(startTime)
 		return int64(diff / time.Second)
-	case "months":
+	case unitMonths:
 		years := endTime.Year() - startTime.Year()
 		months := int(endTime.Month()) - int(startTime.Month())
 		totalMonths := years*monthsPerYear + months
@@ -1338,7 +1384,7 @@ func (e *Evaluator) calculateDateDiff(startTime, endTime time.Time, unit string)
 			totalMonths--
 		}
 		return int64(totalMonths)
-	case "years":
+	case unitYears:
 		years := endTime.Year() - startTime.Year()
 
 		// Adjust if end date is before start date in the year
@@ -1348,7 +1394,8 @@ func (e *Evaluator) calculateDateDiff(startTime, endTime time.Time, unit string)
 		}
 		return int64(years)
 	default:
-		return 0 // Unsupported unit, return 0
+		// This should never happen due to validation, but being explicit
+		return 0
 	}
 }
 

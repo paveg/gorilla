@@ -482,13 +482,9 @@ func TestUnsupportedDateDiffUnit(t *testing.T) {
 		"end_col":   timestampArray,
 	}
 
-	// Test unsupported unit
+	// Test unsupported unit - should now return an error for better error visibility
 	expr := DateDiff(Col("start_col"), Col("end_col"), "invalid_unit")
-	result, err := evaluator.Evaluate(expr, columns)
-	require.NoError(t, err)
-	defer result.Release()
-
-	int64Result, ok := result.(*array.Int64)
-	require.True(t, ok)
-	assert.Equal(t, int64(0), int64Result.Value(0)) // Should return 0 for unsupported unit
+	_, err := evaluator.Evaluate(expr, columns)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "date_diff function unsupported unit: invalid_unit")
 }
