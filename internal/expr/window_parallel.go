@@ -546,9 +546,6 @@ func (e *Evaluator) executeOffsetPartitionsParallel(
 	// Process partitions in parallel
 	results := parallel.ProcessIndexed(wp, tasks,
 		func(taskIndex int, task offsetPartitionTask) offsetPartitionResult {
-			// Create independent memory allocator for thread safety
-			workerMem := memory.NewGoAllocator()
-
 			// Process the offset partition
 			partitionResults := e.processOffsetPartition(
 				task.rowIndices,
@@ -556,7 +553,6 @@ func (e *Evaluator) executeOffsetPartitionsParallel(
 				columns,
 				task.columnExpr,
 				task.offset,
-				workerMem,
 			)
 
 			return offsetPartitionResult{
@@ -584,7 +580,6 @@ func (e *Evaluator) processOffsetPartition(
 	columns map[string]arrow.Array,
 	columnExpr arrow.Array,
 	offset int64,
-	_ memory.Allocator,
 ) []interface{} {
 	// Sort partition if ORDER BY is specified
 	sortedIndices := partition
