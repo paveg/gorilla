@@ -1137,8 +1137,16 @@ func (e *Evaluator) evaluateWindowFunction(expr *WindowFunctionExpr, window *Win
 		}
 		return e.evaluateDenseRank(window, columns, dataLength)
 	case "LAG":
+		// Try parallel execution first, fall back to sequential if needed
+		if e.shouldUseWindowParallelExecution(window, columns, dataLength) {
+			return e.evaluateLagParallel(expr, window, columns, dataLength)
+		}
 		return e.evaluateLag(expr, window, columns, dataLength)
 	case "LEAD":
+		// Try parallel execution first, fall back to sequential if needed
+		if e.shouldUseWindowParallelExecution(window, columns, dataLength) {
+			return e.evaluateLeadParallel(expr, window, columns, dataLength)
+		}
 		return e.evaluateLead(expr, window, columns, dataLength)
 	case "FIRST_VALUE":
 		return e.evaluateFirstValue(expr, window, columns, dataLength)
