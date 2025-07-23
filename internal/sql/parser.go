@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/paveg/gorilla/internal/expr"
 )
@@ -356,9 +354,7 @@ func (p *Parser) ParseSQL() SQLStatement {
 func (p *Parser) parseSelectStatement() *SelectStatement {
 	stmt := &SelectStatement{}
 
-	if !p.expectPeek(SELECT) {
-		return nil
-	}
+	// Current token is already SELECT, no need to advance
 
 	// Parse SELECT list
 	selectList, ok := p.parseSelectList()

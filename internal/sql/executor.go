@@ -5,7 +5,6 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/paveg/gorilla/internal/dataframe"
-	"github.com/paveg/gorilla/internal/series"
 )
 
 // SQLExecutor executes SQL queries against registered DataFrames

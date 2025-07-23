@@ -71,7 +71,16 @@ func (t *SQLTranslator) translateSelect(stmt *SelectStatement) (*dataframe.LazyF
 		}
 
 		if len(aggExprs) > 0 {
-			lazy = lazy.GroupBy(groupCols...).Agg(aggExprs...)
+			// Convert expr.Expr to *expr.AggregationExpr
+			aggPtrs := make([]*expr.AggregationExpr, 0, len(aggExprs))
+			for _, aggExpr := range aggExprs {
+				if aggPtr, ok := aggExpr.(*expr.AggregationExpr); ok {
+					aggPtrs = append(aggPtrs, aggPtr)
+				} else {
+					return nil, fmt.Errorf("expected aggregation expression, got %T", aggExpr)
+				}
+			}
+			lazy = lazy.GroupBy(groupCols...).Agg(aggPtrs...)
 		} else {
 			return nil, fmt.Errorf("GROUP BY requires aggregation functions in SELECT")
 		}
@@ -106,11 +115,11 @@ func (t *SQLTranslator) translateSelect(stmt *SelectStatement) (*dataframe.LazyF
 
 	// Apply ORDER BY clause
 	if stmt.OrderByClause != nil {
-		sortExprs, ascending, err := t.translateOrderBy(stmt.OrderByClause)
+		sortCols, ascending, err := t.translateOrderBy(stmt.OrderByClause)
 		if err != nil {
 			return nil, fmt.Errorf("error in ORDER BY: %w", err)
 		}
-		lazy = lazy.Sort(sortExprs, ascending)
+		lazy = lazy.SortBy(sortCols, ascending)
 	}
 
 	// Note: LIMIT/OFFSET will be handled during execution as they require
@@ -123,11 +132,11 @@ func (t *SQLTranslator) translateSelect(stmt *SelectStatement) (*dataframe.LazyF
 func (t *SQLTranslator) extractColumnNames(expressions []expr.Expr) ([]string, error) {
 	var columns []string
 
-	for _, expr := range expressions {
-		if colExpr, ok := expr.(*expr.ColumnExpr); ok {
+	for _, expression := range expressions {
+		if colExpr, ok := expression.(*expr.ColumnExpr); ok {
 			columns = append(columns, colExpr.Name())
 		} else {
-			return nil, fmt.Errorf("GROUP BY supports only column references, got %T", expr)
+			return nil, fmt.Errorf("GROUP BY supports only column references, got %T", expression)
 		}
 	}
 
@@ -225,13 +234,13 @@ func (t *SQLTranslator) isWildcardSelect(selectList []SelectItem) bool {
 }
 
 // isAggregationExpression checks if expression is an aggregation
-func (t *SQLTranslator) isAggregationExpression(expr expr.Expr) bool {
-	switch e := expr.(type) {
+func (t *SQLTranslator) isAggregationExpression(expression expr.Expr) bool {
+	switch e := expression.(type) {
 	case *expr.AggregationExpr:
 		return true
 	case *expr.FunctionExpr:
 		// Check if function name indicates aggregation
-		funcName := strings.ToUpper(e.Name)
+		funcName := strings.ToUpper(e.Name())
 		switch funcName {
 		case "COUNT", "SUM", "AVG", "MIN", "MAX":
 			return true
@@ -241,16 +250,21 @@ func (t *SQLTranslator) isAggregationExpression(expr expr.Expr) bool {
 }
 
 // translateOrderBy translates ORDER BY clause
-func (t *SQLTranslator) translateOrderBy(orderBy *OrderByClause) ([]expr.Expr, []bool, error) {
-	var expressions []expr.Expr
+func (t *SQLTranslator) translateOrderBy(orderBy *OrderByClause) ([]string, []bool, error) {
+	var columns []string
 	var ascending []bool
 
 	for _, item := range orderBy.OrderItems {
-		expressions = append(expressions, item.Expression)
-		ascending = append(ascending, item.Direction == AscendingOrder)
+		// For now, only support column references in ORDER BY
+		if colExpr, ok := item.Expression.(*expr.ColumnExpr); ok {
+			columns = append(columns, colExpr.Name())
+			ascending = append(ascending, item.Direction == AscendingOrder)
+		} else {
+			return nil, nil, fmt.Errorf("ORDER BY supports only column references, got %T", item.Expression)
+		}
 	}
 
-	return expressions, ascending, nil
+	return columns, ascending, nil
 }
 
 // TranslateFunctionCall translates SQL function calls to Gorilla expressions
@@ -329,40 +343,38 @@ func (t *SQLTranslator) TranslateFunctionCall(fn *SQLFunction) (expr.Expr, error
 		}
 		return nil, fmt.Errorf("ROUND function requires a column expression")
 
-	// Date functions (basic implementations)
-	case "NOW":
-		if len(fn.Args) != 0 {
-			return nil, fmt.Errorf("NOW function takes no arguments")
-		}
-		return expr.Now(), nil
-	case "DATE_ADD":
-		if len(fn.Args) != 2 {
-			return nil, fmt.Errorf("DATE_ADD function requires exactly two arguments")
-		}
-		return expr.DateAdd(fn.Args[0], fn.Args[1]), nil
-	case "DATE_SUB":
-		if len(fn.Args) != 2 {
-			return nil, fmt.Errorf("DATE_SUB function requires exactly two arguments")
-		}
-		return expr.DateSub(fn.Args[0], fn.Args[1]), nil
-	case "DATE_DIFF":
-		if len(fn.Args) != 3 {
-			return nil, fmt.Errorf("DATE_DIFF function requires exactly three arguments")
-		}
-		// Extract unit from third argument (should be string literal)
-		if litExpr, ok := fn.Args[2].(*expr.LiteralExpr); ok {
-			if unit, ok := litExpr.Value().(string); ok {
-				return expr.DateDiff(fn.Args[0], fn.Args[1], unit), nil
-			}
-		}
-		return nil, fmt.Errorf("DATE_DIFF third argument must be a string literal")
+	// Date functions (basic implementations) - TODO: Implement date functions
+	// case "NOW":
+	//	if len(fn.Args) != 0 {
+	//		return nil, fmt.Errorf("NOW function takes no arguments")
+	//	}
+	//	return expr.Now(), nil
+	// case "DATE_ADD":
+	//	if len(fn.Args) != 2 {
+	//		return nil, fmt.Errorf("DATE_ADD function requires exactly two arguments")
+	//	}
+	//	return expr.DateAdd(fn.Args[0], fn.Args[1]), nil
+	// case "DATE_SUB":
+	//	if len(fn.Args) != 2 {
+	//		return nil, fmt.Errorf("DATE_SUB function requires exactly two arguments")
+	//	}
+	//	return expr.DateSub(fn.Args[0], fn.Args[1]), nil
+	// case "DATE_DIFF":
+	//	if len(fn.Args) != 3 {
+	//		return nil, fmt.Errorf("DATE_DIFF function requires exactly three arguments")
+	//	}
+	//	// Extract unit from third argument (should be string literal)
+	//	if litExpr, ok := fn.Args[2].(*expr.LiteralExpr); ok {
+	//		if unit, ok := litExpr.Value().(string); ok {
+	//			return expr.DateDiff(fn.Args[0], fn.Args[1], unit), nil
+	//		}
+	//	}
+	//	return nil, fmt.Errorf("DATE_DIFF third argument must be a string literal")
 
 	default:
-		// For unknown functions, create a generic function expression
-		return &expr.FunctionExpr{
-			Name: strings.ToLower(fn.Name),
-			Args: fn.Args,
-		}, nil
+		// For unknown functions, return an error for now
+		// TODO: Create a constructor for generic function expressions
+		return nil, fmt.Errorf("function %s not supported yet", fn.Name)
 	}
 }
 
