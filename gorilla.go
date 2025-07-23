@@ -74,6 +74,8 @@ import (
 	"github.com/paveg/gorilla/internal/dataframe"
 	"github.com/paveg/gorilla/internal/expr"
 	"github.com/paveg/gorilla/internal/series"
+	// TODO: Enable SQL import after fixing compilation errors
+	// "github.com/paveg/gorilla/internal/sql"
 	"github.com/paveg/gorilla/internal/version"
 )
 
@@ -752,3 +754,298 @@ func ExampleDataFrameJoin() {
 
 	fmt.Println(result)
 }
+
+// SQLExecutor provides SQL query execution capabilities for DataFrames.
+//
+// SQLExecutor allows you to execute SQL queries against registered DataFrames,
+// providing a familiar SQL interface for data analysis and manipulation. It supports
+// standard SQL operations including SELECT, WHERE, GROUP BY, ORDER BY, and LIMIT.
+//
+// Key features:
+//   - Standard SQL syntax support (SELECT, FROM, WHERE, GROUP BY, etc.)
+//   - Integration with existing DataFrame operations and optimizations
+//   - Query validation and error reporting
+//   - Prepared statement support for query reuse
+//   - EXPLAIN functionality for query plan analysis
+//
+// Memory management: SQLExecutor manages memory automatically, but result DataFrames
+// must still be released by the caller:
+//
+//	executor := gorilla.NewSQLExecutor(mem)
+//	result, err := executor.Execute("SELECT name FROM employees WHERE age > 30")
+//	defer result.Release()
+//
+// Example:
+//
+//	mem := memory.NewGoAllocator()
+//	executor := gorilla.NewSQLExecutor(mem)
+//
+//	// Register DataFrames as tables
+//	executor.RegisterTable("employees", employeesDF)
+//	executor.RegisterTable("departments", departmentsDF)
+//
+//	// Execute SQL queries
+//	result, err := executor.Execute(`
+//		SELECT e.name, d.department_name, e.salary
+//		FROM employees e
+//		JOIN departments d ON e.dept_id = d.id
+//		WHERE e.salary > 50000
+//		ORDER BY e.salary DESC
+//		LIMIT 10
+//	`)
+//	if err != nil {
+//		panic(err)
+//	}
+//	defer result.Release()
+// TODO: Enable SQL after fixing compilation errors
+// type SQLExecutor struct {
+//	executor *sql.SQLExecutor
+// }
+
+// NewSQLExecutor creates a new SQL executor for DataFrame queries.
+//
+// The executor allows you to register DataFrames as tables and execute SQL queries
+// against them. All SQL operations are translated to efficient DataFrame operations
+// and benefit from the same optimizations as direct DataFrame API usage.
+//
+// Parameters:
+//   - mem: Apache Arrow memory allocator for managing query results
+//
+// Example:
+//
+//	mem := memory.NewGoAllocator()
+//	executor := gorilla.NewSQLExecutor(mem)
+//
+//	// Register a DataFrame as a table
+//	executor.RegisterTable("sales", salesDF)
+//
+//	// Execute SQL queries
+//	result, err := executor.Execute("SELECT * FROM sales WHERE amount > 1000")
+//	defer result.Release()
+// TODO: Enable SQL after fixing compilation errors
+// func NewSQLExecutor(mem memory.Allocator) *SQLExecutor {
+//	return &SQLExecutor{
+//		executor: sql.NewSQLExecutor(mem),
+//	}
+// }
+
+// RegisterTable registers a DataFrame with a table name for SQL queries.
+//
+// Once registered, the DataFrame can be referenced by the table name in SQL queries.
+// Multiple DataFrames can be registered to support JOIN operations and complex queries.
+//
+// Parameters:
+//   - name: Table name to use in SQL queries (case-sensitive)
+//   - df: DataFrame to register as a table
+//
+// Example:
+//
+//	executor.RegisterTable("employees", employeesDF)
+//	executor.RegisterTable("departments", departmentsDF)
+//
+//	// Now can use in SQL
+//	result, err := executor.Execute("SELECT * FROM employees WHERE dept_id IN (SELECT id FROM departments)")
+// TODO: Enable SQL after fixing compilation errors
+/*
+func (se *SQLExecutor) RegisterTable(name string, df *DataFrame) {
+	se.executor.RegisterTable(name, df.df)
+}
+
+// Execute executes a SQL query and returns the result DataFrame.
+//
+// Supports standard SQL SELECT syntax including:
+//   - Column selection: SELECT col1, col2, *
+//   - Computed columns: SELECT col1, col2 * 2 AS doubled
+//   - Filtering: WHERE conditions with AND, OR, comparison operators
+//   - Aggregation: GROUP BY with SUM, COUNT, AVG, MIN, MAX functions
+//   - Sorting: ORDER BY with ASC/DESC
+//   - Limiting: LIMIT and OFFSET clauses
+//   - String functions: UPPER, LOWER, LENGTH
+//   - Math functions: ABS, ROUND
+//   - Conditional logic: CASE WHEN expressions
+//
+// Parameters:
+//   - query: SQL query string to execute
+//
+// Returns:
+//   - DataFrame containing query results (must be released by caller)
+//   - Error if query parsing, validation, or execution fails
+//
+// Example:
+//
+//	result, err := executor.Execute(`
+//		SELECT department, AVG(salary) as avg_salary, COUNT(*) as employee_count
+//		FROM employees
+//		WHERE active = true
+//		GROUP BY department
+//		HAVING AVG(salary) > 50000
+//		ORDER BY avg_salary DESC
+//		LIMIT 5
+//	`)
+//	if err != nil {
+//		return err
+//	}
+//	defer result.Release()
+func (se *SQLExecutor) Execute(query string) (*DataFrame, error) {
+	result, err := se.executor.Execute(query)
+	if err != nil {
+		return nil, err
+	}
+	return &DataFrame{df: result}, nil
+}
+
+// ValidateQuery validates a SQL query without executing it.
+//
+// Performs syntax checking, table reference validation, and semantic analysis
+// to ensure the query is valid before execution. Useful for query validation
+// in applications or prepared statement creation.
+//
+// Parameters:
+//   - query: SQL query string to validate
+//
+// Returns:
+//   - nil if query is valid
+//   - Error describing validation issues
+//
+// Example:
+//
+//	if err := executor.ValidateQuery("SELECT * FROM employees WHERE age >"); err != nil {
+//		fmt.Printf("Query validation failed: %v\n", err)
+//	}
+func (se *SQLExecutor) ValidateQuery(query string) error {
+	return se.executor.ValidateQuery(query)
+}
+
+// Explain returns the execution plan for a SQL query.
+//
+// Shows how the SQL query will be translated to DataFrame operations,
+// including optimization steps, operation order, and estimated performance
+// characteristics. Useful for query optimization and debugging.
+//
+// Parameters:
+//   - query: SQL query string to explain
+//
+// Returns:
+//   - String representation of the execution plan
+//   - Error if query parsing or translation fails
+//
+// Example:
+//
+//	plan, err := executor.Explain("SELECT name FROM employees WHERE salary > 50000")
+//	if err != nil {
+//		return err
+//	}
+//	fmt.Println("Execution Plan:")
+//	fmt.Println(plan)
+func (se *SQLExecutor) Explain(query string) (string, error) {
+	return se.executor.Explain(query)
+}
+
+// GetRegisteredTables returns the list of registered table names.
+//
+// Useful for introspection and debugging to see which tables are available
+// for SQL queries.
+//
+// Returns:
+//   - Slice of table names that can be used in SQL queries
+//
+// Example:
+//
+//	tables := executor.GetRegisteredTables()
+//	fmt.Printf("Available tables: %v\n", tables)
+func (se *SQLExecutor) GetRegisteredTables() []string {
+	return se.executor.GetRegisteredTables()
+}
+
+// ClearTables removes all registered tables.
+//
+// Useful for cleaning up or resetting the executor state. After calling this,
+// all previously registered tables will need to be re-registered before use.
+//
+// Example:
+//
+//	executor.ClearTables()
+//	// Need to re-register tables before executing queries
+func (se *SQLExecutor) ClearTables() {
+	se.executor.ClearTables()
+}
+
+// BatchExecute executes multiple SQL statements in sequence.
+//
+// Executes queries in order and returns all results. If any query fails,
+// all previously successful results are cleaned up and an error is returned.
+//
+// Parameters:
+//   - queries: Slice of SQL query strings to execute
+//
+// Returns:
+//   - Slice of DataFrames containing results (all must be released by caller)
+//   - Error if any query fails
+//
+// Example:
+//
+//	queries := []string{
+//		"SELECT * FROM employees WHERE active = true",
+//		"SELECT department, COUNT(*) FROM employees GROUP BY department",
+//		"SELECT AVG(salary) FROM employees",
+//	}
+//	results, err := executor.BatchExecute(queries)
+//	if err != nil {
+//		return err
+//	}
+//	defer func() {
+//		for _, result := range results {
+//			result.Release()
+//		}
+//	}()
+func (se *SQLExecutor) BatchExecute(queries []string) ([]*DataFrame, error) {
+	results, err := se.executor.BatchExecute(queries)
+	if err != nil {
+		return nil, err
+	}
+
+	gorillaDFs := make([]*DataFrame, len(results))
+	for i, result := range results {
+		gorillaDFs[i] = &DataFrame{df: result}
+	}
+
+	return gorillaDFs, nil
+}
+
+// ExampleSQLExecutor demonstrates SQL query execution with DataFrames.
+func ExampleSQLExecutor() {
+	mem := memory.NewGoAllocator()
+
+	// Create sample data
+	names := NewSeries("name", []string{"Alice", "Bob", "Charlie", "David"}, mem)
+	departments := NewSeries("department", []string{"Engineering", "Sales", "Engineering", "Marketing"}, mem)
+	salaries := NewSeries("salary", []int64{100000, 80000, 120000, 75000}, mem)
+	active := NewSeries("active", []bool{true, true, false, true}, mem)
+	defer names.Release()
+	defer departments.Release()
+	defer salaries.Release()
+	defer active.Release()
+
+	employees := NewDataFrame(names, departments, salaries, active)
+	defer employees.Release()
+
+	// Create SQL executor and register table
+	executor := NewSQLExecutor(mem)
+	executor.RegisterTable("employees", employees)
+
+	// Execute SQL queries
+	result, err := executor.Execute(`
+		SELECT department, AVG(salary) as avg_salary, COUNT(*) as employee_count
+		FROM employees
+		WHERE active = true
+		GROUP BY department
+		ORDER BY avg_salary DESC
+	`)
+	if err != nil {
+		panic(err)
+	}
+	defer result.Release()
+
+	fmt.Println(result)
+}
+*/
