@@ -13,19 +13,10 @@ import (
 
 func createTestDataFrame(mem memory.Allocator) *dataframe.DataFrame {
 	names := series.New("name", []string{"Alice", "Bob", "Charlie", "David"}, mem)
-	defer names.Release()
-
 	ages := series.New("age", []int64{25, 30, 35, 28}, mem)
-	defer ages.Release()
-
 	departments := series.New("department", []string{"Engineering", "Sales", "Engineering", "Marketing"}, mem)
-	defer departments.Release()
-
 	salaries := series.New("salary", []int64{100000, 80000, 120000, 75000}, mem)
-	defer salaries.Release()
-
 	active := series.New("active", []bool{true, true, false, true}, mem)
-	defer active.Release()
 
 	return dataframe.New(names, ages, departments, salaries, active)
 }

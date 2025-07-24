@@ -187,6 +187,11 @@ func (i *InvalidExpr) Message() string {
 
 // Constructor functions
 
+// NewFunction creates a function expression
+func NewFunction(name string, args ...Expr) *FunctionExpr {
+	return &FunctionExpr{name: name, args: args}
+}
+
 // Col creates a column expression
 func Col(name string) *ColumnExpr {
 	return &ColumnExpr{name: name}

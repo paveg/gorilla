@@ -614,6 +614,10 @@ func (p *Parser) addError(msg string) {
 
 // Parse helper functions (implementations for remaining parse methods will be added in subsequent files)
 func (p *Parser) parseIdentifier() (expr.Expr, bool) {
+	// Check if this is a function call (identifier followed by LPAREN)
+	if p.peekTokenIs(LPAREN) {
+		return p.parseFunctionCall()
+	}
 	return expr.Col(p.curToken.Literal), true
 }
 
@@ -844,8 +848,9 @@ func (p *Parser) parseFunctionCall() (expr.Expr, bool) {
 		return nil, false
 	}
 
-	// Convert SQL aggregation functions to Gorilla expressions
+	// Convert SQL functions to Gorilla expressions
 	switch strings.ToUpper(functionName) {
+	// Aggregation functions
 	case CountFunction:
 		if len(args) == 0 {
 			return expr.Count(expr.Lit(1)), true
@@ -875,10 +880,94 @@ func (p *Parser) parseFunctionCall() (expr.Expr, bool) {
 			return nil, false
 		}
 		return expr.Max(args[0]), true
-	default:
-		// Other functions not supported yet
-		p.addError(fmt.Sprintf("function %s not supported yet", functionName))
+
+	// String functions
+	case UpperFunction:
+		if len(args) != 1 {
+			p.addError("UPPER function requires exactly one argument")
+			return nil, false
+		}
+		// Convert to column expression and apply Upper method
+		if colExpr, ok := args[0].(*expr.ColumnExpr); ok {
+			return colExpr.Upper(), true
+		}
+		p.addError("UPPER function requires a column argument")
 		return nil, false
+	case LowerFunction:
+		if len(args) != 1 {
+			p.addError("LOWER function requires exactly one argument")
+			return nil, false
+		}
+		if colExpr, ok := args[0].(*expr.ColumnExpr); ok {
+			return colExpr.Lower(), true
+		}
+		p.addError("LOWER function requires a column argument")
+		return nil, false
+	case LengthFunction:
+		if len(args) != 1 {
+			p.addError("LENGTH function requires exactly one argument")
+			return nil, false
+		}
+		if colExpr, ok := args[0].(*expr.ColumnExpr); ok {
+			return colExpr.Length(), true
+		}
+		p.addError("LENGTH function requires a column argument")
+		return nil, false
+	case TrimFunction:
+		if len(args) != 1 {
+			p.addError("TRIM function requires exactly one argument")
+			return nil, false
+		}
+		if colExpr, ok := args[0].(*expr.ColumnExpr); ok {
+			return colExpr.Trim(), true
+		}
+		p.addError("TRIM function requires a column argument")
+		return nil, false
+
+	// Math functions
+	case AbsFunction:
+		if len(args) != 1 {
+			p.addError("ABS function requires exactly one argument")
+			return nil, false
+		}
+		if colExpr, ok := args[0].(*expr.ColumnExpr); ok {
+			return colExpr.Abs(), true
+		}
+		p.addError("ABS function requires a column argument")
+		return nil, false
+	case RoundFunction:
+		if len(args) != 1 {
+			p.addError("ROUND function requires exactly one argument")
+			return nil, false
+		}
+		if colExpr, ok := args[0].(*expr.ColumnExpr); ok {
+			return colExpr.Round(), true
+		}
+		p.addError("ROUND function requires a column argument")
+		return nil, false
+	case FloorFunction:
+		if len(args) != 1 {
+			p.addError("FLOOR function requires exactly one argument")
+			return nil, false
+		}
+		if colExpr, ok := args[0].(*expr.ColumnExpr); ok {
+			return colExpr.Floor(), true
+		}
+		p.addError("FLOOR function requires a column argument")
+		return nil, false
+	case CeilFunction:
+		if len(args) != 1 {
+			p.addError("CEIL function requires exactly one argument")
+			return nil, false
+		}
+		if colExpr, ok := args[0].(*expr.ColumnExpr); ok {
+			return colExpr.Ceil(), true
+		}
+		p.addError("CEIL function requires a column argument")
+		return nil, false
+	default:
+		// Create generic function expression for other functions
+		return expr.NewFunction(functionName, args...), true
 	}
 }
 
