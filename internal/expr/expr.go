@@ -551,6 +551,46 @@ func (a *AggregationExpr) As(alias string) *AggregationExpr {
 	}
 }
 
+// Gt creates a greater-than expression
+func (a *AggregationExpr) Gt(other Expr) *BinaryExpr {
+	return &BinaryExpr{left: a, op: OpGt, right: other}
+}
+
+// Lt creates a less-than expression
+func (a *AggregationExpr) Lt(other Expr) *BinaryExpr {
+	return &BinaryExpr{left: a, op: OpLt, right: other}
+}
+
+// Eq creates an equality expression
+func (a *AggregationExpr) Eq(other Expr) *BinaryExpr {
+	return &BinaryExpr{left: a, op: OpEq, right: other}
+}
+
+// Ne creates a not-equal expression
+func (a *AggregationExpr) Ne(other Expr) *BinaryExpr {
+	return &BinaryExpr{left: a, op: OpNe, right: other}
+}
+
+// Ge creates a greater-than-or-equal expression
+func (a *AggregationExpr) Ge(other Expr) *BinaryExpr {
+	return &BinaryExpr{left: a, op: OpGe, right: other}
+}
+
+// Le creates a less-than-or-equal expression
+func (a *AggregationExpr) Le(other Expr) *BinaryExpr {
+	return &BinaryExpr{left: a, op: OpLe, right: other}
+}
+
+// And creates a logical AND expression
+func (a *AggregationExpr) And(other Expr) *BinaryExpr {
+	return &BinaryExpr{left: a, op: OpAnd, right: other}
+}
+
+// Or creates a logical OR expression
+func (a *AggregationExpr) Or(other Expr) *BinaryExpr {
+	return &BinaryExpr{left: a, op: OpOr, right: other}
+}
+
 // Enhanced Expression System - Unary Operations
 
 // Neg creates a negation (unary minus) expression
