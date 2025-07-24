@@ -75,19 +75,23 @@ func (e *SQLExecutor) executeWithLimit(
 	// Apply OFFSET and LIMIT
 	totalRows := fullResult.Len()
 
-	// Safe conversion with bounds checking to prevent integer overflow
+	// Safe conversion with explicit bounds checking to prevent integer overflow
 	const maxInt = int(^uint(0) >> 1) // Maximum value for int type
 
-	if limitClause.Offset < 0 || limitClause.Offset > int64(maxInt) {
+	// Validate and convert OFFSET with explicit bounds checking
+	var offset int
+	if limitClause.Offset < 0 {
 		return e.createEmptyDataFrame(fullResult), nil
+	} else if limitClause.Offset > int64(maxInt) {
+		return e.createEmptyDataFrame(fullResult), nil
+	} else {
+		offset = int(limitClause.Offset) // Safe conversion after explicit bounds check
 	}
 
+	// Validate LIMIT value
 	if limitClause.Count < 0 || limitClause.Count > int64(maxInt) {
 		return nil, fmt.Errorf("invalid LIMIT/OFFSET values: offset=%d, count=%d", limitClause.Offset, limitClause.Count)
 	}
-
-	// Safe conversion to int after bounds checking
-	offset := int(limitClause.Offset)
 
 	// Validate offset bounds against actual data size
 	if offset >= totalRows {
@@ -257,20 +261,23 @@ func (q *SQLQuery) executeWithLimit(lazy *dataframe.LazyFrame, limitClause *Limi
 	// Apply OFFSET and LIMIT
 	totalRows := fullResult.Len()
 
-	// Safe conversion with bounds checking to prevent integer overflow
+	// Safe conversion with explicit bounds checking to prevent integer overflow
 	const maxInt = int(^uint(0) >> 1) // Maximum value for int type
 
-	if limitClause.Offset < 0 || limitClause.Offset > int64(maxInt) {
-		// Return empty DataFrame for invalid offset
+	// Validate and convert OFFSET with explicit bounds checking
+	var offset int
+	if limitClause.Offset < 0 {
 		return fullResult, nil
+	} else if limitClause.Offset > int64(maxInt) {
+		return fullResult, nil
+	} else {
+		offset = int(limitClause.Offset) // Safe conversion after explicit bounds check
 	}
 
+	// Validate LIMIT value
 	if limitClause.Count < 0 || limitClause.Count > int64(maxInt) {
 		return nil, fmt.Errorf("invalid LIMIT/OFFSET values: offset=%d, count=%d", limitClause.Offset, limitClause.Count)
 	}
-
-	// Safe conversion to int after bounds checking
-	offset := int(limitClause.Offset)
 
 	// Validate offset
 	if offset >= totalRows {
