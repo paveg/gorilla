@@ -2,10 +2,22 @@ package sql
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/paveg/gorilla/internal/dataframe"
 )
+
+// safeInt64ToInt safely converts int64 to int with bounds checking
+func safeInt64ToInt(value int64) (int, error) {
+	if value < 0 {
+		return 0, fmt.Errorf("negative value not allowed: %d", value)
+	}
+	if value > math.MaxInt {
+		return 0, fmt.Errorf("value exceeds int range: %d", value)
+	}
+	return int(value), nil
+}
 
 // SQLExecutor executes SQL queries against registered DataFrames
 type SQLExecutor struct {
@@ -75,22 +87,16 @@ func (e *SQLExecutor) executeWithLimit(
 	// Apply OFFSET and LIMIT
 	totalRows := fullResult.Len()
 
-	// Safe conversion with explicit bounds checking to prevent integer overflow
-	const maxInt = int(^uint(0) >> 1) // Maximum value for int type
-
-	// Validate and convert OFFSET with explicit bounds checking
-	var offset int
-	if limitClause.Offset < 0 {
+	// Safe conversion using helper function with explicit bounds checking
+	offset, err := safeInt64ToInt(limitClause.Offset)
+	if err != nil {
 		return e.createEmptyDataFrame(fullResult), nil
-	} else if limitClause.Offset > int64(maxInt) {
-		return e.createEmptyDataFrame(fullResult), nil
-	} else {
-		offset = int(limitClause.Offset) // Safe conversion after explicit bounds check
 	}
 
-	// Validate LIMIT value
-	if limitClause.Count < 0 || limitClause.Count > int64(maxInt) {
-		return nil, fmt.Errorf("invalid LIMIT/OFFSET values: offset=%d, count=%d", limitClause.Offset, limitClause.Count)
+	// Validate LIMIT value using same safe conversion pattern
+	_, err = safeInt64ToInt(limitClause.Count)
+	if err != nil {
+		return nil, fmt.Errorf("invalid LIMIT value: %w", err)
 	}
 
 	// Validate offset bounds against actual data size
@@ -261,22 +267,16 @@ func (q *SQLQuery) executeWithLimit(lazy *dataframe.LazyFrame, limitClause *Limi
 	// Apply OFFSET and LIMIT
 	totalRows := fullResult.Len()
 
-	// Safe conversion with explicit bounds checking to prevent integer overflow
-	const maxInt = int(^uint(0) >> 1) // Maximum value for int type
-
-	// Validate and convert OFFSET with explicit bounds checking
-	var offset int
-	if limitClause.Offset < 0 {
+	// Safe conversion using helper function with explicit bounds checking
+	offset, err := safeInt64ToInt(limitClause.Offset)
+	if err != nil {
 		return fullResult, nil
-	} else if limitClause.Offset > int64(maxInt) {
-		return fullResult, nil
-	} else {
-		offset = int(limitClause.Offset) // Safe conversion after explicit bounds check
 	}
 
-	// Validate LIMIT value
-	if limitClause.Count < 0 || limitClause.Count > int64(maxInt) {
-		return nil, fmt.Errorf("invalid LIMIT/OFFSET values: offset=%d, count=%d", limitClause.Offset, limitClause.Count)
+	// Validate LIMIT value using same safe conversion pattern
+	_, err = safeInt64ToInt(limitClause.Count)
+	if err != nil {
+		return nil, fmt.Errorf("invalid LIMIT value: %w", err)
 	}
 
 	// Validate offset
