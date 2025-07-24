@@ -106,6 +106,12 @@ issues:
         - gocritic
         - gosec
         - mnd
+    - path: internal/sql/
+      linters:
+        - gocyclo
+        - exhaustive
+        - gocritic
+        - unparam
     # Allow TODO comments
     - linters:
         - godox

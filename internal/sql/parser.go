@@ -840,30 +840,30 @@ func (p *Parser) parseFunctionCall() (expr.Expr, bool) {
 
 	// Convert SQL aggregation functions to Gorilla expressions
 	switch strings.ToUpper(functionName) {
-	case "COUNT":
+	case CountFunction:
 		if len(args) == 0 {
 			return expr.Count(expr.Lit(1)), true
 		}
 		return expr.Count(args[0]), true
-	case "SUM":
+	case SumFunction:
 		if len(args) != 1 {
 			p.addError("SUM function requires exactly one argument")
 			return nil, false
 		}
 		return expr.Sum(args[0]), true
-	case "AVG":
+	case AvgFunction:
 		if len(args) != 1 {
 			p.addError("AVG function requires exactly one argument")
 			return nil, false
 		}
 		return expr.Mean(args[0]), true
-	case "MIN":
+	case MinFunction:
 		if len(args) != 1 {
 			p.addError("MIN function requires exactly one argument")
 			return nil, false
 		}
 		return expr.Min(args[0]), true
-	case "MAX":
+	case MaxFunction:
 		if len(args) != 1 {
 			p.addError("MAX function requires exactly one argument")
 			return nil, false
@@ -876,7 +876,7 @@ func (p *Parser) parseFunctionCall() (expr.Expr, bool) {
 	}
 }
 
-func (p *Parser) parseFunctionCallWithLeft(left *expr.ColumnExpr) (expr.Expr, bool) {
+func (p *Parser) parseFunctionCallWithLeft(_ *expr.ColumnExpr) (expr.Expr, bool) {
 	_, ok := p.parseExpressionList(RPAREN)
 	if !ok {
 		return nil, false
@@ -1007,9 +1007,9 @@ func (p *Parser) parseOrderByClause() (*OrderByClause, bool) {
 		if p.peekTokenIs(IDENT) {
 			p.nextToken()
 			switch strings.ToUpper(p.curToken.Literal) {
-			case "ASC":
+			case AscOrder:
 				direction = AscendingOrder
-			case "DESC":
+			case DescOrder:
 				direction = DescendingOrder
 			default:
 				p.addError(fmt.Sprintf("invalid sort direction: %s", p.curToken.Literal))

@@ -154,8 +154,9 @@ func TestParseSQL(t *testing.T) {
 			expectErr: false,
 		},
 		{
-			name:      "Complex SELECT",
-			input:     "SELECT name, AVG(salary) as avg_sal FROM employees WHERE active = true GROUP BY name HAVING AVG(salary) > 50000 ORDER BY avg_sal DESC LIMIT 5",
+			name: "Complex SELECT",
+			input: `SELECT name, AVG(salary) as avg_sal FROM employees WHERE active = true 
+				GROUP BY name HAVING AVG(salary) > 50000 ORDER BY avg_sal DESC LIMIT 5`,
 			expectErr: false,
 		},
 		{
@@ -188,7 +189,8 @@ func TestParseSQL(t *testing.T) {
 
 func TestSelectStatementParsing(t *testing.T) {
 	t.Skip("TODO: Fix SQL parser issues before enabling these tests")
-	input := "SELECT name, age * 2 as double_age FROM users WHERE age > 30 GROUP BY name HAVING COUNT(*) > 1 ORDER BY name ASC LIMIT 10 OFFSET 5"
+	input := `SELECT name, age * 2 as double_age FROM users WHERE age > 30 
+		GROUP BY name HAVING COUNT(*) > 1 ORDER BY name ASC LIMIT 10 OFFSET 5`
 
 	stmt, err := ParseSQL(input)
 	require.NoError(t, err)

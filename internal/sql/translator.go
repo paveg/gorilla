@@ -65,10 +65,7 @@ func (t *SQLTranslator) translateSelect(stmt *SelectStatement) (*dataframe.LazyF
 		}
 
 		// Collect aggregations from SELECT list
-		aggExprs, err := t.extractAggregations(stmt.SelectList)
-		if err != nil {
-			return nil, fmt.Errorf("error extracting aggregations: %w", err)
-		}
+		aggExprs := t.extractAggregations(stmt.SelectList)
 
 		if len(aggExprs) > 0 {
 			// Convert expr.Expr to *expr.AggregationExpr
@@ -93,10 +90,7 @@ func (t *SQLTranslator) translateSelect(stmt *SelectStatement) (*dataframe.LazyF
 
 	// Apply computed columns from SELECT (non-aggregation expressions)
 	if stmt.GroupByClause == nil {
-		computedCols, err := t.extractComputedColumns(stmt.SelectList)
-		if err != nil {
-			return nil, fmt.Errorf("error extracting computed columns: %w", err)
-		}
+		computedCols := t.extractComputedColumns(stmt.SelectList)
 
 		for alias, expression := range computedCols {
 			lazy = lazy.WithColumn(alias, expression)
@@ -104,10 +98,7 @@ func (t *SQLTranslator) translateSelect(stmt *SelectStatement) (*dataframe.LazyF
 	}
 
 	// Apply column selection
-	selectCols, err := t.extractSelectColumns(stmt.SelectList)
-	if err != nil {
-		return nil, fmt.Errorf("error extracting select columns: %w", err)
-	}
+	selectCols := t.extractSelectColumns(stmt.SelectList)
 
 	if len(selectCols) > 0 && !t.isWildcardSelect(stmt.SelectList) {
 		lazy = lazy.Select(selectCols...)
@@ -144,7 +135,7 @@ func (t *SQLTranslator) extractColumnNames(expressions []expr.Expr) ([]string, e
 }
 
 // extractAggregations extracts aggregation expressions from SELECT list
-func (t *SQLTranslator) extractAggregations(selectList []SelectItem) ([]expr.Expr, error) {
+func (t *SQLTranslator) extractAggregations(selectList []SelectItem) []expr.Expr {
 	var aggExprs []expr.Expr
 
 	for _, item := range selectList {
@@ -164,11 +155,11 @@ func (t *SQLTranslator) extractAggregations(selectList []SelectItem) ([]expr.Exp
 		}
 	}
 
-	return aggExprs, nil
+	return aggExprs
 }
 
 // extractComputedColumns extracts computed column expressions (non-aggregations)
-func (t *SQLTranslator) extractComputedColumns(selectList []SelectItem) (map[string]expr.Expr, error) {
+func (t *SQLTranslator) extractComputedColumns(selectList []SelectItem) map[string]expr.Expr {
 	computedCols := make(map[string]expr.Expr)
 
 	for _, item := range selectList {
@@ -195,16 +186,16 @@ func (t *SQLTranslator) extractComputedColumns(selectList []SelectItem) (map[str
 		computedCols[columnName] = item.Expression
 	}
 
-	return computedCols, nil
+	return computedCols
 }
 
 // extractSelectColumns extracts final column selection list
-func (t *SQLTranslator) extractSelectColumns(selectList []SelectItem) ([]string, error) {
+func (t *SQLTranslator) extractSelectColumns(selectList []SelectItem) []string {
 	var columns []string
 
 	for _, item := range selectList {
 		if item.IsWildcard {
-			return []string{}, nil // Wildcard means select all columns
+			return []string{} // Wildcard means select all columns
 		}
 
 		// Use alias if provided, otherwise derive from expression
@@ -220,7 +211,7 @@ func (t *SQLTranslator) extractSelectColumns(selectList []SelectItem) ([]string,
 		columns = append(columns, columnName)
 	}
 
-	return columns, nil
+	return columns
 }
 
 // isWildcardSelect checks if SELECT list contains wildcard

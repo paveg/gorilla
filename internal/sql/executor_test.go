@@ -357,7 +357,7 @@ func TestSQLExecutorExplain(t *testing.T) {
 			require.NoError(t, err)
 
 			assert.NotEmpty(t, plan)
-			assert.True(t, len(plan) > 0, "Explain plan should not be empty")
+			assert.True(t, plan != "", "Explain plan should not be empty")
 		})
 	}
 }

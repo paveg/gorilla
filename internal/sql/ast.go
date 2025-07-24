@@ -220,11 +220,11 @@ const (
 func (od OrderDirection) String() string {
 	switch od {
 	case AscendingOrder:
-		return "ASC"
+		return AscOrder
 	case DescendingOrder:
-		return "DESC"
+		return DescOrder
 	default:
-		return "ASC"
+		return AscOrder
 	}
 }
 
@@ -265,6 +265,12 @@ func (f *SQLFunction) String() string {
 	}
 	return f.Name + "(" + strings.Join(argStrings, ", ") + ")"
 }
+
+// Sort directions
+const (
+	AscOrder  = "ASC"
+	DescOrder = "DESC"
+)
 
 // Aggregation functions
 const (

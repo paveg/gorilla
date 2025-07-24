@@ -61,7 +61,10 @@ func (e *SQLExecutor) Execute(query string) (*dataframe.DataFrame, error) {
 }
 
 // executeWithLimit executes query with LIMIT/OFFSET handling
-func (e *SQLExecutor) executeWithLimit(lazy *dataframe.LazyFrame, limitClause *LimitClause) (*dataframe.DataFrame, error) {
+func (e *SQLExecutor) executeWithLimit(
+	lazy *dataframe.LazyFrame,
+	limitClause *LimitClause,
+) (*dataframe.DataFrame, error) {
 	// First collect the full result
 	fullResult, err := lazy.Collect()
 	if err != nil {
@@ -90,12 +93,6 @@ func (e *SQLExecutor) executeWithLimit(lazy *dataframe.LazyFrame, limitClause *L
 func (e *SQLExecutor) createEmptyDataFrame(template *dataframe.DataFrame) *dataframe.DataFrame {
 	// For simplicity, return an empty DataFrame using the existing Slice method
 	return template.Slice(0, 0)
-}
-
-// sliceDataFrame creates a new DataFrame with rows from start to end (exclusive)
-func (e *SQLExecutor) sliceDataFrame(df *dataframe.DataFrame, start, end int) (*dataframe.DataFrame, error) {
-	// Use the existing DataFrame Slice method for simplicity
-	return df.Slice(start, end), nil
 }
 
 // GetRegisteredTables returns the list of registered table names
