@@ -74,17 +74,29 @@ func (e *SQLExecutor) executeWithLimit(
 
 	// Apply OFFSET and LIMIT
 	totalRows := fullResult.Len()
-	offset := int(limitClause.Offset)
-	_ = int(limitClause.Count) // TODO: implement proper LIMIT handling
 
-	// Validate offset
+	// Safe conversion with bounds checking to prevent integer overflow
+	const maxInt = int(^uint(0) >> 1) // Maximum value for int type
+
+	if limitClause.Offset < 0 || limitClause.Offset > int64(maxInt) {
+		return e.createEmptyDataFrame(fullResult), nil
+	}
+
+	if limitClause.Count < 0 || limitClause.Count > int64(maxInt) {
+		return nil, fmt.Errorf("invalid LIMIT/OFFSET values: offset=%d, count=%d", limitClause.Offset, limitClause.Count)
+	}
+
+	// Safe conversion to int after bounds checking
+	offset := int(limitClause.Offset)
+
+	// Validate offset bounds against actual data size
 	if offset >= totalRows {
 		// Return empty DataFrame with same schema
 		return e.createEmptyDataFrame(fullResult), nil
 	}
 
 	// For now, just return the original DataFrame
-	// TODO: implement proper LIMIT/OFFSET functionality
+	// TODO: implement proper LIMIT/OFFSET functionality with safe count conversion
 	_ = offset
 	return fullResult, nil
 }
