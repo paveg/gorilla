@@ -12,7 +12,7 @@ import (
 )
 
 func TestSQLExecutorBasicQueries(t *testing.T) {
-	t.Skip("TODO: Fix SQL parser issues before enabling these tests")
+	t.Skip("TODO: Fix translator integration issues with DataFrame")
 	mem := memory.NewGoAllocator()
 	executor := NewSQLExecutor(mem)
 
@@ -158,7 +158,7 @@ func TestSQLExecutorAggregation(t *testing.T) {
 }
 
 func TestSQLExecutorSorting(t *testing.T) {
-	t.Skip("TODO: Fix SQL parser issues before enabling these tests")
+	t.Skip("TODO: Fix translator integration issues with DataFrame")
 	mem := memory.NewGoAllocator()
 	executor := NewSQLExecutor(mem)
 
@@ -205,7 +205,7 @@ func TestSQLExecutorSorting(t *testing.T) {
 }
 
 func TestSQLExecutorLimit(t *testing.T) {
-	t.Skip("TODO: Fix SQL parser issues before enabling these tests")
+	t.Skip("TODO: Fix translator integration issues with DataFrame")
 	mem := memory.NewGoAllocator()
 	executor := NewSQLExecutor(mem)
 

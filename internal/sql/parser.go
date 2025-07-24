@@ -549,6 +549,9 @@ func (p *Parser) parsePrefix() (expr.Expr, bool) {
 		return p.parseGroupedExpression()
 	case COUNT, SUM, AVG, MIN, MAX:
 		return p.parseFunctionCall()
+	case MULT:
+		// Handle * as a special literal for function arguments like COUNT(*)
+		return expr.Lit(1), true
 	default:
 		p.addError(fmt.Sprintf("no prefix parse function for %s found", p.curToken.Literal))
 		return nil, false
@@ -745,7 +748,7 @@ func (p *Parser) parseBinaryExpression(left expr.Expr) (expr.Expr, bool) {
 		} else if fun, ok := left.(*expr.FunctionExpr); ok {
 			return fun.Eq(right), true
 		}
-		p.addError("unsupported expression type for equality (BinaryExpr doesn't support Eq)")
+		p.addError("unsupported expression type for equality (aggregations cannot be compared in this context)")
 		return nil, false
 	case "!=", "<>":
 		if col, ok := left.(*expr.ColumnExpr); ok {
@@ -753,7 +756,7 @@ func (p *Parser) parseBinaryExpression(left expr.Expr) (expr.Expr, bool) {
 		} else if fun, ok := left.(*expr.FunctionExpr); ok {
 			return fun.Ne(right), true
 		}
-		p.addError("unsupported expression type for not equal (BinaryExpr doesn't support Ne)")
+		p.addError("unsupported expression type for not equal (aggregations cannot be compared in this context)")
 		return nil, false
 	case "<":
 		if col, ok := left.(*expr.ColumnExpr); ok {
@@ -761,7 +764,7 @@ func (p *Parser) parseBinaryExpression(left expr.Expr) (expr.Expr, bool) {
 		} else if fun, ok := left.(*expr.FunctionExpr); ok {
 			return fun.Lt(right), true
 		}
-		p.addError("unsupported expression type for less than (BinaryExpr doesn't support Lt)")
+		p.addError("unsupported expression type for less than (aggregations cannot be compared in this context)")
 		return nil, false
 	case "<=":
 		if col, ok := left.(*expr.ColumnExpr); ok {
@@ -769,7 +772,7 @@ func (p *Parser) parseBinaryExpression(left expr.Expr) (expr.Expr, bool) {
 		} else if fun, ok := left.(*expr.FunctionExpr); ok {
 			return fun.Le(right), true
 		}
-		p.addError("unsupported expression type for less than or equal (BinaryExpr doesn't support Le)")
+		p.addError("unsupported expression type for less than or equal (aggregations cannot be compared in this context)")
 		return nil, false
 	case ">":
 		if col, ok := left.(*expr.ColumnExpr); ok {
@@ -777,7 +780,7 @@ func (p *Parser) parseBinaryExpression(left expr.Expr) (expr.Expr, bool) {
 		} else if fun, ok := left.(*expr.FunctionExpr); ok {
 			return fun.Gt(right), true
 		}
-		p.addError("unsupported expression type for greater than (BinaryExpr doesn't support Gt)")
+		p.addError("unsupported expression type for greater than (aggregations cannot be compared in this context)")
 		return nil, false
 	case ">=":
 		if col, ok := left.(*expr.ColumnExpr); ok {
@@ -785,7 +788,7 @@ func (p *Parser) parseBinaryExpression(left expr.Expr) (expr.Expr, bool) {
 		} else if fun, ok := left.(*expr.FunctionExpr); ok {
 			return fun.Ge(right), true
 		}
-		p.addError("unsupported expression type for greater than or equal (BinaryExpr doesn't support Ge)")
+		p.addError("unsupported expression type for greater than or equal (aggregations cannot be compared in this context)")
 		return nil, false
 	default:
 		p.addError(fmt.Sprintf("unknown operator: %s", operator))
