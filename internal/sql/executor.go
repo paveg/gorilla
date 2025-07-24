@@ -256,8 +256,21 @@ func (q *SQLQuery) executeWithLimit(lazy *dataframe.LazyFrame, limitClause *Limi
 
 	// Apply OFFSET and LIMIT
 	totalRows := fullResult.Len()
+
+	// Safe conversion with bounds checking to prevent integer overflow
+	const maxInt = int(^uint(0) >> 1) // Maximum value for int type
+
+	if limitClause.Offset < 0 || limitClause.Offset > int64(maxInt) {
+		// Return empty DataFrame for invalid offset
+		return fullResult, nil
+	}
+
+	if limitClause.Count < 0 || limitClause.Count > int64(maxInt) {
+		return nil, fmt.Errorf("invalid LIMIT/OFFSET values: offset=%d, count=%d", limitClause.Offset, limitClause.Count)
+	}
+
+	// Safe conversion to int after bounds checking
 	offset := int(limitClause.Offset)
-	_ = int(limitClause.Count) // TODO: implement proper LIMIT handling
 
 	// Validate offset
 	if offset >= totalRows {
