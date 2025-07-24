@@ -623,6 +623,9 @@ func (p *Parser) parseIntegerLiteral() (expr.Expr, bool) {
 		p.addError(fmt.Sprintf("could not parse %q as integer", p.curToken.Literal))
 		return nil, false
 	}
+
+	// Note: value is stored as int64 in LiteralExpr, which is safe for all platforms
+	// The validation is primarily to ensure we have a valid 64-bit signed integer
 	return expr.Lit(value), true
 }
 
@@ -1046,6 +1049,12 @@ func (p *Parser) parseLimitClause() (*LimitClause, bool) {
 		return nil, false
 	}
 
+	// Validate LIMIT value range to prevent overflow issues
+	if count < 0 {
+		p.addError(fmt.Sprintf("LIMIT value cannot be negative: %d", count))
+		return nil, false
+	}
+
 	limitClause := &LimitClause{Count: count}
 
 	// Check for OFFSET
@@ -1060,6 +1069,13 @@ func (p *Parser) parseLimitClause() (*LimitClause, bool) {
 			p.addError(fmt.Sprintf("could not parse OFFSET value: %s", p.curToken.Literal))
 			return nil, false
 		}
+
+		// Validate OFFSET value range to prevent overflow issues
+		if offset < 0 {
+			p.addError(fmt.Sprintf("OFFSET value cannot be negative: %d", offset))
+			return nil, false
+		}
+
 		limitClause.Offset = offset
 	}
 
