@@ -4,9 +4,15 @@ on:
   pull_request:
     branches: [ main ]
 
+# Security: Add explicit permissions following principle of least privilege
+permissions:
+  contents: read
+
 jobs:
   version-check:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
