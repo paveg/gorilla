@@ -12,30 +12,7 @@ import (
 )
 
 func TestSQLExecutorBasicQueries(t *testing.T) {
-	t.Skip("TODO: Fix translator integration issues with DataFrame")
-	mem := memory.NewGoAllocator()
-	executor := NewSQLExecutor(mem)
-
-	// Create test data
-	names := series.New("name", []string{"Alice", "Bob", "Charlie", "David"}, mem)
-	defer names.Release()
-
-	ages := series.New("age", []int64{25, 30, 35, 28}, mem)
-	defer ages.Release()
-
-	departments := series.New("department", []string{"Engineering", "Sales", "Engineering", "Marketing"}, mem)
-	defer departments.Release()
-
-	salaries := series.New("salary", []int64{100000, 80000, 120000, 75000}, mem)
-	defer salaries.Release()
-
-	active := series.New("active", []bool{true, true, false, true}, mem)
-	defer active.Release()
-
-	df := dataframe.New(names, ages, departments, salaries, active)
-	defer df.Release()
-
-	executor.RegisterTable("employees", df)
+	// t.Skip("TODO: Fix translator integration issues with DataFrame")
 
 	tests := []struct {
 		name             string
@@ -83,6 +60,22 @@ func TestSQLExecutorBasicQueries(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Create fresh executor and data for each subtest
+			mem := memory.NewGoAllocator()
+			executor := NewSQLExecutor(mem)
+
+			// Create test data
+			names := series.New("name", []string{"Alice", "Bob", "Charlie", "David"}, mem)
+			ages := series.New("age", []int64{25, 30, 35, 28}, mem)
+			departments := series.New("department", []string{"Engineering", "Sales", "Engineering", "Marketing"}, mem)
+			salaries := series.New("salary", []int64{100000, 80000, 120000, 75000}, mem)
+			active := series.New("active", []bool{true, true, false, true}, mem)
+
+			df := dataframe.New(names, ages, departments, salaries, active)
+			defer df.Release()
+
+			executor.RegisterTable("employees", df)
+
 			result, err := executor.Execute(tt.query)
 			require.NoError(t, err)
 			defer result.Release()
@@ -106,13 +99,8 @@ func TestSQLExecutorAggregation(t *testing.T) {
 
 	// Create test data
 	names := series.New("name", []string{"Alice", "Bob", "Charlie", "David"}, mem)
-	defer names.Release()
-
 	departments := series.New("department", []string{"Engineering", "Sales", "Engineering", "Marketing"}, mem)
-	defer departments.Release()
-
 	salaries := series.New("salary", []int64{100000, 80000, 120000, 75000}, mem)
-	defer salaries.Release()
 
 	df := dataframe.New(names, departments, salaries)
 	defer df.Release()
@@ -158,21 +146,7 @@ func TestSQLExecutorAggregation(t *testing.T) {
 }
 
 func TestSQLExecutorSorting(t *testing.T) {
-	t.Skip("TODO: Fix translator integration issues with DataFrame")
-	mem := memory.NewGoAllocator()
-	executor := NewSQLExecutor(mem)
-
-	// Create test data with known sort order
-	names := series.New("name", []string{"Charlie", "Alice", "Bob"}, mem)
-	defer names.Release()
-
-	ages := series.New("age", []int64{35, 25, 30}, mem)
-	defer ages.Release()
-
-	df := dataframe.New(names, ages)
-	defer df.Release()
-
-	executor.RegisterTable("people", df)
+	// t.Skip("TODO: Fix translator integration issues with DataFrame")
 
 	tests := []struct {
 		name  string
@@ -184,16 +158,29 @@ func TestSQLExecutorSorting(t *testing.T) {
 		},
 		{
 			name:  "ORDER BY DESC",
-			query: "SELECT name FROM people ORDER BY age DESC",
+			query: "SELECT name, age FROM people ORDER BY age DESC",
 		},
 		{
 			name:  "ORDER BY with WHERE",
-			query: "SELECT name FROM people WHERE age > 20 ORDER BY age ASC",
+			query: "SELECT name, age FROM people WHERE age > 20 ORDER BY age ASC",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Create fresh executor and data for each subtest
+			mem := memory.NewGoAllocator()
+			executor := NewSQLExecutor(mem)
+
+			// Create test data with known sort order
+			names := series.New("name", []string{"Charlie", "Alice", "Bob"}, mem)
+			ages := series.New("age", []int64{35, 25, 30}, mem)
+
+			df := dataframe.New(names, ages)
+			defer df.Release()
+
+			executor.RegisterTable("people", df)
+
 			result, err := executor.Execute(tt.query)
 			require.NoError(t, err)
 			defer result.Release()
@@ -205,21 +192,7 @@ func TestSQLExecutorSorting(t *testing.T) {
 }
 
 func TestSQLExecutorLimit(t *testing.T) {
-	t.Skip("TODO: Fix translator integration issues with DataFrame")
-	mem := memory.NewGoAllocator()
-	executor := NewSQLExecutor(mem)
-
-	// Create test data with more rows
-	names := series.New("name", []string{"Alice", "Bob", "Charlie", "David", "Eve"}, mem)
-	defer names.Release()
-
-	ages := series.New("age", []int64{25, 30, 35, 28, 32}, mem)
-	defer ages.Release()
-
-	df := dataframe.New(names, ages)
-	defer df.Release()
-
-	executor.RegisterTable("people", df)
+	t.Skip("TODO: Implement proper LIMIT/OFFSET functionality in executeWithLimit")
 
 	tests := []struct {
 		name         string
@@ -255,6 +228,19 @@ func TestSQLExecutorLimit(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Create fresh executor and data for each subtest
+			mem := memory.NewGoAllocator()
+			executor := NewSQLExecutor(mem)
+
+			// Create test data with more rows
+			names := series.New("name", []string{"Alice", "Bob", "Charlie", "David", "Eve"}, mem)
+			ages := series.New("age", []int64{25, 30, 35, 28, 32}, mem)
+
+			df := dataframe.New(names, ages)
+			defer df.Release()
+
+			executor.RegisterTable("people", df)
+
 			result, err := executor.Execute(tt.query)
 			require.NoError(t, err)
 			defer result.Release()
@@ -270,7 +256,6 @@ func TestSQLExecutorValidation(t *testing.T) {
 
 	// Create test data
 	names := series.New("name", []string{"Alice", "Bob"}, mem)
-	defer names.Release()
 
 	df := dataframe.New(names)
 	defer df.Release()
@@ -330,7 +315,6 @@ func TestSQLExecutorExplain(t *testing.T) {
 
 	// Create test data
 	names := series.New("name", []string{"Alice", "Bob"}, mem)
-	defer names.Release()
 
 	df := dataframe.New(names)
 	defer df.Release()
@@ -368,10 +352,7 @@ func TestSQLExecutorTableManagement(t *testing.T) {
 
 	// Create test data
 	names1 := series.New("name", []string{"Alice", "Bob"}, mem)
-	defer names1.Release()
-
 	names2 := series.New("name", []string{"Charlie", "David"}, mem)
-	defer names2.Release()
 
 	df1 := dataframe.New(names1)
 	defer df1.Release()
@@ -401,10 +382,7 @@ func TestSQLExecutorBatchExecute(t *testing.T) {
 
 	// Create test data
 	names := series.New("name", []string{"Alice", "Bob", "Charlie"}, mem)
-	defer names.Release()
-
 	ages := series.New("age", []int64{25, 30, 35}, mem)
-	defer ages.Release()
 
 	df := dataframe.New(names, ages)
 	defer df.Release()
@@ -464,16 +442,9 @@ func TestSQLExecutorComplexQueries(t *testing.T) {
 
 	// Create test data
 	names := series.New("name", []string{"Alice", "Bob", "Charlie", "David", "Eve"}, mem)
-	defer names.Release()
-
 	departments := series.New("department", []string{"Engineering", "Sales", "Engineering", "Marketing", "Sales"}, mem)
-	defer departments.Release()
-
 	salaries := series.New("salary", []int64{100000, 80000, 120000, 75000, 85000}, mem)
-	defer salaries.Release()
-
 	active := series.New("active", []bool{true, true, false, true, true}, mem)
-	defer active.Release()
 
 	df := dataframe.New(names, departments, salaries, active)
 	defer df.Release()
@@ -536,18 +507,7 @@ func TestSQLExecutorComplexQueries(t *testing.T) {
 }
 
 func TestSQLExecutorStringFunctions(t *testing.T) {
-	t.Skip("TODO: Fix SQL parser issues before enabling these tests")
-	mem := memory.NewGoAllocator()
-	executor := NewSQLExecutor(mem)
-
-	// Create test data
-	names := series.New("name", []string{"alice", "BOB", "Charlie"}, mem)
-	defer names.Release()
-
-	df := dataframe.New(names)
-	defer df.Release()
-
-	executor.RegisterTable("people", df)
+	t.Skip("TODO: Implement string function evaluation in expr package")
 
 	tests := []struct {
 		name  string
@@ -569,6 +529,18 @@ func TestSQLExecutorStringFunctions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Create fresh executor and data for each subtest
+			mem := memory.NewGoAllocator()
+			executor := NewSQLExecutor(mem)
+
+			// Create test data
+			names := series.New("name", []string{"alice", "BOB", "Charlie"}, mem)
+
+			df := dataframe.New(names)
+			defer df.Release()
+
+			executor.RegisterTable("people", df)
+
 			result, err := executor.Execute(tt.query)
 			require.NoError(t, err)
 			defer result.Release()

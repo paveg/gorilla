@@ -82,7 +82,7 @@ func (e *SQLExecutor) executeWithLimit(
 	if err != nil {
 		return nil, fmt.Errorf("execution error: %w", err)
 	}
-	defer fullResult.Release()
+	// Note: Don't defer release here since we're returning the result
 
 	// Apply OFFSET and LIMIT
 	totalRows := fullResult.Len()
@@ -90,19 +90,23 @@ func (e *SQLExecutor) executeWithLimit(
 	// Safe conversion using helper function with explicit bounds checking
 	offset, err := safeInt64ToInt(limitClause.Offset)
 	if err != nil {
+		defer fullResult.Release()
 		return e.createEmptyDataFrame(fullResult), nil
 	}
 
 	// Validate LIMIT value using same safe conversion pattern
 	_, err = safeInt64ToInt(limitClause.Count)
 	if err != nil {
+		defer fullResult.Release()
 		return nil, fmt.Errorf("invalid LIMIT value: %w", err)
 	}
 
 	// Validate offset bounds against actual data size
 	if offset >= totalRows {
 		// Return empty DataFrame with same schema
-		return e.createEmptyDataFrame(fullResult), nil
+		emptyResult := e.createEmptyDataFrame(fullResult)
+		defer fullResult.Release()
+		return emptyResult, nil
 	}
 
 	// For now, just return the original DataFrame
