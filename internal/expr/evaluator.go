@@ -58,6 +58,64 @@ func NewEvaluator(mem memory.Allocator) *Evaluator {
 	return &Evaluator{mem: mem}
 }
 
+// EvaluateWithContext evaluates an expression with a specific evaluation context
+func (e *Evaluator) EvaluateWithContext(expr Expr, columns map[string]arrow.Array, ctx EvaluationContext) (arrow.Array, error) {
+	// Validate context support
+	if err := e.validateContextSupport(expr, ctx); err != nil {
+		return nil, err
+	}
+
+	switch ex := expr.(type) {
+	case *ColumnExpr:
+		return e.evaluateColumnWithContext(ex, columns, ctx)
+	case *LiteralExpr:
+		return e.evaluateLiteralWithContext(ex, columns, ctx)
+	case *BinaryExpr:
+		return e.evaluateBinaryWithContext(ex, columns, ctx)
+	case *FunctionExpr:
+		return e.evaluateFunctionWithContext(ex, columns, ctx)
+	case *AggregationExpr:
+		return e.evaluateAggregationWithContext(ex, columns, ctx)
+	case *WindowExpr:
+		return e.evaluateWindowWithContext(ex, columns, ctx)
+	case *InvalidExpr:
+		return nil, fmt.Errorf("invalid expression: %s", ex.Message())
+	default:
+		return nil, fmt.Errorf("unsupported expression type: %T", expr)
+	}
+}
+
+// EvaluateBooleanWithContext evaluates an expression that should return a boolean array with context
+func (e *Evaluator) EvaluateBooleanWithContext(expr Expr, columns map[string]arrow.Array, ctx EvaluationContext) (arrow.Array, error) {
+	// Validate context support
+	if err := e.validateContextSupport(expr, ctx); err != nil {
+		return nil, err
+	}
+
+	switch ex := expr.(type) {
+	case *ColumnExpr:
+		return e.evaluateColumnBooleanWithContext(ex, columns, ctx)
+	case *LiteralExpr:
+		return e.evaluateLiteralBooleanWithContext(ex, columns, ctx)
+	case *BinaryExpr:
+		return e.evaluateBinaryBooleanWithContext(ex, columns, ctx)
+	case *InvalidExpr:
+		return nil, fmt.Errorf("invalid expression: %s", ex.Message())
+	default:
+		return nil, fmt.Errorf("unsupported expression type for boolean evaluation: %T", expr)
+	}
+}
+
+// validateContextSupport validates that an expression supports the given context
+func (e *Evaluator) validateContextSupport(expr Expr, ctx EvaluationContext) error {
+	if contextualExpr, ok := expr.(ContextualExpr); ok {
+		if !contextualExpr.SupportsContext(ctx) {
+			return fmt.Errorf("expression %s does not support %s context", expr.String(), ctx.String())
+		}
+	}
+	return nil
+}
+
 // EvaluateBoolean evaluates an expression that should return a boolean array
 func (e *Evaluator) EvaluateBoolean(expr Expr, columns map[string]arrow.Array) (arrow.Array, error) {
 	switch ex := expr.(type) {
@@ -94,6 +152,198 @@ func (e *Evaluator) Evaluate(expr Expr, columns map[string]arrow.Array) (arrow.A
 	default:
 		return nil, fmt.Errorf("unsupported expression type: %T", expr)
 	}
+}
+
+// Context-aware evaluation methods for each expression type
+
+// evaluateColumnWithContext evaluates a column expression with context
+func (e *Evaluator) evaluateColumnWithContext(expr *ColumnExpr, columns map[string]arrow.Array, ctx EvaluationContext) (arrow.Array, error) {
+	// Column evaluation is the same in both contexts, but the column names/data may differ
+	_ = ctx // Context is validated before this method is called
+	return e.evaluateColumn(expr, columns)
+}
+
+// evaluateLiteralWithContext evaluates a literal expression with context
+func (e *Evaluator) evaluateLiteralWithContext(expr *LiteralExpr, columns map[string]arrow.Array, ctx EvaluationContext) (arrow.Array, error) {
+	// Literal evaluation is context-independent
+	_ = ctx // Context is validated before this method is called
+	return e.evaluateLiteral(expr, columns)
+}
+
+// evaluateBinaryWithContext evaluates a binary expression with context
+func (e *Evaluator) evaluateBinaryWithContext(expr *BinaryExpr, columns map[string]arrow.Array, ctx EvaluationContext) (arrow.Array, error) {
+	// Validate context support for operands
+	if err := e.validateContextSupport(expr.left, ctx); err != nil {
+		return nil, fmt.Errorf("validating left operand context: %w", err)
+	}
+	if err := e.validateContextSupport(expr.right, ctx); err != nil {
+		return nil, fmt.Errorf("validating right operand context: %w", err)
+	}
+
+	// Evaluate left and right operands with context
+	left, err := e.EvaluateWithContext(expr.left, columns, ctx)
+	if err != nil {
+		return nil, fmt.Errorf("evaluating left operand: %w", err)
+	}
+	defer left.Release()
+
+	right, err := e.EvaluateWithContext(expr.right, columns, ctx)
+	if err != nil {
+		return nil, fmt.Errorf("evaluating right operand: %w", err)
+	}
+	defer right.Release()
+
+	// Apply the binary operation
+	switch expr.op {
+	case OpAdd, OpSub, OpMul, OpDiv:
+		return e.evaluateArithmetic(left, right, expr.op)
+	case OpEq, OpNe, OpLt, OpLe, OpGt, OpGe:
+		return e.evaluateComparison(left, right, expr.op)
+	case OpAnd, OpOr:
+		return e.evaluateLogical(left, right, expr.op)
+	default:
+		return nil, fmt.Errorf("unsupported binary operation: %v", expr.op)
+	}
+}
+
+// evaluateBinaryBooleanWithContext evaluates a binary expression that returns boolean with context
+func (e *Evaluator) evaluateBinaryBooleanWithContext(expr *BinaryExpr, columns map[string]arrow.Array, ctx EvaluationContext) (arrow.Array, error) {
+	// Validate context support for operands
+	if err := e.validateContextSupport(expr.left, ctx); err != nil {
+		return nil, fmt.Errorf("validating left operand context: %w", err)
+	}
+	if err := e.validateContextSupport(expr.right, ctx); err != nil {
+		return nil, fmt.Errorf("validating right operand context: %w", err)
+	}
+
+	// Evaluate left and right operands with context
+	left, err := e.EvaluateWithContext(expr.left, columns, ctx)
+	if err != nil {
+		return nil, fmt.Errorf("evaluating left operand: %w", err)
+	}
+	defer left.Release()
+
+	right, err := e.EvaluateWithContext(expr.right, columns, ctx)
+	if err != nil {
+		return nil, fmt.Errorf("evaluating right operand: %w", err)
+	}
+	defer right.Release()
+
+	// Apply the binary operation
+	switch expr.op {
+	case OpEq, OpNe, OpLt, OpLe, OpGt, OpGe:
+		return e.evaluateComparison(left, right, expr.op)
+	case OpAnd, OpOr:
+		return e.evaluateLogical(left, right, expr.op)
+	default:
+		return nil, fmt.Errorf("binary operation %v does not produce boolean result", expr.op)
+	}
+}
+
+// evaluateColumnBooleanWithContext evaluates a column expression that should return boolean with context
+func (e *Evaluator) evaluateColumnBooleanWithContext(expr *ColumnExpr, columns map[string]arrow.Array, ctx EvaluationContext) (arrow.Array, error) {
+	// Column boolean evaluation is the same in both contexts
+	_ = ctx // Context is validated before this method is called
+	return e.evaluateColumnBoolean(expr, columns)
+}
+
+// evaluateLiteralBooleanWithContext evaluates a literal expression that should return boolean with context
+func (e *Evaluator) evaluateLiteralBooleanWithContext(expr *LiteralExpr, columns map[string]arrow.Array, ctx EvaluationContext) (arrow.Array, error) {
+	// Literal boolean evaluation is context-independent
+	_ = ctx // Context is validated before this method is called
+	return e.evaluateLiteralBoolean(expr, columns)
+}
+
+// evaluateFunctionWithContext evaluates a function expression with context
+func (e *Evaluator) evaluateFunctionWithContext(expr *FunctionExpr, columns map[string]arrow.Array, ctx EvaluationContext) (arrow.Array, error) {
+	// Validate context support for function arguments
+	for i, arg := range expr.args {
+		if err := e.validateContextSupport(arg, ctx); err != nil {
+			return nil, fmt.Errorf("validating argument %d context for function %s: %w", i, expr.name, err)
+		}
+	}
+
+	// Most functions work the same way regardless of context
+	// The context validation ensures the arguments are appropriate for the context
+	return e.evaluateFunction(expr, columns)
+}
+
+// evaluateAggregationWithContext evaluates an aggregation expression with context
+func (e *Evaluator) evaluateAggregationWithContext(expr *AggregationExpr, columns map[string]arrow.Array, ctx EvaluationContext) (arrow.Array, error) {
+	// Aggregation expressions can only be evaluated in GroupContext
+	if ctx != GroupContext {
+		return nil, fmt.Errorf("aggregation expressions can only be evaluated in GroupContext, got %s", ctx.String())
+	}
+
+	// For aggregation expressions, we delegate to the existing evaluation
+	// The context validation ensures we're in the right context
+	// Note: This might need special handling depending on how aggregations are implemented
+	// in the GroupBy operations, but for now we assume the columns contain pre-aggregated data
+	return e.evaluateAggregationValue(expr, columns)
+}
+
+// evaluateWindowWithContext evaluates a window expression with context
+func (e *Evaluator) evaluateWindowWithContext(expr *WindowExpr, columns map[string]arrow.Array, ctx EvaluationContext) (arrow.Array, error) {
+	// Window expressions can only be evaluated in RowContext
+	if ctx != RowContext {
+		return nil, fmt.Errorf("window expressions can only be evaluated in RowContext, got %s", ctx.String())
+	}
+
+	// Validate context support for the window function
+	if err := e.validateContextSupport(expr.function, ctx); err != nil {
+		return nil, fmt.Errorf("validating window function context: %w", err)
+	}
+
+	// Delegate to the existing window evaluation
+	return e.EvaluateWindow(expr, columns)
+}
+
+// evaluateAggregationValue is a helper method for evaluating aggregation expressions
+// when they appear in contexts where the aggregated value is already computed
+func (e *Evaluator) evaluateAggregationValue(expr *AggregationExpr, columns map[string]arrow.Array) (arrow.Array, error) {
+	// In GroupContext, aggregation expressions typically reference pre-computed aggregated columns
+	// The actual aggregation computation happens in the GroupBy operation
+	// Here we just need to retrieve the aggregated value from the columns
+
+	// Try to find the aggregated column by alias first, then by default naming
+	var columnName string
+	if expr.alias != "" {
+		columnName = expr.alias
+	} else {
+		// Generate a default aggregation column name
+		var aggName string
+		switch expr.aggType {
+		case AggSum:
+			aggName = AggNameSum
+		case AggCount:
+			aggName = AggNameCount
+		case AggMean:
+			aggName = AggNameMean
+		case AggMin:
+			aggName = AggNameMin
+		case AggMax:
+			aggName = AggNameMax
+		default:
+			return nil, fmt.Errorf("unsupported aggregation type: %v", expr.aggType)
+		}
+
+		// Default naming pattern: aggName_columnName
+		if colExpr, ok := expr.column.(*ColumnExpr); ok {
+			columnName = fmt.Sprintf("%s_%s", aggName, colExpr.name)
+		} else {
+			columnName = fmt.Sprintf("%s_%s", aggName, expr.column.String())
+		}
+	}
+
+	// Look up the aggregated column
+	arr, exists := columns[columnName]
+	if !exists {
+		return nil, fmt.Errorf("aggregated column not found: %s", columnName)
+	}
+
+	// Return a reference to the existing array
+	arr.Retain()
+	return arr, nil
 }
 
 func (e *Evaluator) evaluateColumn(expr *ColumnExpr, columns map[string]arrow.Array) (arrow.Array, error) {
