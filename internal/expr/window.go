@@ -207,6 +207,12 @@ func (w *WindowExpr) String() string {
 	return fmt.Sprintf("%s %s", w.function.String(), w.window.String())
 }
 
+// SupportsContext returns whether this expression can be evaluated in the given context
+// WindowExpr typically requires RowContext as it operates on row-level data with window semantics
+func (w *WindowExpr) SupportsContext(ctx EvaluationContext) bool {
+	return ctx == RowContext
+}
+
 // Type returns the expression type
 func (w *WindowFunctionExpr) Type() ExprType {
 	return ExprWindowFunction
@@ -223,6 +229,12 @@ func (w *WindowFunctionExpr) String() string {
 		argStrings = append(argStrings, arg.String())
 	}
 	return fmt.Sprintf("%s(%s)", w.funcName, strings.Join(argStrings, ", "))
+}
+
+// SupportsContext returns whether this expression can be evaluated in the given context
+// WindowFunctionExpr can only be evaluated in RowContext
+func (w *WindowFunctionExpr) SupportsContext(ctx EvaluationContext) bool {
+	return ctx == RowContext
 }
 
 // Over creates a window expression with the specified window

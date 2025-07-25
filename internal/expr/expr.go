@@ -19,10 +19,39 @@ const (
 	ExprInvalid
 )
 
+// EvaluationContext represents the context in which an expression is evaluated
+type EvaluationContext int
+
+const (
+	// RowContext evaluates expressions against raw row data (for WHERE clauses)
+	RowContext EvaluationContext = iota
+
+	// GroupContext evaluates expressions against aggregated group data (for HAVING clauses)
+	GroupContext
+)
+
+func (ec EvaluationContext) String() string {
+	switch ec {
+	case RowContext:
+		return "RowContext"
+	case GroupContext:
+		return "GroupContext"
+	default:
+		return "UnknownContext"
+	}
+}
+
 // Expr represents an expression that can be evaluated lazily
 type Expr interface {
 	Type() ExprType
 	String() string
+}
+
+// ContextualExpr represents expressions that can be evaluated in different contexts
+type ContextualExpr interface {
+	Expr
+	// SupportsContext returns whether this expression can be evaluated in the given context
+	SupportsContext(ctx EvaluationContext) bool
 }
 
 // ColumnExpr represents a column reference
@@ -42,6 +71,12 @@ func (c *ColumnExpr) Name() string {
 	return c.name
 }
 
+// SupportsContext returns whether this expression can be evaluated in the given context
+// ColumnExpr can be evaluated in both contexts (but meaning differs)
+func (c *ColumnExpr) SupportsContext(ctx EvaluationContext) bool {
+	return true // Columns exist in both raw and aggregated data
+}
+
 // LiteralExpr represents a literal value
 type LiteralExpr struct {
 	value interface{}
@@ -57,6 +92,12 @@ func (l *LiteralExpr) String() string {
 
 func (l *LiteralExpr) Value() interface{} {
 	return l.value
+}
+
+// SupportsContext returns whether this expression can be evaluated in the given context
+// LiteralExpr can be evaluated in any context
+func (l *LiteralExpr) SupportsContext(ctx EvaluationContext) bool {
+	return true
 }
 
 // BinaryOp represents binary operations
@@ -131,6 +172,22 @@ func (b *BinaryExpr) Right() Expr {
 	return b.right
 }
 
+// SupportsContext returns whether this expression can be evaluated in the given context
+// BinaryExpr context support depends on operands
+func (b *BinaryExpr) SupportsContext(ctx EvaluationContext) bool {
+	if leftContextual, ok := b.left.(ContextualExpr); ok {
+		if !leftContextual.SupportsContext(ctx) {
+			return false
+		}
+	}
+	if rightContextual, ok := b.right.(ContextualExpr); ok {
+		if !rightContextual.SupportsContext(ctx) {
+			return false
+		}
+	}
+	return true
+}
+
 // UnaryOp represents unary operations
 type UnaryOp int
 
@@ -168,6 +225,15 @@ func (u *UnaryExpr) Operand() Expr {
 	return u.operand
 }
 
+// SupportsContext returns whether this expression can be evaluated in the given context
+// UnaryExpr context support depends on its operand
+func (u *UnaryExpr) SupportsContext(ctx EvaluationContext) bool {
+	if operandContextual, ok := u.operand.(ContextualExpr); ok {
+		return operandContextual.SupportsContext(ctx)
+	}
+	return true
+}
+
 // InvalidExpr represents an invalid expression with an error message
 type InvalidExpr struct {
 	message string
@@ -183,6 +249,12 @@ func (i *InvalidExpr) String() string {
 
 func (i *InvalidExpr) Message() string {
 	return i.message
+}
+
+// SupportsContext returns whether this expression can be evaluated in the given context
+// InvalidExpr cannot be evaluated in any context
+func (i *InvalidExpr) SupportsContext(ctx EvaluationContext) bool {
+	return false
 }
 
 // Constructor functions
@@ -291,6 +363,38 @@ func (b *BinaryExpr) Or(other Expr) *BinaryExpr {
 	return &BinaryExpr{left: b, op: OpOr, right: other}
 }
 
+// Comparison operations on binary expressions (for chaining)
+
+// Gt creates a greater-than expression
+func (b *BinaryExpr) Gt(other Expr) *BinaryExpr {
+	return &BinaryExpr{left: b, op: OpGt, right: other}
+}
+
+// Lt creates a less-than expression
+func (b *BinaryExpr) Lt(other Expr) *BinaryExpr {
+	return &BinaryExpr{left: b, op: OpLt, right: other}
+}
+
+// Eq creates an equality expression
+func (b *BinaryExpr) Eq(other Expr) *BinaryExpr {
+	return &BinaryExpr{left: b, op: OpEq, right: other}
+}
+
+// Ne creates a not-equal expression
+func (b *BinaryExpr) Ne(other Expr) *BinaryExpr {
+	return &BinaryExpr{left: b, op: OpNe, right: other}
+}
+
+// Ge creates a greater-than-or-equal expression
+func (b *BinaryExpr) Ge(other Expr) *BinaryExpr {
+	return &BinaryExpr{left: b, op: OpGe, right: other}
+}
+
+// Le creates a less-than-or-equal expression
+func (b *BinaryExpr) Le(other Expr) *BinaryExpr {
+	return &BinaryExpr{left: b, op: OpLe, right: other}
+}
+
 // Math function methods for BinaryExpr
 
 // Abs creates an absolute value function expression
@@ -397,6 +501,19 @@ func (f *FunctionExpr) Args() []Expr {
 	return f.args
 }
 
+// SupportsContext returns whether this expression can be evaluated in the given context
+// FunctionExpr context support depends on its arguments
+func (f *FunctionExpr) SupportsContext(ctx EvaluationContext) bool {
+	for _, arg := range f.args {
+		if argContextual, ok := arg.(ContextualExpr); ok {
+			if !argContextual.SupportsContext(ctx) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // AggregationExpr represents an aggregation function over a column
 type AggregationExpr struct {
 	column  Expr
@@ -437,6 +554,12 @@ func (a *AggregationExpr) Alias() string {
 	return a.alias
 }
 
+// SupportsContext returns whether this expression can be evaluated in the given context
+// AggregationExpr can only be evaluated in GroupContext
+func (a *AggregationExpr) SupportsContext(ctx EvaluationContext) bool {
+	return ctx == GroupContext
+}
+
 // CaseWhen represents a condition and value pair in CASE expression
 type CaseWhen struct {
 	condition Expr
@@ -471,6 +594,31 @@ func (c *CaseExpr) Whens() []CaseWhen {
 
 func (c *CaseExpr) ElseValue() Expr {
 	return c.elseValue
+}
+
+// SupportsContext returns whether this expression can be evaluated in the given context
+// CaseExpr context support depends on all its conditions and values
+func (c *CaseExpr) SupportsContext(ctx EvaluationContext) bool {
+	for _, when := range c.whens {
+		if condContextual, ok := when.condition.(ContextualExpr); ok {
+			if !condContextual.SupportsContext(ctx) {
+				return false
+			}
+		}
+		if valContextual, ok := when.value.(ContextualExpr); ok {
+			if !valContextual.SupportsContext(ctx) {
+				return false
+			}
+		}
+	}
+	if c.elseValue != nil {
+		if elseContextual, ok := c.elseValue.(ContextualExpr); ok {
+			if !elseContextual.SupportsContext(ctx) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // When adds a condition-value pair to the case expression
@@ -594,6 +742,77 @@ func (a *AggregationExpr) And(other Expr) *BinaryExpr {
 // Or creates a logical OR expression
 func (a *AggregationExpr) Or(other Expr) *BinaryExpr {
 	return &BinaryExpr{left: a, op: OpOr, right: other}
+}
+
+// Arithmetic operations for AggregationExpr
+
+// Add creates an addition expression
+func (a *AggregationExpr) Add(other Expr) *BinaryExpr {
+	return &BinaryExpr{left: a, op: OpAdd, right: other}
+}
+
+// Sub creates a subtraction expression
+func (a *AggregationExpr) Sub(other Expr) *BinaryExpr {
+	return &BinaryExpr{left: a, op: OpSub, right: other}
+}
+
+// Mul creates a multiplication expression
+func (a *AggregationExpr) Mul(other Expr) *BinaryExpr {
+	return &BinaryExpr{left: a, op: OpMul, right: other}
+}
+
+// Div creates a division expression
+func (a *AggregationExpr) Div(other Expr) *BinaryExpr {
+	return &BinaryExpr{left: a, op: OpDiv, right: other}
+}
+
+// Unary operations for AggregationExpr
+
+// Neg creates a negation (unary minus) expression
+func (a *AggregationExpr) Neg() *UnaryExpr {
+	return &UnaryExpr{op: UnaryNeg, operand: a}
+}
+
+// Not creates a logical NOT expression
+func (a *AggregationExpr) Not() *UnaryExpr {
+	return &UnaryExpr{op: UnaryNot, operand: a}
+}
+
+// Math functions for AggregationExpr
+
+// Abs creates an absolute value function expression
+func (a *AggregationExpr) Abs() *FunctionExpr {
+	return &FunctionExpr{name: "abs", args: []Expr{a}}
+}
+
+// Round creates a round function expression
+func (a *AggregationExpr) Round() *FunctionExpr {
+	return &FunctionExpr{name: "round", args: []Expr{a}}
+}
+
+// RoundTo creates a round function expression with precision
+func (a *AggregationExpr) RoundTo(precision Expr) *FunctionExpr {
+	return &FunctionExpr{name: "round", args: []Expr{a, precision}}
+}
+
+// Floor creates a floor function expression
+func (a *AggregationExpr) Floor() *FunctionExpr {
+	return &FunctionExpr{name: "floor", args: []Expr{a}}
+}
+
+// Ceil creates a ceil function expression
+func (a *AggregationExpr) Ceil() *FunctionExpr {
+	return &FunctionExpr{name: "ceil", args: []Expr{a}}
+}
+
+// Sqrt creates a square root function expression
+func (a *AggregationExpr) Sqrt() *FunctionExpr {
+	return &FunctionExpr{name: "sqrt", args: []Expr{a}}
+}
+
+// Log creates a natural logarithm function expression
+func (a *AggregationExpr) Log() *FunctionExpr {
+	return &FunctionExpr{name: "log", args: []Expr{a}}
 }
 
 // Enhanced Expression System - Unary Operations
@@ -1003,6 +1222,12 @@ func (i *IntervalExpr) IntervalType() IntervalType {
 	return i.intervalType
 }
 
+// SupportsContext returns whether this expression can be evaluated in the given context
+// IntervalExpr can be evaluated in any context (it's a literal-like expression)
+func (i *IntervalExpr) SupportsContext(ctx EvaluationContext) bool {
+	return true
+}
+
 // Interval constructor functions
 
 // Days creates an interval representing days
@@ -1070,4 +1295,61 @@ func (f *FunctionExpr) DateAdd(intervalExpr *IntervalExpr) *FunctionExpr {
 // DateSub subtracts an interval from a date/time function result
 func (f *FunctionExpr) DateSub(intervalExpr *IntervalExpr) *FunctionExpr {
 	return DateSub(f, intervalExpr)
+}
+
+// ValidateExpressionContext validates that an expression can be used in the given context
+func ValidateExpressionContext(expr Expr, ctx EvaluationContext) error {
+	if contextual, ok := expr.(ContextualExpr); ok {
+		if !contextual.SupportsContext(ctx) {
+			return fmt.Errorf("expression %s cannot be used in %s", expr.String(), ctx.String())
+		}
+	}
+
+	// Recursively validate sub-expressions
+	switch e := expr.(type) {
+	case *BinaryExpr:
+		return validateBinaryExpr(e, ctx)
+	case *UnaryExpr:
+		return ValidateExpressionContext(e.operand, ctx)
+	case *FunctionExpr:
+		return validateFunctionExpr(e, ctx)
+	case *CaseExpr:
+		return validateCaseExpr(e, ctx)
+	}
+
+	return nil
+}
+
+// validateBinaryExpr validates a binary expression's sub-expressions
+func validateBinaryExpr(e *BinaryExpr, ctx EvaluationContext) error {
+	if err := ValidateExpressionContext(e.left, ctx); err != nil {
+		return err
+	}
+	return ValidateExpressionContext(e.right, ctx)
+}
+
+// validateFunctionExpr validates a function expression's arguments
+func validateFunctionExpr(e *FunctionExpr, ctx EvaluationContext) error {
+	for _, arg := range e.args {
+		if err := ValidateExpressionContext(arg, ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateCaseExpr validates a case expression's conditions and values
+func validateCaseExpr(e *CaseExpr, ctx EvaluationContext) error {
+	for _, when := range e.whens {
+		if err := ValidateExpressionContext(when.condition, ctx); err != nil {
+			return err
+		}
+		if err := ValidateExpressionContext(when.value, ctx); err != nil {
+			return err
+		}
+	}
+	if e.elseValue != nil {
+		return ValidateExpressionContext(e.elseValue, ctx)
+	}
+	return nil
 }
