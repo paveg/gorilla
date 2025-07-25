@@ -194,9 +194,25 @@ func TestEvaluationContext(t *testing.T) {
 		assert.True(t, rankExpr.SupportsContext(RowContext))
 		assert.False(t, rankExpr.SupportsContext(GroupContext))
 
+		// Additional window functions
+		denseRankExpr := DenseRank().Over(NewWindow().OrderBy("score", false))
+		assert.True(t, denseRankExpr.SupportsContext(RowContext))
+		assert.False(t, denseRankExpr.SupportsContext(GroupContext))
+
+		// Test WindowFunctionExpr as well
+		leadExpr := Lead(Col("value"), 1).Over(NewWindow().OrderBy("id", true))
+		assert.True(t, leadExpr.SupportsContext(RowContext))
+		assert.False(t, leadExpr.SupportsContext(GroupContext))
+
+		lagExpr := Lag(Col("value"), 1).Over(NewWindow().OrderBy("id", true))
+		assert.True(t, lagExpr.SupportsContext(RowContext))
+		assert.False(t, lagExpr.SupportsContext(GroupContext))
+
 		// Validation
 		assert.NoError(t, ValidateExpressionContext(rowNumExpr, RowContext))
 		assert.Error(t, ValidateExpressionContext(rowNumExpr, GroupContext))
+		assert.NoError(t, ValidateExpressionContext(leadExpr, RowContext))
+		assert.Error(t, ValidateExpressionContext(leadExpr, GroupContext))
 	})
 
 	t.Run("Complex nested expression validation", func(t *testing.T) {
@@ -231,21 +247,57 @@ func TestEvaluationContext(t *testing.T) {
 		basicExpr := Col("test")
 		assert.NoError(t, ValidateExpressionContext(basicExpr, RowContext))
 		assert.NoError(t, ValidateExpressionContext(basicExpr, GroupContext))
+
+		// Empty expressions and boundary conditions
+		emptyColumnExpr := Col("")
+		assert.True(t, emptyColumnExpr.SupportsContext(RowContext))
+		assert.True(t, emptyColumnExpr.SupportsContext(GroupContext))
+
+		// Complex nested expressions with mixed contexts
+		mixedNestedExpr := Case().
+			When(Col("category").Eq(Lit("A")), Col("value")).
+			When(Col("category").Eq(Lit("B")), Col("value").Mul(Lit(2))).
+			Else(Col("default_value"))
+		assert.NoError(t, ValidateExpressionContext(mixedNestedExpr, RowContext))
+		assert.NoError(t, ValidateExpressionContext(mixedNestedExpr, GroupContext))
+
+		// Deeply nested arithmetic with valid context
+		deeplyNested := Col("a").Add(Col("b")).Mul(Col("c")).Div(Col("d")).Sub(Col("e"))
+		assert.NoError(t, ValidateExpressionContext(deeplyNested, RowContext))
+		assert.NoError(t, ValidateExpressionContext(deeplyNested, GroupContext))
 	})
 
 	t.Run("Error messages", func(t *testing.T) {
-		// Check error message format
+		// Check error message format for aggregation in RowContext
 		sumExpr := Sum(Col("amount"))
 		err := ValidateExpressionContext(sumExpr, RowContext)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "sum(col(amount))")
 		assert.Contains(t, err.Error(), "RowContext")
 
-		// Nested error
+		// Check error message format for window function in GroupContext
+		rowNumExpr := RowNumber().Over(NewWindow().OrderBy("id", true))
+		err = ValidateExpressionContext(rowNumExpr, GroupContext)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "GroupContext")
+
+		// Nested error in binary expression
 		nestedExpr := Col("value").Add(Sum(Col("total")))
 		err = ValidateExpressionContext(nestedExpr, RowContext)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "sum(col(total))")
+
+		// Complex nested error with multiple contexts
+		complexExpr := If(
+			Sum(Col("amount")).Gt(Lit(1000)),
+			RowNumber().Over(NewWindow().OrderBy("id", true)),
+			Lit(0),
+		)
+		// Should fail in both contexts for different reasons
+		err = ValidateExpressionContext(complexExpr, RowContext)
+		assert.Error(t, err)
+		err = ValidateExpressionContext(complexExpr, GroupContext)
+		assert.Error(t, err)
 	})
 }
 
@@ -279,5 +331,117 @@ func TestContextValidationWithAggregationComparisons(t *testing.T) {
 		orExpr := Mean(Col("score")).Ge(Lit(80)).Or(Max(Col("score")).Eq(Lit(100)))
 		assert.NoError(t, ValidateExpressionContext(orExpr, GroupContext))
 		assert.Error(t, ValidateExpressionContext(orExpr, RowContext))
+	})
+}
+
+func TestContextValidationComprehensive(t *testing.T) {
+	t.Run("All aggregation types context validation", func(t *testing.T) {
+		aggregationExprs := []Expr{
+			Sum(Col("amount")),
+			Count(Col("id")),
+			Mean(Col("price")),
+			Min(Col("date")),
+			Max(Col("score")),
+		}
+
+		for _, aggExpr := range aggregationExprs {
+			// All aggregations should support GroupContext only
+			assert.True(t, aggExpr.(ContextualExpr).SupportsContext(GroupContext),
+				"Aggregation %s should support GroupContext", aggExpr.String())
+			assert.False(t, aggExpr.(ContextualExpr).SupportsContext(RowContext),
+				"Aggregation %s should not support RowContext", aggExpr.String())
+
+			// Validation should pass in GroupContext and fail in RowContext
+			assert.NoError(t, ValidateExpressionContext(aggExpr, GroupContext))
+			assert.Error(t, ValidateExpressionContext(aggExpr, RowContext))
+		}
+	})
+
+	t.Run("Mixed context expressions with chaining", func(t *testing.T) {
+		// Row context: column operations that should work in both contexts
+		rowExpr := Col("price").Mul(Lit(1.2)).Round()
+		assert.NoError(t, ValidateExpressionContext(rowExpr, RowContext))
+		assert.NoError(t, ValidateExpressionContext(rowExpr, GroupContext))
+
+		// Group context: aggregation operations
+		groupExpr := Sum(Col("amount")).Div(Count(Col("id"))).Round()
+		assert.NoError(t, ValidateExpressionContext(groupExpr, GroupContext))
+		assert.Error(t, ValidateExpressionContext(groupExpr, RowContext))
+
+		// Mixed invalid: aggregation in row-level comparison
+		invalidMixed := Col("name").Eq(Lit("test")).And(Sum(Col("amount")).Gt(Lit(100)))
+		assert.Error(t, ValidateExpressionContext(invalidMixed, RowContext))
+		assert.NoError(t, ValidateExpressionContext(invalidMixed, GroupContext))
+	})
+
+	t.Run("Boundary conditions and special cases", func(t *testing.T) {
+		// Empty function expressions
+		upperEmpty := Col("").Upper()
+		assert.True(t, upperEmpty.SupportsContext(RowContext))
+		assert.True(t, upperEmpty.SupportsContext(GroupContext))
+
+		// Unary operations on different expression types
+		negColumn := Col("value").Neg()
+		assert.True(t, negColumn.SupportsContext(RowContext))
+		assert.True(t, negColumn.SupportsContext(GroupContext))
+
+		negAggregation := Sum(Col("amount")).Neg()
+		assert.False(t, negAggregation.SupportsContext(RowContext))
+		assert.True(t, negAggregation.SupportsContext(GroupContext))
+
+		notColumn := Col("active").Not()
+		assert.True(t, notColumn.SupportsContext(RowContext))
+		assert.True(t, notColumn.SupportsContext(GroupContext))
+
+		// Deeply nested conditional with different contexts
+		deepConditional := Case().
+			When(Col("type").Eq(Lit("A")),
+				If(Col("value").Gt(Lit(100)), Lit("high"), Lit("low"))).
+			When(Col("type").Eq(Lit("B")),
+				Col("category").Upper()).
+			Else(Lit("unknown"))
+
+		assert.NoError(t, ValidateExpressionContext(deepConditional, RowContext))
+		assert.NoError(t, ValidateExpressionContext(deepConditional, GroupContext))
+	})
+
+	t.Run("Context validation error propagation", func(t *testing.T) {
+		// Test that errors bubble up correctly through nested expressions
+
+		// Error should come from Sum in RowContext
+		nestedSum := Col("base").Add(Sum(Col("amount")))
+		err := ValidateExpressionContext(nestedSum, RowContext)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "sum(col(amount))")
+
+		// Error should come from window function in GroupContext
+		nestedWindow := Sum(Col("total")).Add(RowNumber().Over(NewWindow().OrderBy("id", true)))
+		err = ValidateExpressionContext(nestedWindow, GroupContext)
+		assert.Error(t, err)
+
+		// Multiple levels of nesting
+		deeplyNested := Case().
+			When(Col("condition").Eq(Lit(true)),
+				Col("a").Add(Sum(Col("b")))).
+			Else(Lit(0))
+
+		err = ValidateExpressionContext(deeplyNested, RowContext)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "sum(col(b))")
+	})
+}
+
+func TestEvaluationContextStringRepresentation(t *testing.T) {
+	t.Run("All context values have proper string representation", func(t *testing.T) {
+		assert.Equal(t, "RowContext", RowContext.String())
+		assert.Equal(t, "GroupContext", GroupContext.String())
+
+		// Test unknown context handling
+		unknownContext := EvaluationContext(999)
+		assert.Equal(t, "UnknownContext", unknownContext.String())
+
+		// Test edge case contexts
+		negativeContext := EvaluationContext(-1)
+		assert.Equal(t, "UnknownContext", negativeContext.String())
 	})
 }
