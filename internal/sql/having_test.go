@@ -20,7 +20,7 @@ func TestHavingClauseTranslation(t *testing.T) {
 		[]string{"Engineering", "Sales", "Engineering", "Sales", "Engineering", "HR", "HR", "Sales"},
 		mem)
 	salaries := series.New("salary", []float64{90000, 75000, 85000, 80000, 95000, 60000, 65000, 70000}, mem)
-	employees := series.New("employee", 
+	employees := series.New("employee",
 		[]string{"Alice", "Bob", "Charlie", "David", "Eve", "Frank", "Grace", "Henry"}, mem)
 
 	df := dataframe.New(departments, salaries, employees)

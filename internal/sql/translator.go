@@ -68,13 +68,17 @@ func (t *SQLTranslator) translateSelect(stmt *SelectStatement) (*dataframe.LazyF
 		aggExprs := t.extractAggregations(stmt.SelectList)
 
 		if len(aggExprs) > 0 {
-			// Convert expr.Expr to *expr.AggregationExpr
+			// Extract aggregations with their aliases from SELECT list
 			aggPtrs := make([]*expr.AggregationExpr, 0, len(aggExprs))
-			for _, aggExpr := range aggExprs {
-				if aggPtr, ok := aggExpr.(*expr.AggregationExpr); ok {
-					aggPtrs = append(aggPtrs, aggPtr)
-				} else {
-					return nil, fmt.Errorf("expected aggregation expression, got %T", aggExpr)
+			for _, item := range stmt.SelectList {
+				if !item.IsWildcard {
+					if aggExpr, ok := item.Expression.(*expr.AggregationExpr); ok {
+						// Apply alias if provided
+						if item.Alias != "" {
+							aggExpr = aggExpr.As(item.Alias)
+						}
+						aggPtrs = append(aggPtrs, aggExpr)
+					}
 				}
 			}
 
@@ -82,10 +86,20 @@ func (t *SQLTranslator) translateSelect(stmt *SelectStatement) (*dataframe.LazyF
 			if stmt.HavingClause != nil {
 				// Build aggregation context for HAVING validation
 				aggContext := expr.NewAggregationContext()
+
 				for _, agg := range aggPtrs {
-					// Register aggregation in context
 					exprStr := agg.String()
-					columnName := expr.ExpressionToColumnName(agg)
+
+					// Use the actual alias if provided, otherwise use a generated name with SQL-appropriate prefix
+					var columnName string
+					if agg.Alias() != "" {
+						columnName = agg.Alias()
+					} else {
+						// Generate SQL-appropriate default name (e.g., "avg_salary" not "mean_salary")
+						tempResolver := expr.NewAliasResolver(false)
+						columnName = tempResolver.GenerateDefaultName(agg)
+					}
+
 					aggContext.AddMapping(exprStr, columnName)
 				}
 
@@ -120,8 +134,14 @@ func (t *SQLTranslator) translateSelect(stmt *SelectStatement) (*dataframe.LazyF
 					return nil, fmt.Errorf("HAVING validation error: %w", err)
 				}
 
+				// Resolve aliases in HAVING expression
+				resolvedHavingCondition, err := t.resolveAliasesInExpression(stmt.HavingClause.Condition, aliasResolver, aggContext)
+				if err != nil {
+					return nil, fmt.Errorf("error resolving aliases in HAVING clause: %w", err)
+				}
+
 				// Use AggWithHaving for combined GROUP BY + HAVING operation
-				lazy = lazy.GroupBy(groupCols...).AggWithHaving(stmt.HavingClause.Condition, aggPtrs...)
+				lazy = lazy.GroupBy(groupCols...).AggWithHaving(resolvedHavingCondition, aggPtrs...)
 			} else {
 				// No HAVING clause, use regular aggregation
 				lazy = lazy.GroupBy(groupCols...).Agg(aggPtrs...)
@@ -500,4 +520,57 @@ func (t *SQLTranslator) GetRegisteredTables() []string {
 // ClearTables removes all registered tables
 func (t *SQLTranslator) ClearTables() {
 	t.tables = make(map[string]*dataframe.DataFrame)
+}
+
+// resolveAliasesInExpression recursively resolves aliases in an expression tree
+func (t *SQLTranslator) resolveAliasesInExpression(
+	expression expr.Expr,
+	aliasResolver *expr.AliasResolver,
+	aggContext *expr.AggregationContext,
+) (expr.Expr, error) {
+	switch e := expression.(type) {
+	case *expr.ColumnExpr:
+		// Check if this is an alias that needs to be resolved
+		if resolved, isAlias := aliasResolver.ResolveAlias(e.Name()); isAlias {
+			// Return a new ColumnExpr with the resolved name
+			return expr.Col(resolved), nil
+		}
+		// Return the original column expression
+		return e, nil
+
+	case *expr.BinaryExpr:
+		// Recursively resolve aliases in left and right operands
+		left, err := t.resolveAliasesInExpression(e.Left(), aliasResolver, aggContext)
+		if err != nil {
+			return nil, err
+		}
+
+		right, err := t.resolveAliasesInExpression(e.Right(), aliasResolver, aggContext)
+		if err != nil {
+			return nil, err
+		}
+
+		// Create a new binary expression with resolved operands
+		return expr.NewBinaryExpr(left, e.Op(), right), nil
+
+	case *expr.AggregationExpr:
+		// For HAVING clauses, aggregation expressions should be converted to column references
+		// Use the aggregation context to find the corresponding column name
+		exprStr := e.String()
+		if columnName, found := aggContext.GetColumnName(exprStr); found {
+			// Convert to a column reference to the aggregated column
+			return expr.Col(columnName), nil
+		}
+
+		// If no mapping found in aggregation context, return as-is (this might cause an error during execution)
+		return e, nil
+
+	case *expr.LiteralExpr:
+		// Literal expressions should remain as-is
+		return e, nil
+
+	default:
+		// For any other expression types, return as-is
+		return expression, nil
+	}
 }
