@@ -483,11 +483,7 @@ func (g *GroupByOperation) Apply(df *DataFrame) (*DataFrame, error) {
 			columns[colName] = series.Array()
 		}
 	}
-	defer func() {
-		for _, arr := range columns {
-			arr.Release()
-		}
-	}()
+	// Note: Arrays from series.Array() are managed by the parent series and should not be manually released
 
 	// Evaluate the HAVING predicate in GroupContext
 	mask, err := eval.EvaluateBooleanWithContext(g.havingPredicate, columns, expr.GroupContext)
@@ -571,6 +567,10 @@ func (g *GroupByOperation) createEmptyDataFrame(df *DataFrame) *DataFrame {
 				emptySeries = append(emptySeries, series.New(colName, []float64{}, mem))
 			case "bool":
 				emptySeries = append(emptySeries, series.New(colName, []bool{}, mem))
+			default:
+				// For unsupported types, create an empty string series as fallback
+				// This ensures the DataFrame structure is preserved even with unexpected types
+				emptySeries = append(emptySeries, series.New(colName, []string{}, mem))
 			}
 		}
 	}
@@ -599,7 +599,7 @@ func (g *GroupByOperation) filterSeries(originalSeries ISeries, mask *array.Bool
 // filterStringSeries filters a string series
 func (g *GroupByOperation) filterStringSeries(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, mem memory.Allocator) (ISeries, error) {
 	originalArray := originalSeries.Array()
-	defer originalArray.Release()
+	// Note: Array from series.Array() is managed by the parent series
 
 	stringArray, ok := originalArray.(*array.String)
 	if !ok {
@@ -611,6 +611,9 @@ func (g *GroupByOperation) filterStringSeries(originalSeries ISeries, mask *arra
 		if !mask.IsNull(i) && mask.Value(i) {
 			if !stringArray.IsNull(i) {
 				filteredValues = append(filteredValues, stringArray.Value(i))
+			} else {
+				// Handle null values consistently by using empty string as placeholder
+				filteredValues = append(filteredValues, "")
 			}
 		}
 	}
@@ -621,7 +624,7 @@ func (g *GroupByOperation) filterStringSeries(originalSeries ISeries, mask *arra
 // filterInt64Series filters an int64 series
 func (g *GroupByOperation) filterInt64Series(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, mem memory.Allocator) (ISeries, error) {
 	originalArray := originalSeries.Array()
-	defer originalArray.Release()
+	// Note: Array from series.Array() is managed by the parent series
 
 	intArray, ok := originalArray.(*array.Int64)
 	if !ok {
@@ -633,6 +636,9 @@ func (g *GroupByOperation) filterInt64Series(originalSeries ISeries, mask *array
 		if !mask.IsNull(i) && mask.Value(i) {
 			if !intArray.IsNull(i) {
 				filteredValues = append(filteredValues, intArray.Value(i))
+			} else {
+				// Handle null values consistently by using zero as placeholder
+				filteredValues = append(filteredValues, 0)
 			}
 		}
 	}
@@ -643,7 +649,7 @@ func (g *GroupByOperation) filterInt64Series(originalSeries ISeries, mask *array
 // filterFloat64Series filters a float64 series
 func (g *GroupByOperation) filterFloat64Series(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, mem memory.Allocator) (ISeries, error) {
 	originalArray := originalSeries.Array()
-	defer originalArray.Release()
+	// Note: Array from series.Array() is managed by the parent series
 
 	floatArray, ok := originalArray.(*array.Float64)
 	if !ok {
@@ -655,6 +661,9 @@ func (g *GroupByOperation) filterFloat64Series(originalSeries ISeries, mask *arr
 		if !mask.IsNull(i) && mask.Value(i) {
 			if !floatArray.IsNull(i) {
 				filteredValues = append(filteredValues, floatArray.Value(i))
+			} else {
+				// Handle null values consistently by using zero as placeholder
+				filteredValues = append(filteredValues, 0.0)
 			}
 		}
 	}
@@ -665,7 +674,7 @@ func (g *GroupByOperation) filterFloat64Series(originalSeries ISeries, mask *arr
 // filterBoolSeries filters a boolean series
 func (g *GroupByOperation) filterBoolSeries(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, mem memory.Allocator) (ISeries, error) {
 	originalArray := originalSeries.Array()
-	defer originalArray.Release()
+	// Note: Array from series.Array() is managed by the parent series
 
 	boolArray, ok := originalArray.(*array.Boolean)
 	if !ok {
@@ -677,6 +686,9 @@ func (g *GroupByOperation) filterBoolSeries(originalSeries ISeries, mask *array.
 		if !mask.IsNull(i) && mask.Value(i) {
 			if !boolArray.IsNull(i) {
 				filteredValues = append(filteredValues, boolArray.Value(i))
+			} else {
+				// Handle null values consistently by using false as placeholder
+				filteredValues = append(filteredValues, false)
 			}
 		}
 	}
