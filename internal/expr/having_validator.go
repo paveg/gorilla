@@ -9,17 +9,34 @@ import (
 // HavingValidator provides validation for HAVING clause expressions.
 // It ensures that HAVING expressions only reference columns that are available
 // in GROUP BY results (either GROUP BY columns or aggregated columns).
+// It supports comprehensive alias resolution for user-defined and default names.
 type HavingValidator struct {
 	aggregationContext *AggregationContext
 	groupByColumns     []string
+	aliasResolver      *AliasResolver // Enhanced alias resolution support
 }
 
 // NewHavingValidator creates a new HavingValidator with the given aggregation context
-// and GROUP BY columns.
+// and GROUP BY columns. For backward compatibility.
 func NewHavingValidator(aggregationContext *AggregationContext, groupByColumns []string) *HavingValidator {
 	return &HavingValidator{
 		aggregationContext: aggregationContext,
 		groupByColumns:     groupByColumns,
+		aliasResolver:      nil, // Backward compatibility - no alias resolution
+	}
+}
+
+// NewHavingValidatorWithAlias creates a new HavingValidator with enhanced alias resolution.
+// This is the recommended constructor for full HAVING clause functionality.
+func NewHavingValidatorWithAlias(
+	aggregationContext *AggregationContext,
+	groupByColumns []string,
+	aliasResolver *AliasResolver,
+) *HavingValidator {
+	return &HavingValidator{
+		aggregationContext: aggregationContext,
+		groupByColumns:     groupByColumns,
+		aliasResolver:      aliasResolver,
 	}
 }
 
@@ -55,7 +72,20 @@ func (hv *HavingValidator) ValidateExpression(expr Expr) error {
 
 // validateColumnReference checks if a column reference is valid in HAVING context.
 // Valid columns are either GROUP BY columns or aggregated columns.
+// Uses alias resolution when available for enhanced user experience.
 func (hv *HavingValidator) validateColumnReference(columnName string) error {
+	// Use alias resolver if available for enhanced resolution
+	if hv.aliasResolver != nil {
+		return hv.aliasResolver.ValidateAlias(columnName)
+	}
+
+	// Fallback to original validation logic for backward compatibility
+	return hv.validateColumnReferenceLegacy(columnName)
+}
+
+// validateColumnReferenceLegacy provides the original column validation logic.
+// This is used for backward compatibility when no alias resolver is provided.
+func (hv *HavingValidator) validateColumnReferenceLegacy(columnName string) error {
 	// Check if it's a GROUP BY column
 	for _, groupCol := range hv.groupByColumns {
 		if groupCol == columnName {
@@ -73,11 +103,21 @@ func (hv *HavingValidator) validateColumnReference(columnName string) error {
 }
 
 // validateAggregationExpression checks if an aggregation expression is valid.
-// It must exist in the aggregation context.
+// It must exist in the aggregation context or be resolvable via alias resolver.
 func (hv *HavingValidator) validateAggregationExpression(aggExpr *AggregationExpr) error {
 	exprStr := aggExpr.String()
 
-	// Check if this aggregation exists in the context
+	// Use alias resolver if available for enhanced resolution
+	if hv.aliasResolver != nil {
+		// Check if the expression can be resolved through alias resolver
+		if _, exists := hv.aliasResolver.GetColumnNameFromExpression(exprStr); exists {
+			return nil
+		}
+		// Return alias resolver's error (which provides better messages)
+		return hv.aliasResolver.ValidateAlias(exprStr)
+	}
+
+	// Fallback to original validation logic for backward compatibility
 	if hv.aggregationContext.HasMapping(exprStr) {
 		return nil
 	}
@@ -188,8 +228,14 @@ func (hv *HavingValidator) createAggregationNotFoundError(exprStr string) error 
 }
 
 // GetAvailableColumns returns all columns available in HAVING context
-// (GROUP BY columns + aggregated columns).
+// (GROUP BY columns + aggregated columns). Uses alias resolver when available.
 func (hv *HavingValidator) GetAvailableColumns() []string {
+	// Use alias resolver if available for enhanced column listing
+	if hv.aliasResolver != nil {
+		return hv.aliasResolver.GetAllAvailableAliases()
+	}
+
+	// Fallback to original logic for backward compatibility
 	var columns []string
 
 	// Add GROUP BY columns
@@ -218,4 +264,30 @@ func (hv *HavingValidator) GetAvailableAggregations() []string {
 	sort.Strings(aggregations)
 
 	return aggregations
+}
+
+// BuildHavingValidatorWithAlias creates a complete HAVING validator with alias resolution
+// from GROUP BY columns and aggregation expressions. This is a convenience function
+// that sets up both the AggregationContext and AliasResolver automatically.
+func BuildHavingValidatorWithAlias(
+	groupByColumns []string,
+	aggregations []*AggregationExpr,
+	caseInsensitive bool,
+) (*HavingValidator, error) {
+	// Build aggregation context
+	aggregationContext := NewAggregationContext()
+	for _, agg := range aggregations {
+		exprStr := agg.String()
+		columnName := ExpressionToColumnName(agg)
+		aggregationContext.AddMapping(exprStr, columnName)
+	}
+
+	// Build alias resolver
+	aliasResolver, err := BuildAliasResolver(groupByColumns, aggregations, caseInsensitive)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build alias resolver: %w", err)
+	}
+
+	// Create validator with both context and alias resolver
+	return NewHavingValidatorWithAlias(aggregationContext, groupByColumns, aliasResolver), nil
 }
