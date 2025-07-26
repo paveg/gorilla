@@ -121,7 +121,9 @@ func (t *SQLTranslator) translateSelect(stmt *SelectStatement) (*dataframe.LazyF
 							// If the item has an alias, update the aggregation expression
 							if item.Alias != "" {
 								// Type safety check: ensure the As method exists and returns correct type
-								if aliasableAgg, ok := interface{}(aggExpr).(interface{ As(string) *expr.AggregationExpr }); ok {
+								if aliasableAgg, ok := interface{}(aggExpr).(interface {
+									As(string) *expr.AggregationExpr
+								}); ok {
 									aggExpr = aliasableAgg.As(item.Alias)
 								} else {
 									return nil, fmt.Errorf("aggregation expression does not support aliasing: %T", aggExpr)

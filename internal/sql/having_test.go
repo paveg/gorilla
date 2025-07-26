@@ -245,7 +245,7 @@ func TestHavingClauseComplexExpressions(t *testing.T) {
 				GROUP BY category
 				HAVING SUM(value) * 2 > 200
 			`,
-			expectErr: true, // TODO: Arithmetic expressions not yet supported in parser
+			expectErr:   true, // TODO: Arithmetic expressions not yet supported in parser
 			errContains: "unsupported expression type",
 		},
 		{
@@ -285,7 +285,7 @@ func TestHavingClauseComplexExpressions(t *testing.T) {
 				GROUP BY category
 				HAVING AVG(score) * 10 > AVG(value)
 			`,
-			expectErr: true, // TODO: Arithmetic expressions with aggregations not yet supported in parser
+			expectErr:   true, // TODO: Arithmetic expressions with aggregations not yet supported in parser
 			errContains: "unsupported expression type",
 		},
 	}

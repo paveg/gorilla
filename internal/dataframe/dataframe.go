@@ -773,14 +773,14 @@ func (gb *GroupBy) aggSequential(aggregations ...*expr.AggregationExpr) *DataFra
 					countValues[i] = int64(len(indices))
 					i++
 				}
-				
+
 				aggColumnName := gb.getAggregationColumnName(agg, "*")
 				countSeries := series.New(aggColumnName, countValues, mem)
 				resultSeries = append(resultSeries, countSeries)
 				continue
 			}
 		}
-		
+
 		columnExpr, ok := agg.Column().(*expr.ColumnExpr)
 		if !ok {
 			continue // Skip non-column aggregations for now
@@ -824,7 +824,7 @@ func (gb *GroupBy) aggParallel(aggregations ...*expr.AggregationExpr) *DataFrame
 
 	var workItems []aggWork
 	var countResults []ISeries // Handle COUNT(*) separately since they don't need series data
-	
+
 	for _, agg := range aggregations {
 		// Handle COUNT(*) expressions specially (they use LiteralExpr instead of ColumnExpr)
 		if agg.AggType() == expr.AggCount {
@@ -836,14 +836,14 @@ func (gb *GroupBy) aggParallel(aggregations ...*expr.AggregationExpr) *DataFrame
 					countValues[i] = int64(len(indices))
 					i++
 				}
-				
+
 				aggColumnName := gb.getAggregationColumnName(agg, "*")
 				countSeries := series.New(aggColumnName, countValues, mem)
 				countResults = append(countResults, countSeries)
 				continue
 			}
 		}
-		
+
 		columnExpr, ok := agg.Column().(*expr.ColumnExpr)
 		if !ok {
 			continue
@@ -868,7 +868,7 @@ func (gb *GroupBy) aggParallel(aggregations ...*expr.AggregationExpr) *DataFrame
 
 	// Add aggregation results to result series
 	resultSeries = append(resultSeries, aggResults...)
-	
+
 	// Add COUNT(*) results
 	resultSeries = append(resultSeries, countResults...)
 
