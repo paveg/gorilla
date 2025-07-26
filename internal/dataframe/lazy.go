@@ -426,8 +426,27 @@ func (s *SortOperation) String() string {
 
 // GroupByOperation represents a group by and aggregation operation
 type GroupByOperation struct {
-	groupByCols  []string
-	aggregations []*expr.AggregationExpr
+	groupByCols     []string
+	aggregations    []*expr.AggregationExpr
+	havingPredicate expr.Expr // optional HAVING predicate (can be nil)
+}
+
+// NewGroupByOperation creates a new GroupByOperation without HAVING predicate (for backward compatibility)
+func NewGroupByOperation(groupByCols []string, aggregations []*expr.AggregationExpr) *GroupByOperation {
+	return &GroupByOperation{
+		groupByCols:     groupByCols,
+		aggregations:    aggregations,
+		havingPredicate: nil,
+	}
+}
+
+// NewGroupByOperationWithHaving creates a new GroupByOperation with optional HAVING predicate
+func NewGroupByOperationWithHaving(groupByCols []string, aggregations []*expr.AggregationExpr, havingPredicate expr.Expr) *GroupByOperation {
+	return &GroupByOperation{
+		groupByCols:     groupByCols,
+		aggregations:    aggregations,
+		havingPredicate: havingPredicate,
+	}
 }
 
 func (g *GroupByOperation) Apply(df *DataFrame) (*DataFrame, error) {
@@ -439,7 +458,230 @@ func (g *GroupByOperation) Apply(df *DataFrame) (*DataFrame, error) {
 	gb := df.GroupBy(g.groupByCols...)
 
 	// Perform aggregations
-	return gb.Agg(g.aggregations...), nil
+	aggregatedResult := gb.Agg(g.aggregations...)
+
+	// If there's no HAVING predicate, return the aggregated result directly
+	if g.havingPredicate == nil {
+		return aggregatedResult, nil
+	}
+
+	// Apply HAVING filtering to the aggregated result
+	defer aggregatedResult.Release()
+
+	// Validate that the predicate contains aggregation functions appropriate for GroupContext
+	if err := g.validateHavingPredicate(); err != nil {
+		return nil, err
+	}
+
+	// Create expression evaluator for GroupContext evaluation
+	eval := expr.NewEvaluator(nil)
+
+	// Get column arrays for evaluation against aggregated data
+	columns := make(map[string]arrow.Array)
+	for _, colName := range aggregatedResult.Columns() {
+		if series, exists := aggregatedResult.Column(colName); exists {
+			columns[colName] = series.Array()
+		}
+	}
+	defer func() {
+		for _, arr := range columns {
+			arr.Release()
+		}
+	}()
+
+	// Evaluate the HAVING predicate in GroupContext
+	mask, err := eval.EvaluateBooleanWithContext(g.havingPredicate, columns, expr.GroupContext)
+	if err != nil {
+		return nil, fmt.Errorf("evaluating HAVING predicate: %w", err)
+	}
+	defer mask.Release()
+
+	// Apply the filter mask to keep only groups that satisfy the predicate
+	return g.applyHavingFilterMask(aggregatedResult, mask)
+}
+
+// validateHavingPredicate ensures the predicate is appropriate for GroupContext
+func (g *GroupByOperation) validateHavingPredicate() error {
+	if g.havingPredicate == nil {
+		return nil
+	}
+
+	// Validate that the expression is appropriate for GroupContext
+	if err := expr.ValidateExpressionContext(g.havingPredicate, expr.GroupContext); err != nil {
+		return fmt.Errorf("HAVING clause must contain aggregation functions: %w", err)
+	}
+	return nil
+}
+
+// applyHavingFilterMask filters the aggregated DataFrame based on the boolean mask
+func (g *GroupByOperation) applyHavingFilterMask(df *DataFrame, mask arrow.Array) (*DataFrame, error) {
+	boolMask, ok := mask.(*array.Boolean)
+	if !ok {
+		return nil, fmt.Errorf("HAVING filter mask must be boolean array")
+	}
+
+	// Count true values to determine result size
+	trueCount := 0
+	for i := 0; i < boolMask.Len(); i++ {
+		if !boolMask.IsNull(i) && boolMask.Value(i) {
+			trueCount++
+		}
+	}
+
+	if trueCount == 0 {
+		// Return empty DataFrame with same structure
+		return g.createEmptyDataFrame(df), nil
+	}
+
+	// Create filtered series for each column
+	var filteredSeries []ISeries
+	mem := memory.NewGoAllocator()
+
+	for _, colName := range df.Columns() {
+		if originalSeries, exists := df.Column(colName); exists {
+			filtered, err := g.filterSeries(originalSeries, boolMask, trueCount, mem)
+			if err != nil {
+				// Clean up any created series
+				for _, s := range filteredSeries {
+					s.Release()
+				}
+				return nil, fmt.Errorf("filtering column %s: %w", colName, err)
+			}
+			filteredSeries = append(filteredSeries, filtered)
+		}
+	}
+
+	return New(filteredSeries...), nil
+}
+
+// createEmptyDataFrame creates an empty DataFrame with the same schema
+func (g *GroupByOperation) createEmptyDataFrame(df *DataFrame) *DataFrame {
+	mem := memory.NewGoAllocator()
+	var emptySeries []ISeries
+
+	for _, colName := range df.Columns() {
+		if originalSeries, exists := df.Column(colName); exists {
+			// Create empty series with same type
+			switch originalSeries.DataType().Name() {
+			case "utf8":
+				emptySeries = append(emptySeries, series.New(colName, []string{}, mem))
+			case "int64":
+				emptySeries = append(emptySeries, series.New(colName, []int64{}, mem))
+			case "float64":
+				emptySeries = append(emptySeries, series.New(colName, []float64{}, mem))
+			case "bool":
+				emptySeries = append(emptySeries, series.New(colName, []bool{}, mem))
+			}
+		}
+	}
+
+	return New(emptySeries...)
+}
+
+// filterSeries filters a single series based on the boolean mask
+func (g *GroupByOperation) filterSeries(originalSeries ISeries, mask *array.Boolean, resultSize int, mem memory.Allocator) (ISeries, error) {
+	name := originalSeries.Name()
+
+	switch originalSeries.DataType().Name() {
+	case "utf8":
+		return g.filterStringSeries(originalSeries, mask, resultSize, name, mem)
+	case "int64":
+		return g.filterInt64Series(originalSeries, mask, resultSize, name, mem)
+	case "float64":
+		return g.filterFloat64Series(originalSeries, mask, resultSize, name, mem)
+	case "bool":
+		return g.filterBoolSeries(originalSeries, mask, resultSize, name, mem)
+	default:
+		return nil, fmt.Errorf("unsupported series type for HAVING filtering: %s", originalSeries.DataType().Name())
+	}
+}
+
+// filterStringSeries filters a string series
+func (g *GroupByOperation) filterStringSeries(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, mem memory.Allocator) (ISeries, error) {
+	originalArray := originalSeries.Array()
+	defer originalArray.Release()
+
+	stringArray, ok := originalArray.(*array.String)
+	if !ok {
+		return nil, fmt.Errorf("expected string array")
+	}
+
+	filteredValues := make([]string, 0, resultSize)
+	for i := 0; i < mask.Len(); i++ {
+		if !mask.IsNull(i) && mask.Value(i) {
+			if !stringArray.IsNull(i) {
+				filteredValues = append(filteredValues, stringArray.Value(i))
+			}
+		}
+	}
+
+	return series.New(name, filteredValues, mem), nil
+}
+
+// filterInt64Series filters an int64 series
+func (g *GroupByOperation) filterInt64Series(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, mem memory.Allocator) (ISeries, error) {
+	originalArray := originalSeries.Array()
+	defer originalArray.Release()
+
+	intArray, ok := originalArray.(*array.Int64)
+	if !ok {
+		return nil, fmt.Errorf("expected int64 array")
+	}
+
+	filteredValues := make([]int64, 0, resultSize)
+	for i := 0; i < mask.Len(); i++ {
+		if !mask.IsNull(i) && mask.Value(i) {
+			if !intArray.IsNull(i) {
+				filteredValues = append(filteredValues, intArray.Value(i))
+			}
+		}
+	}
+
+	return series.New(name, filteredValues, mem), nil
+}
+
+// filterFloat64Series filters a float64 series
+func (g *GroupByOperation) filterFloat64Series(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, mem memory.Allocator) (ISeries, error) {
+	originalArray := originalSeries.Array()
+	defer originalArray.Release()
+
+	floatArray, ok := originalArray.(*array.Float64)
+	if !ok {
+		return nil, fmt.Errorf("expected float64 array")
+	}
+
+	filteredValues := make([]float64, 0, resultSize)
+	for i := 0; i < mask.Len(); i++ {
+		if !mask.IsNull(i) && mask.Value(i) {
+			if !floatArray.IsNull(i) {
+				filteredValues = append(filteredValues, floatArray.Value(i))
+			}
+		}
+	}
+
+	return series.New(name, filteredValues, mem), nil
+}
+
+// filterBoolSeries filters a boolean series
+func (g *GroupByOperation) filterBoolSeries(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, mem memory.Allocator) (ISeries, error) {
+	originalArray := originalSeries.Array()
+	defer originalArray.Release()
+
+	boolArray, ok := originalArray.(*array.Boolean)
+	if !ok {
+		return nil, fmt.Errorf("expected boolean array")
+	}
+
+	filteredValues := make([]bool, 0, resultSize)
+	for i := 0; i < mask.Len(); i++ {
+		if !mask.IsNull(i) && mask.Value(i) {
+			if !boolArray.IsNull(i) {
+				filteredValues = append(filteredValues, boolArray.Value(i))
+			}
+		}
+	}
+
+	return series.New(name, filteredValues, mem), nil
 }
 
 func (g *GroupByOperation) String() string {
@@ -447,7 +689,11 @@ func (g *GroupByOperation) String() string {
 	for _, agg := range g.aggregations {
 		aggStrs = append(aggStrs, agg.String())
 	}
-	return fmt.Sprintf("group_by(%v).agg(%v)", g.groupByCols, aggStrs)
+	result := fmt.Sprintf("group_by(%v).agg(%v)", g.groupByCols, aggStrs)
+	if g.havingPredicate != nil {
+		result += fmt.Sprintf(".having(%s)", g.havingPredicate.String())
+	}
+	return result
 }
 
 // HavingOperation represents a HAVING clause that filters grouped data based on aggregation predicates
@@ -1020,10 +1266,17 @@ type LazyGroupBy struct {
 
 // Agg performs aggregation operations and returns a new LazyFrame
 func (lgb *LazyGroupBy) Agg(aggregations ...*expr.AggregationExpr) *LazyFrame {
-	newOps := append(lgb.lazyFrame.operations, &GroupByOperation{
-		groupByCols:  lgb.groupByCols,
-		aggregations: aggregations,
-	})
+	newOps := append(lgb.lazyFrame.operations, NewGroupByOperation(lgb.groupByCols, aggregations))
+	return &LazyFrame{
+		source:     lgb.lazyFrame.source,
+		operations: newOps,
+		pool:       lgb.lazyFrame.pool,
+	}
+}
+
+// AggWithHaving performs aggregation operations with an optional HAVING predicate and returns a new LazyFrame
+func (lgb *LazyGroupBy) AggWithHaving(havingPredicate expr.Expr, aggregations ...*expr.AggregationExpr) *LazyFrame {
+	newOps := append(lgb.lazyFrame.operations, NewGroupByOperationWithHaving(lgb.groupByCols, aggregations, havingPredicate))
 	return &LazyFrame{
 		source:     lgb.lazyFrame.source,
 		operations: newOps,
