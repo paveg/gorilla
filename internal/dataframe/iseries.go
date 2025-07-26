@@ -13,4 +13,5 @@ type ISeries interface {
 	String() string
 	Array() arrow.Array
 	Release()
+	GetAsString(index int) string
 }

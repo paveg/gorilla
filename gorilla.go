@@ -109,6 +109,7 @@ type ISeries interface {
 	String() string           // Returns a string representation
 	Array() arrow.Array       // Returns the underlying Arrow array
 	Release()                 // Releases memory resources
+	GetAsString(index int) string // Returns the value at index as a string
 }
 
 // DataFrame represents a 2-dimensional table of data with named columns.
