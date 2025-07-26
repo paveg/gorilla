@@ -229,11 +229,13 @@ func (ar *AliasResolver) denormalizeKey(normalizedKey string) string {
 		return normalizedKey
 	}
 
-	// For case-insensitive mode, find the original case from aliasMap
-	for originalAlias, columnName := range ar.aliasMap {
-		if ar.normalizeKey(originalAlias) == normalizedKey {
-			// Return the actual column name that this alias maps to
-			return columnName
+	// For case-insensitive mode, find the original case from reverseMap
+	for _, aliases := range ar.reverseMap {
+		for _, alias := range aliases {
+			if ar.normalizeKey(alias) == normalizedKey {
+				// Return the original alias with its original case
+				return alias
+			}
 		}
 	}
 
