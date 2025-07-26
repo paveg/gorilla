@@ -174,8 +174,8 @@ func TestHavingValidatorWithAlias_GetAvailableColumns(t *testing.T) {
 	expectedColumns := []string{
 		"department", "region", // GROUP BY columns
 		"total_salary", "sum_salary", // User alias + default name
-		"count_employee_id",   // Default name only
-		"avg_age", // User alias
+		"count_employee_id", // Default name only
+		"avg_age",           // User alias
 	}
 
 	for _, expected := range expectedColumns {
