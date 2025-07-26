@@ -157,7 +157,7 @@ func TestParseSQL(t *testing.T) {
 			name: "Complex SELECT",
 			input: `SELECT name, AVG(salary) as avg_sal FROM employees WHERE active = true 
 				GROUP BY name HAVING AVG(salary) > 50000 ORDER BY avg_sal DESC LIMIT 5`,
-			expectErr: true, // HAVING with aggregation comparisons not fully supported yet
+			expectErr: false, // HAVING with aggregation comparisons now supported
 		},
 		{
 			name:      "Invalid syntax - missing FROM",

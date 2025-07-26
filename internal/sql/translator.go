@@ -68,24 +68,100 @@ func (t *SQLTranslator) translateSelect(stmt *SelectStatement) (*dataframe.LazyF
 		aggExprs := t.extractAggregations(stmt.SelectList)
 
 		if len(aggExprs) > 0 {
-			// Convert expr.Expr to *expr.AggregationExpr
+			// Extract aggregations with their aliases from SELECT list
 			aggPtrs := make([]*expr.AggregationExpr, 0, len(aggExprs))
-			for _, aggExpr := range aggExprs {
-				if aggPtr, ok := aggExpr.(*expr.AggregationExpr); ok {
-					aggPtrs = append(aggPtrs, aggPtr)
-				} else {
-					return nil, fmt.Errorf("expected aggregation expression, got %T", aggExpr)
+			for _, item := range stmt.SelectList {
+				if !item.IsWildcard {
+					if aggExpr, ok := item.Expression.(*expr.AggregationExpr); ok {
+						// Apply alias if provided
+						if item.Alias != "" {
+							aggExpr = aggExpr.As(item.Alias)
+						}
+						aggPtrs = append(aggPtrs, aggExpr)
+					}
 				}
 			}
-			lazy = lazy.GroupBy(groupCols...).Agg(aggPtrs...)
+
+			// Apply HAVING clause if present
+			if stmt.HavingClause != nil {
+				// Build aggregation context for HAVING validation
+				aggContext := expr.NewAggregationContext()
+
+				for _, agg := range aggPtrs {
+					exprStr := agg.String()
+
+					// Use the actual alias if provided, otherwise use a generated name with SQL-appropriate prefix
+					var columnName string
+					if agg.Alias() != "" {
+						columnName = agg.Alias()
+					} else {
+						// Generate SQL-appropriate default name (e.g., "avg_salary" not "mean_salary")
+						tempResolver := expr.NewAliasResolver(false)
+						columnName = tempResolver.GenerateDefaultName(agg)
+					}
+
+					aggContext.AddMapping(exprStr, columnName)
+				}
+
+				// Build alias resolver from SELECT list
+				aliasResolver := expr.NewAliasResolver(false) // case-sensitive by default
+
+				// Add GROUP BY columns to alias resolver
+				for _, col := range groupCols {
+					aliasResolver.AddGroupByColumn(col)
+				}
+
+				// Add aggregations with their aliases
+				// Note: For HAVING clauses, we only need to track aggregation aliases and GROUP BY columns.
+				// Non-aggregation aliases in SELECT are not valid in HAVING unless they reference GROUP BY columns,
+				// which are already handled by aliasResolver.AddGroupByColumn() above.
+				for _, item := range stmt.SelectList {
+					if !item.IsWildcard {
+						if aggExpr, ok := item.Expression.(*expr.AggregationExpr); ok {
+							// If the item has an alias, update the aggregation expression
+							if item.Alias != "" {
+								// Type safety check: ensure the As method exists and returns correct type
+								if aliasableAgg, ok := interface{}(aggExpr).(interface {
+									As(string) *expr.AggregationExpr
+								}); ok {
+									aggExpr = aliasableAgg.As(item.Alias)
+								} else {
+									return nil, fmt.Errorf("aggregation expression does not support aliasing: %T", aggExpr)
+								}
+							}
+							if err := aliasResolver.AddAggregation(aggExpr); err != nil {
+								return nil, fmt.Errorf("error adding aggregation to alias resolver: %w", err)
+							}
+						}
+					}
+				}
+
+				// Create HAVING validator with alias support
+				havingValidator := expr.NewHavingValidatorWithAlias(aggContext, groupCols, aliasResolver)
+
+				// Validate HAVING expression
+				if err := havingValidator.ValidateExpression(stmt.HavingClause.Condition); err != nil {
+					return nil, fmt.Errorf("HAVING validation error: %w", err)
+				}
+
+				// Resolve aliases in HAVING expression
+				resolvedHavingCondition, err := t.resolveAliasesInExpression(stmt.HavingClause.Condition, aliasResolver, aggContext)
+				if err != nil {
+					return nil, fmt.Errorf("error resolving aliases in HAVING clause: %w", err)
+				}
+
+				// Use AggWithHaving for combined GROUP BY + HAVING operation
+				lazy = lazy.GroupBy(groupCols...).AggWithHaving(resolvedHavingCondition, aggPtrs...)
+			} else {
+				// No HAVING clause, use regular aggregation
+				lazy = lazy.GroupBy(groupCols...).Agg(aggPtrs...)
+			}
 		} else {
 			return nil, fmt.Errorf("GROUP BY requires aggregation functions in SELECT")
 		}
-	}
-
-	// Apply HAVING clause
-	if stmt.HavingClause != nil {
-		lazy = lazy.Filter(stmt.HavingClause.Condition)
+	} else if stmt.HavingClause != nil {
+		// Validation handled in validateSelectStatement; no further action needed here.
+		return nil, fmt.Errorf("HAVING clause requires GROUP BY clause")
 	}
 
 	// Apply computed columns from SELECT (non-aggregation expressions)
@@ -233,7 +309,7 @@ func (t *SQLTranslator) isAggregationExpression(expression expr.Expr) bool {
 		// Check if function name indicates aggregation
 		funcName := strings.ToUpper(e.Name())
 		switch funcName {
-		case "COUNT", "SUM", "AVG", "MIN", "MAX":
+		case "COUNT", "SUM", "AVG", "MIN", "MAX", "MEAN":
 			return true
 		}
 	}
@@ -274,9 +350,9 @@ func (t *SQLTranslator) TranslateFunctionCall(fn *SQLFunction) (expr.Expr, error
 			return nil, fmt.Errorf("SUM function requires exactly one argument")
 		}
 		return expr.Sum(fn.Args[0]), nil
-	case "AVG":
+	case "AVG", "MEAN":
 		if len(fn.Args) != 1 {
-			return nil, fmt.Errorf("AVG function requires exactly one argument")
+			return nil, fmt.Errorf("%s function requires exactly one argument", funcName)
 		}
 		return expr.Mean(fn.Args[0]), nil
 	case "MIN":
@@ -416,6 +492,9 @@ func (t *SQLTranslator) validateSelectStatement(stmt *SelectStatement) error {
 		return fmt.Errorf("HAVING clause requires GROUP BY clause")
 	}
 
+	// Additional HAVING validation will be done during translation when we have
+	// the aggregation context and alias information
+
 	// Validate ORDER BY references
 	if stmt.OrderByClause != nil {
 		// Basic validation - ensure expressions are valid
@@ -451,4 +530,57 @@ func (t *SQLTranslator) GetRegisteredTables() []string {
 // ClearTables removes all registered tables
 func (t *SQLTranslator) ClearTables() {
 	t.tables = make(map[string]*dataframe.DataFrame)
+}
+
+// resolveAliasesInExpression recursively resolves aliases in an expression tree
+func (t *SQLTranslator) resolveAliasesInExpression(
+	expression expr.Expr,
+	aliasResolver *expr.AliasResolver,
+	aggContext *expr.AggregationContext,
+) (expr.Expr, error) {
+	switch e := expression.(type) {
+	case *expr.ColumnExpr:
+		// Check if this is an alias that needs to be resolved
+		if resolved, isAlias := aliasResolver.ResolveAlias(e.Name()); isAlias {
+			// Return a new ColumnExpr with the resolved name
+			return expr.Col(resolved), nil
+		}
+		// Return the original column expression
+		return e, nil
+
+	case *expr.BinaryExpr:
+		// Recursively resolve aliases in left and right operands
+		left, err := t.resolveAliasesInExpression(e.Left(), aliasResolver, aggContext)
+		if err != nil {
+			return nil, err
+		}
+
+		right, err := t.resolveAliasesInExpression(e.Right(), aliasResolver, aggContext)
+		if err != nil {
+			return nil, err
+		}
+
+		// Create a new binary expression with resolved operands
+		return expr.NewBinaryExpr(left, e.Op(), right), nil
+
+	case *expr.AggregationExpr:
+		// For HAVING clauses, aggregation expressions should be converted to column references
+		// Use the aggregation context to find the corresponding column name
+		exprStr := e.String()
+		if columnName, found := aggContext.GetColumnName(exprStr); found {
+			// Convert to a column reference to the aggregated column
+			return expr.Col(columnName), nil
+		}
+
+		// If no mapping found in aggregation context, return as-is (this might cause an error during execution)
+		return e, nil
+
+	case *expr.LiteralExpr:
+		// Literal expressions should remain as-is
+		return e, nil
+
+	default:
+		// For any other expression types, return as-is
+		return expression, nil
+	}
 }

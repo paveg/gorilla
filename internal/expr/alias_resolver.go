@@ -58,7 +58,7 @@ func (ar *AliasResolver) AddAggregation(aggExpr *AggregationExpr) error {
 	userAlias := aggExpr.Alias()
 
 	// Generate default column name
-	defaultName := ar.generateDefaultName(aggExpr)
+	defaultName := ar.GenerateDefaultName(aggExpr)
 	ar.defaultNames[exprStr] = defaultName
 
 	var finalColumnName string
@@ -159,8 +159,8 @@ func (ar *AliasResolver) ValidateAlias(alias string) error {
 	return nil
 }
 
-// generateDefaultName creates a default column name for an aggregation expression.
-func (ar *AliasResolver) generateDefaultName(aggExpr *AggregationExpr) string {
+// GenerateDefaultName creates a default column name for an aggregation expression.
+func (ar *AliasResolver) GenerateDefaultName(aggExpr *AggregationExpr) string {
 	var aggPrefix string
 	switch aggExpr.AggType() {
 	case AggSum:
@@ -168,7 +168,8 @@ func (ar *AliasResolver) generateDefaultName(aggExpr *AggregationExpr) string {
 	case AggCount:
 		aggPrefix = "count"
 	case AggMean:
-		aggPrefix = "mean"
+		// For SQL context, use "avg" instead of "mean" to match SQL AVG() function
+		aggPrefix = "avg"
 	case AggMin:
 		aggPrefix = "min"
 	case AggMax:
@@ -189,7 +190,12 @@ func (ar *AliasResolver) extractColumnName(expr Expr) string {
 	case *ColumnExpr:
 		return e.Name()
 	case *LiteralExpr:
-		return fmt.Sprintf("%v", e.Value())
+		// Special case: for COUNT(*) which uses lit(1), return a special identifier
+		value := e.Value()
+		if value == 1 || value == int64(1) || value == int32(1) {
+			return "1" // This will create "count_1" which is cleaner than "count_lit_1"
+		}
+		return fmt.Sprintf("%v", value)
 	default:
 		// For complex expressions, use a sanitized version of the string representation
 		return ar.sanitizeColumnName(expr.String())

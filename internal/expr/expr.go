@@ -129,6 +129,11 @@ func (b *BinaryExpr) Type() ExprType {
 	return ExprBinary
 }
 
+// NewBinaryExpr creates a new binary expression
+func NewBinaryExpr(left Expr, op BinaryOp, right Expr) *BinaryExpr {
+	return &BinaryExpr{left: left, op: op, right: right}
+}
+
 func (b *BinaryExpr) String() string {
 	var opStr string
 	switch b.op {
