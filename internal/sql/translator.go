@@ -112,12 +112,20 @@ func (t *SQLTranslator) translateSelect(stmt *SelectStatement) (*dataframe.LazyF
 				}
 
 				// Add aggregations with their aliases
+				// Note: For HAVING clauses, we only need to track aggregation aliases and GROUP BY columns.
+				// Non-aggregation aliases in SELECT are not valid in HAVING unless they reference GROUP BY columns,
+				// which are already handled by aliasResolver.AddGroupByColumn() above.
 				for _, item := range stmt.SelectList {
 					if !item.IsWildcard {
 						if aggExpr, ok := item.Expression.(*expr.AggregationExpr); ok {
 							// If the item has an alias, update the aggregation expression
 							if item.Alias != "" {
-								aggExpr = aggExpr.As(item.Alias)
+								// Type safety check: ensure the As method exists and returns correct type
+								if aliasableAgg, ok := interface{}(aggExpr).(interface{ As(string) *expr.AggregationExpr }); ok {
+									aggExpr = aliasableAgg.As(item.Alias)
+								} else {
+									return nil, fmt.Errorf("aggregation expression does not support aliasing: %T", aggExpr)
+								}
 							}
 							if err := aliasResolver.AddAggregation(aggExpr); err != nil {
 								return nil, fmt.Errorf("error adding aggregation to alias resolver: %w", err)
@@ -150,7 +158,7 @@ func (t *SQLTranslator) translateSelect(stmt *SelectStatement) (*dataframe.LazyF
 			return nil, fmt.Errorf("GROUP BY requires aggregation functions in SELECT")
 		}
 	} else if stmt.HavingClause != nil {
-		// HAVING without GROUP BY is already validated in validateSelectStatement
+		// Validation handled in validateSelectStatement; no further action needed here.
 		return nil, fmt.Errorf("HAVING clause requires GROUP BY clause")
 	}
 

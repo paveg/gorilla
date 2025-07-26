@@ -731,7 +731,7 @@ func (p *Parser) parseBinaryExpression(left expr.Expr) (expr.Expr, bool) {
 		} else if agg, ok := left.(*expr.AggregationExpr); ok {
 			return agg.Add(right), true
 		}
-		p.addError("unsupported expression type for addition")
+		p.addError(fmt.Sprintf("unsupported expression type for addition: %T", left))
 		return nil, false
 	case "-":
 		if col, ok := left.(*expr.ColumnExpr); ok {
@@ -743,7 +743,7 @@ func (p *Parser) parseBinaryExpression(left expr.Expr) (expr.Expr, bool) {
 		} else if agg, ok := left.(*expr.AggregationExpr); ok {
 			return agg.Sub(right), true
 		}
-		p.addError("unsupported expression type for subtraction")
+		p.addError(fmt.Sprintf("unsupported expression type for subtraction: %T", left))
 		return nil, false
 	case "*":
 		if col, ok := left.(*expr.ColumnExpr); ok {
@@ -755,7 +755,7 @@ func (p *Parser) parseBinaryExpression(left expr.Expr) (expr.Expr, bool) {
 		} else if agg, ok := left.(*expr.AggregationExpr); ok {
 			return agg.Mul(right), true
 		}
-		p.addError("unsupported expression type for multiplication")
+		p.addError(fmt.Sprintf("unsupported expression type for multiplication: %T", left))
 		return nil, false
 	case "/":
 		if col, ok := left.(*expr.ColumnExpr); ok {
@@ -767,7 +767,7 @@ func (p *Parser) parseBinaryExpression(left expr.Expr) (expr.Expr, bool) {
 		} else if agg, ok := left.(*expr.AggregationExpr); ok {
 			return agg.Div(right), true
 		}
-		p.addError("unsupported expression type for division")
+		p.addError(fmt.Sprintf("unsupported expression type for division: %T", left))
 		return nil, false
 	case "%":
 		// Modulo operation not implemented yet
@@ -781,7 +781,7 @@ func (p *Parser) parseBinaryExpression(left expr.Expr) (expr.Expr, bool) {
 		} else if agg, ok := left.(*expr.AggregationExpr); ok {
 			return agg.Eq(right), true
 		}
-		p.addError("unsupported expression type for equality")
+		p.addError(fmt.Sprintf("unsupported expression type for equality: %T", left))
 		return nil, false
 	case "!=", "<>":
 		if col, ok := left.(*expr.ColumnExpr); ok {
@@ -791,7 +791,7 @@ func (p *Parser) parseBinaryExpression(left expr.Expr) (expr.Expr, bool) {
 		} else if agg, ok := left.(*expr.AggregationExpr); ok {
 			return agg.Ne(right), true
 		}
-		p.addError("unsupported expression type for not equal")
+		p.addError(fmt.Sprintf("unsupported expression type for not equal: %T", left))
 		return nil, false
 	case "<":
 		if col, ok := left.(*expr.ColumnExpr); ok {
@@ -801,7 +801,7 @@ func (p *Parser) parseBinaryExpression(left expr.Expr) (expr.Expr, bool) {
 		} else if agg, ok := left.(*expr.AggregationExpr); ok {
 			return agg.Lt(right), true
 		}
-		p.addError("unsupported expression type for less than")
+		p.addError(fmt.Sprintf("unsupported expression type for less than: %T", left))
 		return nil, false
 	case "<=":
 		if col, ok := left.(*expr.ColumnExpr); ok {
@@ -811,7 +811,7 @@ func (p *Parser) parseBinaryExpression(left expr.Expr) (expr.Expr, bool) {
 		} else if agg, ok := left.(*expr.AggregationExpr); ok {
 			return agg.Le(right), true
 		}
-		p.addError("unsupported expression type for less than or equal")
+		p.addError(fmt.Sprintf("unsupported expression type for less than or equal: %T", left))
 		return nil, false
 	case ">":
 		if col, ok := left.(*expr.ColumnExpr); ok {
@@ -821,7 +821,7 @@ func (p *Parser) parseBinaryExpression(left expr.Expr) (expr.Expr, bool) {
 		} else if agg, ok := left.(*expr.AggregationExpr); ok {
 			return agg.Gt(right), true
 		}
-		p.addError("unsupported expression type for greater than")
+		p.addError(fmt.Sprintf("unsupported expression type for greater than: %T", left))
 		return nil, false
 	case ">=":
 		if col, ok := left.(*expr.ColumnExpr); ok {
@@ -831,7 +831,7 @@ func (p *Parser) parseBinaryExpression(left expr.Expr) (expr.Expr, bool) {
 		} else if agg, ok := left.(*expr.AggregationExpr); ok {
 			return agg.Ge(right), true
 		}
-		p.addError("unsupported expression type for greater than or equal")
+		p.addError(fmt.Sprintf("unsupported expression type for greater than or equal: %T", left))
 		return nil, false
 	default:
 		p.addError(fmt.Sprintf("unknown operator: %s", operator))
