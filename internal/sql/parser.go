@@ -712,6 +712,8 @@ func (p *Parser) parseBinaryExpression(left expr.Expr) (expr.Expr, bool) {
 			return bin.Add(right), true
 		} else if fun, ok := left.(*expr.FunctionExpr); ok {
 			return fun.Add(right), true
+		} else if agg, ok := left.(*expr.AggregationExpr); ok {
+			return agg.Add(right), true
 		}
 		p.addError("unsupported expression type for addition")
 		return nil, false
@@ -722,6 +724,8 @@ func (p *Parser) parseBinaryExpression(left expr.Expr) (expr.Expr, bool) {
 			return bin.Sub(right), true
 		} else if fun, ok := left.(*expr.FunctionExpr); ok {
 			return fun.Sub(right), true
+		} else if agg, ok := left.(*expr.AggregationExpr); ok {
+			return agg.Sub(right), true
 		}
 		p.addError("unsupported expression type for subtraction")
 		return nil, false
@@ -732,6 +736,8 @@ func (p *Parser) parseBinaryExpression(left expr.Expr) (expr.Expr, bool) {
 			return bin.Mul(right), true
 		} else if fun, ok := left.(*expr.FunctionExpr); ok {
 			return fun.Mul(right), true
+		} else if agg, ok := left.(*expr.AggregationExpr); ok {
+			return agg.Mul(right), true
 		}
 		p.addError("unsupported expression type for multiplication")
 		return nil, false
@@ -742,6 +748,8 @@ func (p *Parser) parseBinaryExpression(left expr.Expr) (expr.Expr, bool) {
 			return bin.Div(right), true
 		} else if fun, ok := left.(*expr.FunctionExpr); ok {
 			return fun.Div(right), true
+		} else if agg, ok := left.(*expr.AggregationExpr); ok {
+			return agg.Div(right), true
 		}
 		p.addError("unsupported expression type for division")
 		return nil, false
@@ -754,48 +762,60 @@ func (p *Parser) parseBinaryExpression(left expr.Expr) (expr.Expr, bool) {
 			return col.Eq(right), true
 		} else if fun, ok := left.(*expr.FunctionExpr); ok {
 			return fun.Eq(right), true
+		} else if agg, ok := left.(*expr.AggregationExpr); ok {
+			return agg.Eq(right), true
 		}
-		p.addError("unsupported expression type for equality (aggregations cannot be compared in this context)")
+		p.addError("unsupported expression type for equality")
 		return nil, false
 	case "!=", "<>":
 		if col, ok := left.(*expr.ColumnExpr); ok {
 			return col.Ne(right), true
 		} else if fun, ok := left.(*expr.FunctionExpr); ok {
 			return fun.Ne(right), true
+		} else if agg, ok := left.(*expr.AggregationExpr); ok {
+			return agg.Ne(right), true
 		}
-		p.addError("unsupported expression type for not equal (aggregations cannot be compared in this context)")
+		p.addError("unsupported expression type for not equal")
 		return nil, false
 	case "<":
 		if col, ok := left.(*expr.ColumnExpr); ok {
 			return col.Lt(right), true
 		} else if fun, ok := left.(*expr.FunctionExpr); ok {
 			return fun.Lt(right), true
+		} else if agg, ok := left.(*expr.AggregationExpr); ok {
+			return agg.Lt(right), true
 		}
-		p.addError("unsupported expression type for less than (aggregations cannot be compared in this context)")
+		p.addError("unsupported expression type for less than")
 		return nil, false
 	case "<=":
 		if col, ok := left.(*expr.ColumnExpr); ok {
 			return col.Le(right), true
 		} else if fun, ok := left.(*expr.FunctionExpr); ok {
 			return fun.Le(right), true
+		} else if agg, ok := left.(*expr.AggregationExpr); ok {
+			return agg.Le(right), true
 		}
-		p.addError("unsupported expression type for less than or equal (aggregations cannot be compared in this context)")
+		p.addError("unsupported expression type for less than or equal")
 		return nil, false
 	case ">":
 		if col, ok := left.(*expr.ColumnExpr); ok {
 			return col.Gt(right), true
 		} else if fun, ok := left.(*expr.FunctionExpr); ok {
 			return fun.Gt(right), true
+		} else if agg, ok := left.(*expr.AggregationExpr); ok {
+			return agg.Gt(right), true
 		}
-		p.addError("unsupported expression type for greater than (aggregations cannot be compared in this context)")
+		p.addError("unsupported expression type for greater than")
 		return nil, false
 	case ">=":
 		if col, ok := left.(*expr.ColumnExpr); ok {
 			return col.Ge(right), true
 		} else if fun, ok := left.(*expr.FunctionExpr); ok {
 			return fun.Ge(right), true
+		} else if agg, ok := left.(*expr.AggregationExpr); ok {
+			return agg.Ge(right), true
 		}
-		p.addError("unsupported expression type for greater than or equal (aggregations cannot be compared in this context)")
+		p.addError("unsupported expression type for greater than or equal")
 		return nil, false
 	default:
 		p.addError(fmt.Sprintf("unknown operator: %s", operator))
@@ -819,6 +839,8 @@ func (p *Parser) parseLogicalExpression(left expr.Expr) (expr.Expr, bool) {
 			return bin.And(right), true
 		} else if fun, ok := left.(*expr.FunctionExpr); ok {
 			return fun.And(right), true
+		} else if agg, ok := left.(*expr.AggregationExpr); ok {
+			return agg.And(right), true
 		}
 		p.addError("unsupported expression type for AND operation")
 		return nil, false
@@ -827,6 +849,8 @@ func (p *Parser) parseLogicalExpression(left expr.Expr) (expr.Expr, bool) {
 			return bin.Or(right), true
 		} else if fun, ok := left.(*expr.FunctionExpr); ok {
 			return fun.Or(right), true
+		} else if agg, ok := left.(*expr.AggregationExpr); ok {
+			return agg.Or(right), true
 		}
 		p.addError("unsupported expression type for OR operation")
 		return nil, false
