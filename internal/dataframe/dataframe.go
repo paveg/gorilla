@@ -2373,7 +2373,7 @@ func (s *lagLeadSeries) GetAsString(index int) string {
 	case *array.Boolean:
 		return fmt.Sprintf("%t", arr.Value(index))
 	default:
-		return fmt.Sprintf("%v", s.array)
+		return s.array.String()
 	}
 }
 

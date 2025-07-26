@@ -102,13 +102,13 @@ import (
 //   - Array() - access to underlying Arrow array
 //   - Release() - memory cleanup
 type ISeries interface {
-	Name() string             // Returns the name of the Series
-	Len() int                 // Returns the number of elements
-	DataType() arrow.DataType // Returns the Apache Arrow data type
-	IsNull(index int) bool    // Checks if the value at index is null
-	String() string           // Returns a string representation
-	Array() arrow.Array       // Returns the underlying Arrow array
-	Release()                 // Releases memory resources
+	Name() string                 // Returns the name of the Series
+	Len() int                     // Returns the number of elements
+	DataType() arrow.DataType     // Returns the Apache Arrow data type
+	IsNull(index int) bool        // Checks if the value at index is null
+	String() string               // Returns a string representation
+	Array() arrow.Array           // Returns the underlying Arrow array
+	Release()                     // Releases memory resources
 	GetAsString(index int) string // Returns the value at index as a string
 }
 
