@@ -110,7 +110,7 @@ func TestAliasResolver_AddAggregation(t *testing.T) {
 		}{
 			{Sum(Col("salary")), "sum_salary"},
 			{Count(Col("id")), "count_id"},
-			{Mean(Col("age")), "mean_age"},
+			{Mean(Col("age")), "avg_age"},
 			{Min(Col("score")), "min_score"},
 			{Max(Col("rating")), "max_rating"},
 		}
@@ -384,7 +384,7 @@ func TestAliasResolver_DefaultNameGeneration(t *testing.T) {
 	}{
 		{"sum aggregation", Sum(Col("salary")), "sum_salary"},
 		{"count aggregation", Count(Col("employee_id")), "count_employee_id"},
-		{"mean aggregation", Mean(Col("age")), "mean_age"},
+		{"mean aggregation", Mean(Col("age")), "avg_age"},
 		{"min aggregation", Min(Col("score")), "min_score"},
 		{"max aggregation", Max(Col("rating")), "max_rating"},
 	}
@@ -419,7 +419,7 @@ func TestBuildAliasResolver(t *testing.T) {
 			"department", "region",
 			"total_salary", "sum_salary",
 			"count_employee_id",
-			"avg_age", "mean_age",
+			"avg_age",
 		}
 
 		for _, alias := range testCases {

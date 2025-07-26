@@ -175,7 +175,7 @@ func TestHavingValidatorWithAlias_GetAvailableColumns(t *testing.T) {
 		"department", "region", // GROUP BY columns
 		"total_salary", "sum_salary", // User alias + default name
 		"count_employee_id",   // Default name only
-		"avg_age", "mean_age", // User alias + default name
+		"avg_age", // User alias
 	}
 
 	for _, expected := range expectedColumns {
@@ -201,7 +201,7 @@ func TestBuildHavingValidatorWithAlias(t *testing.T) {
 			"department", "region",
 			"total_salary", "sum_salary",
 			"count_employee_id",
-			"avg_age", "mean_age",
+			"avg_age",
 		}
 
 		for _, alias := range testCases {
@@ -304,7 +304,7 @@ func TestHavingValidatorWithAlias_Integration(t *testing.T) {
 
 		// Also test that default names work alongside user aliases
 		defaultExpr := Col("sum_revenue").Gt(Lit(1000000)). // Default name for user-aliased column
-									And(Col("mean_price").Ge(Lit(10.0))) // Default name for user-aliased column
+									And(Col("avg_price").Ge(Lit(10.0))) // Default name for user-aliased column
 
 		err = validator.ValidateExpression(defaultExpr)
 		assert.NoError(t, err)
