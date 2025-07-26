@@ -549,3 +549,39 @@ func (s *Series[T]) Release() {
 		s.array.Release()
 	}
 }
+
+// GetAsString returns the value at the given index as a string
+func (s *Series[T]) GetAsString(index int) string {
+	if index < 0 || index >= s.array.Len() || s.array.IsNull(index) {
+		return ""
+	}
+
+	switch arr := s.array.(type) {
+	case *array.String:
+		return arr.Value(index)
+	case *array.Int64:
+		return fmt.Sprintf("%d", arr.Value(index))
+	case *array.Int32:
+		return fmt.Sprintf("%d", arr.Value(index))
+	case *array.Int16:
+		return fmt.Sprintf("%d", arr.Value(index))
+	case *array.Int8:
+		return fmt.Sprintf("%d", arr.Value(index))
+	case *array.Uint64:
+		return fmt.Sprintf("%d", arr.Value(index))
+	case *array.Uint32:
+		return fmt.Sprintf("%d", arr.Value(index))
+	case *array.Uint16:
+		return fmt.Sprintf("%d", arr.Value(index))
+	case *array.Uint8:
+		return fmt.Sprintf("%d", arr.Value(index))
+	case *array.Float64:
+		return fmt.Sprintf("%g", arr.Value(index))
+	case *array.Float32:
+		return fmt.Sprintf("%g", arr.Value(index))
+	case *array.Boolean:
+		return fmt.Sprintf("%t", arr.Value(index))
+	default:
+		return s.array.String()
+	}
+}

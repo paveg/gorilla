@@ -98,6 +98,11 @@ func (df *DataFrame) Len() int {
 	return 0
 }
 
+// NumRows returns the number of rows (alias for Len for compatibility)
+func (df *DataFrame) NumRows() int {
+	return df.Len()
+}
+
 // Width returns the number of columns
 func (df *DataFrame) Width() int {
 	return len(df.columns)
@@ -2347,6 +2352,29 @@ func (s *lagLeadSeries) String() string {
 
 func (s *lagLeadSeries) Release() {
 	s.array.Release()
+}
+
+func (s *lagLeadSeries) GetAsString(index int) string {
+	if index < 0 || index >= s.array.Len() || s.array.IsNull(index) {
+		return ""
+	}
+
+	switch arr := s.array.(type) {
+	case *array.String:
+		return arr.Value(index)
+	case *array.Int64:
+		return fmt.Sprintf("%d", arr.Value(index))
+	case *array.Int32:
+		return fmt.Sprintf("%d", arr.Value(index))
+	case *array.Float64:
+		return fmt.Sprintf("%g", arr.Value(index))
+	case *array.Float32:
+		return fmt.Sprintf("%g", arr.Value(index))
+	case *array.Boolean:
+		return fmt.Sprintf("%t", arr.Value(index))
+	default:
+		return s.array.String()
+	}
 }
 
 // buildPartitionGroups builds groups for partitioned window functions
