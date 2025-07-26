@@ -449,6 +449,17 @@ func (p *Parser) parseSelectList() ([]SelectItem, bool) {
 	return items, true
 }
 
+// isValidAlias checks if a token can be used as an alias
+func (p *Parser) isValidAlias() bool {
+	switch p.peekToken.Type {
+	case IDENT, COUNT, SUM, AVG, MIN, MAX:
+		// Allow identifiers and function names as aliases
+		return true
+	default:
+		return false
+	}
+}
+
 // parseSelectItem parses a single SELECT item
 func (p *Parser) parseSelectItem() (SelectItem, bool) {
 	// Handle wildcard
@@ -466,11 +477,13 @@ func (p *Parser) parseSelectItem() (SelectItem, bool) {
 	var alias string
 	if p.peekTokenIs(AS) {
 		p.nextToken() // consume AS
-		if !p.expectPeek(IDENT) {
+		if !p.isValidAlias() {
+			p.addError(fmt.Sprintf("expected alias name, got %s", p.peekToken.Literal))
 			return SelectItem{}, false
 		}
+		p.nextToken()
 		alias = p.curToken.Literal
-	} else if p.peekTokenIs(IDENT) {
+	} else if p.isValidAlias() {
 		// Implicit alias (without AS keyword)
 		p.nextToken()
 		alias = p.curToken.Literal
@@ -486,6 +499,7 @@ func (p *Parser) parseSelectItem() (SelectItem, bool) {
 const (
 	_ int = iota
 	LOWEST
+	LOGICAL     // AND, OR
 	EQUALS      // ==
 	LESSGREATER // > or <
 	SUMPREC     // + (precedence)
@@ -496,6 +510,8 @@ const (
 
 // precedences maps tokens to their precedence
 var precedences = map[TokenType]int{
+	AND:    LOGICAL,
+	OR:     LOGICAL,
 	EQ:     EQUALS,
 	NE:     EQUALS,
 	LT:     LESSGREATER,
@@ -842,7 +858,7 @@ func (p *Parser) parseLogicalExpression(left expr.Expr) (expr.Expr, bool) {
 		} else if agg, ok := left.(*expr.AggregationExpr); ok {
 			return agg.And(right), true
 		}
-		p.addError("unsupported expression type for AND operation")
+		p.addError(fmt.Sprintf("unsupported expression type for AND operation: %T", left))
 		return nil, false
 	case "OR":
 		if bin, ok := left.(*expr.BinaryExpr); ok {
@@ -852,7 +868,7 @@ func (p *Parser) parseLogicalExpression(left expr.Expr) (expr.Expr, bool) {
 		} else if agg, ok := left.(*expr.AggregationExpr); ok {
 			return agg.Or(right), true
 		}
-		p.addError("unsupported expression type for OR operation")
+		p.addError(fmt.Sprintf("unsupported expression type for OR operation: %T", left))
 		return nil, false
 	default:
 		p.addError(fmt.Sprintf("unknown logical operator: %s", operator))
