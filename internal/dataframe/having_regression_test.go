@@ -101,8 +101,6 @@ func testLatencyRegression(t *testing.T, maxLatency time.Duration) {
 
 // testThroughputRegression verifies throughput meets target for large datasets
 func testThroughputRegression(t *testing.T, minThroughput float64) {
-	// Skip this test until performance optimization is fully integrated
-	t.Skip("Throughput test disabled - performance optimization integration pending")
 	mem := memory.NewGoAllocator()
 
 	// Large dataset (1M rows)
@@ -305,14 +303,72 @@ func TestHavingPerformanceMonitoring(t *testing.T) {
 		t.Skip("Skipping performance monitoring test in short mode")
 	}
 
-	// Skip this test until integration is complete
-	t.Skip("CompiledHavingEvaluator integration pending - test disabled to fix CI")
+	mem := memory.NewGoAllocator()
+
+	// Create test dataset
+	size := 1000
+	departments := make([]string, size)
+	salaries := make([]float64, size)
+
+	deptNames := []string{"Engineering", "Sales", "HR"}
+	for i := 0; i < size; i++ {
+		departments[i] = deptNames[i%len(deptNames)]
+		salaries[i] = float64(40000 + (i * 50))
+	}
+
+	deptSeries := series.New("department", departments, mem)
+	salarySeries := series.New("salary", salaries, mem)
+	df := New(deptSeries, salarySeries)
+	defer df.Release()
+
+	// Test performance monitoring functionality
+	lazy := df.Lazy()
+	groupByOp := &GroupByHavingOperation{
+		groupByCols: []string{"department"},
+		predicate:   expr.Mean(expr.Col("salary")).As("avg_salary").Gt(expr.Lit(50000.0)),
+	}
+	lazy.operations = append(lazy.operations, groupByOp)
+	result, err := lazy.Collect()
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	result.Release()
+	groupByOp.Release()
 }
 
 // TestHavingConstantFolding tests compile-time optimization of constant expressions
 func TestHavingConstantFolding(t *testing.T) {
-	// Skip this test until integration is complete
-	t.Skip("CompiledHavingEvaluator integration pending - test disabled to fix CI")
+	mem := memory.NewGoAllocator()
+
+	// Create test dataset
+	size := 500
+	departments := make([]string, size)
+	salaries := make([]float64, size)
+
+	deptNames := []string{"Engineering", "Sales"}
+	for i := 0; i < size; i++ {
+		departments[i] = deptNames[i%len(deptNames)]
+		salaries[i] = float64(40000 + (i * 20))
+	}
+
+	deptSeries := series.New("department", departments, mem)
+	salarySeries := series.New("salary", salaries, mem)
+	df := New(deptSeries, salarySeries)
+	defer df.Release()
+
+	// Test constant folding functionality
+	lazy := df.Lazy()
+	groupByOp := &GroupByHavingOperation{
+		groupByCols: []string{"department"},
+		predicate:   expr.Mean(expr.Col("salary")).As("avg_salary").Gt(expr.Lit(45000.0)),
+	}
+	lazy.operations = append(lazy.operations, groupByOp)
+	result, err := lazy.Collect()
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	result.Release()
+	groupByOp.Release()
 }
 
 // BenchmarkHavingPerformanceBaseline establishes performance baselines
@@ -360,7 +416,27 @@ func BenchmarkHavingPerformanceBaseline(b *testing.B) {
 	})
 
 	b.Run("Optimized implementation", func(b *testing.B) {
-		// Skip optimized implementation until integration is complete
-		b.Skip("CompiledHavingEvaluator integration pending - benchmark disabled to fix CI")
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			lazy := df.Lazy()
+			groupByOp := &GroupByHavingOperation{
+				groupByCols: []string{"department"},
+				predicate:   expr.Mean(expr.Col("salary")).As("avg_salary").Gt(expr.Lit(60000.0)),
+			}
+			lazy.operations = append(lazy.operations, groupByOp)
+			result, err := lazy.Collect()
+
+			if err != nil {
+				b.Fatal(err)
+			}
+			result.Release()
+			groupByOp.Release() // Clean up cached allocator
+		}
+
+		// Report performance metrics
+		if b.N > 0 {
+			rowsPerSec := float64(size*b.N) / b.Elapsed().Seconds()
+			b.ReportMetric(rowsPerSec, "rows/sec")
+		}
 	})
 }
