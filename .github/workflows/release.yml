@@ -44,7 +44,7 @@ jobs:
       - name: Run linting
         uses: golangci/golangci-lint-action@v6
         with:
-          version: v1.61.0
+          version: latest
           args: --timeout=5m
         
       - name: Build CLI with version info
