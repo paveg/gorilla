@@ -421,6 +421,14 @@ func (p *Parser) parseSelectStatement() *SelectStatement {
 			return nil
 		}
 		stmt.LimitClause = limitClause
+	} else if p.peekTokenIs(OFFSET) {
+		// Parse standalone OFFSET clause (without LIMIT)
+		p.nextToken()
+		offsetClause, ok := p.parseStandaloneOffsetClause()
+		if !ok {
+			return nil
+		}
+		stmt.LimitClause = offsetClause
 	}
 
 	return stmt
@@ -1206,6 +1214,34 @@ func (p *Parser) parseLimitClause() (*LimitClause, bool) {
 		}
 
 		limitClause.Offset = offset
+	}
+
+	return limitClause, true
+}
+
+// parseStandaloneOffsetClause parses an OFFSET clause without a LIMIT
+func (p *Parser) parseStandaloneOffsetClause() (*LimitClause, bool) {
+	if !p.expectPeek(INT) {
+		return nil, false
+	}
+
+	offset, err := strconv.ParseInt(p.curToken.Literal, 10, 64)
+	if err != nil {
+		p.addError(fmt.Sprintf("could not parse OFFSET value: %s", p.curToken.Literal))
+		return nil, false
+	}
+
+	// Validate OFFSET value range to prevent overflow issues
+	if offset < 0 {
+		p.addError(fmt.Sprintf("OFFSET value cannot be negative: %d", offset))
+		return nil, false
+	}
+
+	// For standalone OFFSET, we create a LimitClause with Count=OffsetOnlyLimit to indicate no limit
+	// This allows the executor to distinguish between LIMIT+OFFSET and OFFSET-only
+	limitClause := &LimitClause{
+		Count:  OffsetOnlyLimit, // Special value indicating no LIMIT constraint
+		Offset: offset,
 	}
 
 	return limitClause, true
