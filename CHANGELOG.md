@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **HAVING clause support** with full SQL compatibility and high-performance optimization
+  - Expression validation ensuring proper column references
+  - Alias resolution for user-defined and auto-generated aggregation names
+  - Memory optimization achieving <10% overhead (7.57% measured)
+  - Comprehensive test coverage and performance benchmarks
 - Comprehensive package-level documentation for pkg.go.dev discoverability
 - Example functions demonstrating basic usage, GroupBy, and Join operations
 - Enhanced documentation for internal packages (io, parallel)
