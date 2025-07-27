@@ -1190,7 +1190,6 @@ func (gh *GroupByHavingOperation) createEmptyDataFrame(df *DataFrame) *DataFrame
 	return New(emptySeries...)
 }
 
-
 // createEmptyDataFrameWithAllocator creates an empty DataFrame using provided allocator
 func (gh *GroupByHavingOperation) createEmptyDataFrameWithAllocator(df *DataFrame, allocator memory.Allocator) *DataFrame {
 	var emptySeries []ISeries
@@ -1233,7 +1232,6 @@ func (gh *GroupByHavingOperation) filterSeries(originalSeries ISeries, mask *arr
 		return nil, fmt.Errorf("unsupported series type for HAVING filtering: %s", originalSeries.DataType().Name())
 	}
 }
-
 
 // filterSeriesOptimizedWithAllocator uses type-specific methods for performance with provided allocator
 func (gh *GroupByHavingOperation) filterSeriesOptimizedWithAllocator(originalSeries ISeries, mask *array.Boolean, resultSize int, allocator memory.Allocator) (ISeries, error) {
@@ -1349,7 +1347,6 @@ func (gh *GroupByHavingOperation) filterBoolSeries(originalSeries ISeries, mask 
 	return series.New(name, filteredValues, mem), nil
 }
 
-
 // filterStringSeriesOptimizedWithAllocator filters a string series using provided allocator
 func (gh *GroupByHavingOperation) filterStringSeriesOptimizedWithAllocator(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, allocator memory.Allocator) (ISeries, error) {
 	originalArray := originalSeries.Array()
@@ -1375,7 +1372,6 @@ func (gh *GroupByHavingOperation) filterStringSeriesOptimizedWithAllocator(origi
 
 	return series.New(name, filteredValues, allocator), nil
 }
-
 
 // filterInt64SeriesOptimizedWithAllocator filters an int64 series using provided allocator
 func (gh *GroupByHavingOperation) filterInt64SeriesOptimizedWithAllocator(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, allocator memory.Allocator) (ISeries, error) {
@@ -1403,7 +1399,6 @@ func (gh *GroupByHavingOperation) filterInt64SeriesOptimizedWithAllocator(origin
 	return series.New(name, filteredValues, allocator), nil
 }
 
-
 // filterFloat64SeriesOptimizedWithAllocator filters a float64 series using provided allocator
 func (gh *GroupByHavingOperation) filterFloat64SeriesOptimizedWithAllocator(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, allocator memory.Allocator) (ISeries, error) {
 	originalArray := originalSeries.Array()
@@ -1429,7 +1424,6 @@ func (gh *GroupByHavingOperation) filterFloat64SeriesOptimizedWithAllocator(orig
 
 	return series.New(name, filteredValues, allocator), nil
 }
-
 
 // filterBoolSeriesOptimizedWithAllocator filters a boolean series using provided allocator
 func (gh *GroupByHavingOperation) filterBoolSeriesOptimizedWithAllocator(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, allocator memory.Allocator) (ISeries, error) {
