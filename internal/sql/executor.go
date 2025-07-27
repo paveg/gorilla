@@ -84,6 +84,11 @@ func (e *SQLExecutor) executeWithLimit(
 	}
 	// Note: Don't defer release here since we're returning the result
 
+	// Validate result is not nil
+	if fullResult == nil {
+		return nil, fmt.Errorf("query execution returned nil result")
+	}
+
 	// Apply OFFSET and LIMIT
 	totalRows := fullResult.Len()
 
@@ -94,7 +99,22 @@ func (e *SQLExecutor) executeWithLimit(
 		return e.createEmptyDataFrame(fullResult), nil
 	}
 
-	// Validate LIMIT value using same safe conversion pattern
+	// Handle OFFSET-only queries first (Count = -1 indicates no LIMIT)
+	if limitClause.Count == -1 {
+		// Validate offset bounds against actual data size
+		if offset >= totalRows {
+			// Return empty DataFrame with same schema
+			emptyResult := e.createEmptyDataFrame(fullResult)
+			defer fullResult.Release()
+			return emptyResult, nil
+		}
+		// OFFSET-only: return all rows from offset to end
+		slicedResult := fullResult.Slice(offset, totalRows)
+		defer fullResult.Release()
+		return slicedResult, nil
+	}
+
+	// Validate LIMIT value using same safe conversion pattern (only for non-OFFSET-only queries)
 	_, err = safeInt64ToInt(limitClause.Count)
 	if err != nil {
 		defer fullResult.Release()
@@ -109,10 +129,34 @@ func (e *SQLExecutor) executeWithLimit(
 		return emptyResult, nil
 	}
 
-	// For now, just return the original DataFrame
-	// TODO: implement proper LIMIT/OFFSET functionality with safe count conversion
-	_ = offset
-	return fullResult, nil
+	// Apply LIMIT and OFFSET using DataFrame slicing
+	startIdx := offset
+
+	// Convert LIMIT count safely (we already validated it's not -1)
+	limitCount, err := safeInt64ToInt(limitClause.Count)
+	if err != nil {
+		defer fullResult.Release()
+		return nil, fmt.Errorf("invalid LIMIT value: %w", err)
+	}
+
+	// Handle LIMIT 0 - return empty DataFrame with same schema
+	if limitCount == 0 {
+		emptyResult := e.createEmptyDataFrame(fullResult)
+		defer fullResult.Release()
+		return emptyResult, nil
+	}
+
+	// Calculate end index
+	endIdx := startIdx + limitCount
+	if endIdx > totalRows {
+		endIdx = totalRows
+	}
+
+	// Use DataFrame.Slice() to get the desired subset
+	slicedResult := fullResult.Slice(startIdx, endIdx)
+	defer fullResult.Release()
+
+	return slicedResult, nil
 }
 
 // createEmptyDataFrame creates an empty DataFrame with the same schema
@@ -268,31 +312,66 @@ func (q *SQLQuery) executeWithLimit(lazy *dataframe.LazyFrame, limitClause *Limi
 	}
 	defer fullResult.Release()
 
+	// Validate result is not nil
+	if fullResult == nil {
+		return nil, fmt.Errorf("query execution returned nil result")
+	}
+
 	// Apply OFFSET and LIMIT
 	totalRows := fullResult.Len()
 
 	// Safe conversion using helper function with explicit bounds checking
 	offset, err := safeInt64ToInt(limitClause.Offset)
 	if err != nil {
-		return fullResult, nil
+		emptyResult := fullResult.Slice(0, 0)
+		return emptyResult, nil
 	}
 
-	// Validate LIMIT value using same safe conversion pattern
-	_, err = safeInt64ToInt(limitClause.Count)
+	// Handle OFFSET-only queries first (Count = -1 indicates no LIMIT)
+	if limitClause.Count == -1 {
+		// Validate offset bounds against actual data size
+		if offset >= totalRows {
+			// Return empty DataFrame with same schema
+			emptyResult := fullResult.Slice(0, 0)
+			return emptyResult, nil
+		}
+		// OFFSET-only: return all rows from offset to end
+		slicedResult := fullResult.Slice(offset, totalRows)
+		return slicedResult, nil
+	}
+
+	// Validate offset bounds against actual data size
+	if offset >= totalRows {
+		// Return empty DataFrame with same schema
+		emptyResult := fullResult.Slice(0, 0)
+		return emptyResult, nil
+	}
+
+	// Apply LIMIT and OFFSET using DataFrame slicing
+	startIdx := offset
+
+	// Convert LIMIT count safely (we already validated it's not -1)
+	limitCount, err := safeInt64ToInt(limitClause.Count)
 	if err != nil {
 		return nil, fmt.Errorf("invalid LIMIT value: %w", err)
 	}
 
-	// Validate offset
-	if offset >= totalRows {
-		// Return empty DataFrame with same schema - this would need proper implementation
-		// For now, return the full result (this is a placeholder)
-		return fullResult, nil
+	// Handle LIMIT 0 - return empty DataFrame with same schema
+	if limitCount == 0 {
+		emptyResult := fullResult.Slice(0, 0)
+		return emptyResult, nil
 	}
 
-	// For now, return full result - proper slicing would be implemented here
-	// Note: We return the fullResult directly without Retain since it's already managed
-	return fullResult, nil
+	// Calculate end index
+	endIdx := startIdx + limitCount
+	if endIdx > totalRows {
+		endIdx = totalRows
+	}
+
+	// Use DataFrame.Slice() to get the desired subset
+	slicedResult := fullResult.Slice(startIdx, endIdx)
+
+	return slicedResult, nil
 }
 
 // String returns the SQL query string

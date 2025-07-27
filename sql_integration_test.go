@@ -107,3 +107,160 @@ func TestSQLExecutorTableManagement(t *testing.T) {
 	tables = executor.GetRegisteredTables()
 	assert.Empty(t, tables, "All tables should be cleared")
 }
+
+// TestSQLLimitClause tests SQL LIMIT functionality
+func TestSQLLimitClause(t *testing.T) {
+	mem := memory.NewGoAllocator()
+	executor := NewSQLExecutor(mem)
+
+	// Create test data with 5 rows
+	names := NewSeries("name", []string{"Alice", "Bob", "Charlie", "Diana", "Eve"}, mem)
+	ages := NewSeries("age", []int64{25, 30, 35, 40, 45}, mem)
+	defer names.Release()
+	defer ages.Release()
+
+	df := NewDataFrame(names, ages)
+	defer df.Release()
+	executor.RegisterTable("employees", df)
+
+	// Test LIMIT 3 - should return first 3 rows
+	result, err := executor.Execute("SELECT * FROM employees LIMIT 3")
+	require.NoError(t, err, "LIMIT query should not fail")
+	require.NotNil(t, result, "LIMIT query should return a result")
+	defer result.Release()
+
+	assert.Equal(t, 3, result.Len(), "LIMIT 3 should return 3 rows")
+	assert.Equal(t, 2, result.Width(), "Result should have 2 columns")
+
+	// Verify the first 3 names are correct
+	nameCol, exists := result.Column("name")
+	require.True(t, exists, "Result should have 'name' column")
+	assert.Equal(t, "Alice", nameCol.GetAsString(0))
+	assert.Equal(t, "Bob", nameCol.GetAsString(1))
+	assert.Equal(t, "Charlie", nameCol.GetAsString(2))
+}
+
+// TestSQLOffsetClause tests SQL OFFSET functionality
+func TestSQLOffsetClause(t *testing.T) {
+	mem := memory.NewGoAllocator()
+	executor := NewSQLExecutor(mem)
+
+	// Create test data with 5 rows
+	names := NewSeries("name", []string{"Alice", "Bob", "Charlie", "Diana", "Eve"}, mem)
+	ages := NewSeries("age", []int64{25, 30, 35, 40, 45}, mem)
+	defer names.Release()
+	defer ages.Release()
+
+	df := NewDataFrame(names, ages)
+	defer df.Release()
+	executor.RegisterTable("employees", df)
+
+	// Test OFFSET 2 - should skip first 2 rows and return remaining 3
+	result, err := executor.Execute("SELECT * FROM employees OFFSET 2")
+	require.NoError(t, err, "OFFSET query should not fail")
+	require.NotNil(t, result, "OFFSET query should return a result")
+	defer result.Release()
+
+	assert.Equal(t, 3, result.Len(), "OFFSET 2 should return 3 rows (from 5 total)")
+	assert.Equal(t, 2, result.Width(), "Result should have 2 columns")
+
+	// Verify the names start from Charlie (skipping Alice and Bob)
+	nameCol, exists := result.Column("name")
+	require.True(t, exists, "Result should have 'name' column")
+	assert.Equal(t, "Charlie", nameCol.GetAsString(0))
+	assert.Equal(t, "Diana", nameCol.GetAsString(1))
+	assert.Equal(t, "Eve", nameCol.GetAsString(2))
+}
+
+// TestSQLLimitOffset tests SQL LIMIT and OFFSET together
+func TestSQLLimitOffset(t *testing.T) {
+	mem := memory.NewGoAllocator()
+	executor := NewSQLExecutor(mem)
+
+	// Create test data with 5 rows
+	names := NewSeries("name", []string{"Alice", "Bob", "Charlie", "Diana", "Eve"}, mem)
+	ages := NewSeries("age", []int64{25, 30, 35, 40, 45}, mem)
+	defer names.Release()
+	defer ages.Release()
+
+	df := NewDataFrame(names, ages)
+	defer df.Release()
+	executor.RegisterTable("employees", df)
+
+	// Test LIMIT 2 OFFSET 1 - should skip 1 row and return next 2
+	result, err := executor.Execute("SELECT * FROM employees LIMIT 2 OFFSET 1")
+	require.NoError(t, err, "LIMIT OFFSET query should not fail")
+	require.NotNil(t, result, "LIMIT OFFSET query should return a result")
+	defer result.Release()
+
+	assert.Equal(t, 2, result.Len(), "LIMIT 2 OFFSET 1 should return 2 rows")
+	assert.Equal(t, 2, result.Width(), "Result should have 2 columns")
+
+	// Verify the names are Bob and Charlie (skipping Alice, taking next 2)
+	nameCol, exists := result.Column("name")
+	require.True(t, exists, "Result should have 'name' column")
+	assert.Equal(t, "Bob", nameCol.GetAsString(0))
+	assert.Equal(t, "Charlie", nameCol.GetAsString(1))
+}
+
+// TestSQLLimitOffsetEdgeCases tests edge cases for LIMIT and OFFSET
+func TestSQLLimitOffsetEdgeCases(t *testing.T) {
+	// Split into sub-tests to isolate any resource management issues
+
+	t.Run("offset_beyond_data", func(t *testing.T) {
+		mem := memory.NewGoAllocator()
+		executor := NewSQLExecutor(mem)
+
+		// Create test data with 3 rows
+		names := NewSeries("name", []string{"Alice", "Bob", "Charlie"}, mem)
+		defer names.Release()
+		df := NewDataFrame(names)
+		defer df.Release()
+		executor.RegisterTable("employees", df)
+
+		// Test OFFSET beyond data size - should return empty result
+		result, err := executor.Execute("SELECT * FROM employees OFFSET 10")
+		require.NoError(t, err, "OFFSET beyond data should not fail")
+		require.NotNil(t, result, "Query should return a result")
+		defer result.Release()
+		assert.Equal(t, 0, result.Len(), "OFFSET beyond data should return empty result")
+	})
+
+	t.Run("limit_zero", func(t *testing.T) {
+		mem := memory.NewGoAllocator()
+		executor := NewSQLExecutor(mem)
+
+		// Create test data with 3 rows
+		names := NewSeries("name", []string{"Alice", "Bob", "Charlie"}, mem)
+		defer names.Release()
+		df := NewDataFrame(names)
+		defer df.Release()
+		executor.RegisterTable("employees", df)
+
+		// Test LIMIT 0 - should return empty result
+		result, err := executor.Execute("SELECT * FROM employees LIMIT 0")
+		require.NoError(t, err, "LIMIT 0 should not fail")
+		require.NotNil(t, result, "Query should return a result")
+		defer result.Release()
+		assert.Equal(t, 0, result.Len(), "LIMIT 0 should return empty result")
+	})
+
+	t.Run("limit_larger_than_data", func(t *testing.T) {
+		mem := memory.NewGoAllocator()
+		executor := NewSQLExecutor(mem)
+
+		// Create test data with 3 rows
+		names := NewSeries("name", []string{"Alice", "Bob", "Charlie"}, mem)
+		defer names.Release()
+		df := NewDataFrame(names)
+		defer df.Release()
+		executor.RegisterTable("employees", df)
+
+		// Test LIMIT larger than data size - should return all data
+		result, err := executor.Execute("SELECT * FROM employees LIMIT 100")
+		require.NoError(t, err, "LIMIT larger than data should not fail")
+		require.NotNil(t, result, "Query should return a result")
+		defer result.Release()
+		assert.Equal(t, 3, result.Len(), "LIMIT larger than data should return all rows")
+	})
+}
