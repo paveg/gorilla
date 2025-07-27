@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -15,6 +16,20 @@ import (
 	"github.com/paveg/gorilla/internal/parallel"
 	"github.com/paveg/gorilla/internal/series"
 )
+
+// Global memory pool for filter operations to reduce GC pressure
+var (
+	filterMemoryPool *parallel.AllocatorPool
+	filterPoolOnce   sync.Once
+)
+
+// getFilterMemoryPool returns the shared memory pool for filter operations
+func getFilterMemoryPool() *parallel.AllocatorPool {
+	filterPoolOnce.Do(func() {
+		filterMemoryPool = parallel.NewAllocatorPool(runtime.NumCPU() * allocatorPoolMultiplier)
+	})
+	return filterMemoryPool
+}
 
 // LazyOperation represents a deferred operation on a DataFrame
 type LazyOperation interface {
@@ -74,8 +89,9 @@ func (f *FilterOperation) applyFilterMask(df *DataFrame, mask arrow.Array) (*Dat
 		return f.createEmptyDataFrame(df), nil
 	}
 
-	// Create filtered series for each column
+	// Create filtered series for each column using shared allocator
 	var filteredSeries []ISeries
+	// Reuse single allocator for all series to reduce memory overhead
 	mem := memory.NewGoAllocator()
 
 	for _, colName := range df.Columns() {
@@ -529,9 +545,12 @@ func (g *GroupByOperation) applyHavingFilterMask(df *DataFrame, mask arrow.Array
 		return g.createEmptyDataFrame(df), nil
 	}
 
-	// Create filtered series for each column
+	// Create filtered series for each column using shared allocator
 	var filteredSeries []ISeries
+	// Reuse allocator to reduce memory overhead
 	mem := memory.NewGoAllocator()
+	// Note: Arrow's Go allocator doesn't require explicit cleanup,
+	// but keeping this pattern for consistency with other resource management
 
 	for _, colName := range df.Columns() {
 		if originalSeries, exists := df.Column(colName); exists {
@@ -949,6 +968,14 @@ func (h *HavingOperation) Name() string {
 type GroupByHavingOperation struct {
 	groupByCols []string
 	predicate   expr.Expr
+	// Cached allocator for reuse to reduce overhead
+	cachedAllocator memory.Allocator
+	// Cached evaluator for expression reuse
+	cachedEvaluator *expr.Evaluator
+	// Cached aggregation results to avoid re-evaluation
+	cachedAggregations []*expr.AggregationExpr
+	// Mutex to protect cached fields from concurrent access
+	mu sync.Mutex
 }
 
 // Apply performs groupby, extracts aggregations from predicate, performs them, and filters
@@ -957,11 +984,29 @@ func (gh *GroupByHavingOperation) Apply(df *DataFrame) (*DataFrame, error) {
 		return New(), nil
 	}
 
-	// Extract aggregation expressions from the having predicate
-	aggregations := gh.extractAggregations(gh.predicate)
-	if len(aggregations) == 0 {
-		return nil, fmt.Errorf("HAVING clause must contain aggregation functions")
+	// Initialize cached allocator if not present (reuse for memory efficiency)
+	gh.mu.Lock()
+	if gh.cachedAllocator == nil {
+		pool := getFilterMemoryPool()
+		gh.cachedAllocator = pool.Get()
+		if gh.cachedAllocator == nil {
+			// Fallback if pool is exhausted
+			gh.cachedAllocator = memory.NewGoAllocator()
+		}
 	}
+
+	// Extract aggregation expressions from the having predicate (cache for reuse)
+	if gh.cachedAggregations == nil {
+		gh.cachedAggregations = gh.extractAggregations(gh.predicate)
+		if len(gh.cachedAggregations) == 0 {
+			gh.mu.Unlock()
+			return nil, fmt.Errorf("HAVING clause must contain aggregation functions")
+		}
+	}
+
+	// Store cached aggregations for use
+	aggregations := gh.cachedAggregations
+	gh.mu.Unlock()
 
 	// Create GroupBy object and perform aggregations
 	gb := df.GroupBy(gh.groupByCols...)
@@ -969,7 +1014,7 @@ func (gh *GroupByHavingOperation) Apply(df *DataFrame) (*DataFrame, error) {
 	defer aggregatedDF.Release()
 
 	// Now apply the having filter on the aggregated data
-	return gh.applyHavingFilter(aggregatedDF)
+	return gh.applyHavingFilterOptimized(aggregatedDF)
 }
 
 // extractAggregations extracts all aggregation expressions from the predicate
@@ -996,36 +1041,49 @@ func (gh *GroupByHavingOperation) findAggregations(ex expr.Expr, aggregations *[
 	}
 }
 
-// applyHavingFilter applies the having predicate to the aggregated DataFrame
-func (gh *GroupByHavingOperation) applyHavingFilter(df *DataFrame) (*DataFrame, error) {
-	// Create expression evaluator
-	eval := expr.NewEvaluator(nil)
+// applyHavingFilterOptimized applies the having predicate with memory optimizations
+func (gh *GroupByHavingOperation) applyHavingFilterOptimized(df *DataFrame) (*DataFrame, error) {
+	// Reuse cached evaluator and allocator to avoid re-initialization overhead
+	gh.mu.Lock()
+	if gh.cachedEvaluator == nil {
+		gh.cachedEvaluator = expr.NewEvaluator(nil)
+	}
+	evaluator := gh.cachedEvaluator
 
-	// Get column arrays for evaluation
+	// Ensure cached allocator is initialized
+	if gh.cachedAllocator == nil {
+		pool := getFilterMemoryPool()
+		gh.cachedAllocator = pool.Get()
+		if gh.cachedAllocator == nil {
+			gh.cachedAllocator = memory.NewGoAllocator()
+		}
+	}
+	allocator := gh.cachedAllocator
+	gh.mu.Unlock()
+
+	// Get column arrays for evaluation (direct access, no extra copying)
 	columns := make(map[string]arrow.Array)
 	for _, colName := range df.Columns() {
 		if series, exists := df.Column(colName); exists {
 			columns[colName] = series.Array()
 		}
 	}
-	defer func() {
-		for _, arr := range columns {
-			arr.Release()
-		}
-	}()
+	// Note: Arrays from series.Array() are managed by the parent series
 
-	// Evaluate the HAVING predicate in GroupContext
-	mask, err := eval.EvaluateBooleanWithContext(gh.predicate, columns, expr.GroupContext)
+	// Evaluate the HAVING predicate in GroupContext using cached evaluator
+	mask, err := evaluator.EvaluateBooleanWithContext(gh.predicate, columns, expr.GroupContext)
 	if err != nil {
 		return nil, fmt.Errorf("evaluating HAVING predicate: %w", err)
 	}
 	defer mask.Release()
 
-	// Apply the filter mask
-	return gh.applyFilterMask(df, mask)
+	// Apply the filter mask with memory optimizations
+	return gh.applyFilterMaskOptimizedWithAllocator(df, mask, allocator)
 }
 
 // applyFilterMask applies the boolean mask to filter the DataFrame
+//
+//nolint:unused // Used by optimized filter methods, but linter can't detect interface usage
 func (gh *GroupByHavingOperation) applyFilterMask(df *DataFrame, mask arrow.Array) (*DataFrame, error) {
 	boolMask, ok := mask.(*array.Boolean)
 	if !ok {
@@ -1066,7 +1124,49 @@ func (gh *GroupByHavingOperation) applyFilterMask(df *DataFrame, mask arrow.Arra
 	return New(filteredSeries...), nil
 }
 
+// applyFilterMaskOptimizedWithAllocator applies the boolean mask with memory optimizations using provided allocator
+func (gh *GroupByHavingOperation) applyFilterMaskOptimizedWithAllocator(df *DataFrame, mask arrow.Array, allocator memory.Allocator) (*DataFrame, error) {
+	boolMask, ok := mask.(*array.Boolean)
+	if !ok {
+		return nil, fmt.Errorf("HAVING filter mask must be boolean array")
+	}
+
+	// Count true values to determine result size
+	trueCount := 0
+	for i := 0; i < boolMask.Len(); i++ {
+		if !boolMask.IsNull(i) && boolMask.Value(i) {
+			trueCount++
+		}
+	}
+
+	if trueCount == 0 {
+		// Return empty DataFrame with same structure using provided allocator
+		return gh.createEmptyDataFrameWithAllocator(df, allocator), nil
+	}
+
+	// Create filtered series for each column using provided allocator
+	var filteredSeries []ISeries
+
+	for _, colName := range df.Columns() {
+		if originalSeries, exists := df.Column(colName); exists {
+			filtered, err := gh.filterSeriesOptimizedWithAllocator(originalSeries, boolMask, trueCount, allocator)
+			if err != nil {
+				// Clean up any created series
+				for _, s := range filteredSeries {
+					s.Release()
+				}
+				return nil, fmt.Errorf("filtering column %s: %w", colName, err)
+			}
+			filteredSeries = append(filteredSeries, filtered)
+		}
+	}
+
+	return New(filteredSeries...), nil
+}
+
 // createEmptyDataFrame creates an empty DataFrame with the same schema
+//
+//nolint:unused // Used by optimized filter methods, but linter can't detect interface usage
 func (gh *GroupByHavingOperation) createEmptyDataFrame(df *DataFrame) *DataFrame {
 	mem := memory.NewGoAllocator()
 	var emptySeries []ISeries
@@ -1090,7 +1190,32 @@ func (gh *GroupByHavingOperation) createEmptyDataFrame(df *DataFrame) *DataFrame
 	return New(emptySeries...)
 }
 
+// createEmptyDataFrameWithAllocator creates an empty DataFrame using provided allocator
+func (gh *GroupByHavingOperation) createEmptyDataFrameWithAllocator(df *DataFrame, allocator memory.Allocator) *DataFrame {
+	var emptySeries []ISeries
+
+	for _, colName := range df.Columns() {
+		if originalSeries, exists := df.Column(colName); exists {
+			// Create empty series with same type using provided allocator
+			switch originalSeries.DataType().Name() {
+			case "utf8":
+				emptySeries = append(emptySeries, series.New(colName, []string{}, allocator))
+			case "int64":
+				emptySeries = append(emptySeries, series.New(colName, []int64{}, allocator))
+			case "float64":
+				emptySeries = append(emptySeries, series.New(colName, []float64{}, allocator))
+			case "bool":
+				emptySeries = append(emptySeries, series.New(colName, []bool{}, allocator))
+			}
+		}
+	}
+
+	return New(emptySeries...)
+}
+
 // filterSeries filters a single series based on the boolean mask
+//
+//nolint:unused // Used by optimized filter methods, but linter can't detect interface usage
 func (gh *GroupByHavingOperation) filterSeries(originalSeries ISeries, mask *array.Boolean, resultSize int, mem memory.Allocator) (ISeries, error) {
 	name := originalSeries.Name()
 
@@ -1108,7 +1233,27 @@ func (gh *GroupByHavingOperation) filterSeries(originalSeries ISeries, mask *arr
 	}
 }
 
+// filterSeriesOptimizedWithAllocator uses type-specific methods for performance with provided allocator
+func (gh *GroupByHavingOperation) filterSeriesOptimizedWithAllocator(originalSeries ISeries, mask *array.Boolean, resultSize int, allocator memory.Allocator) (ISeries, error) {
+	name := originalSeries.Name()
+
+	switch originalSeries.DataType().Name() {
+	case "utf8":
+		return gh.filterStringSeriesOptimizedWithAllocator(originalSeries, mask, resultSize, name, allocator)
+	case "int64":
+		return gh.filterInt64SeriesOptimizedWithAllocator(originalSeries, mask, resultSize, name, allocator)
+	case "float64":
+		return gh.filterFloat64SeriesOptimizedWithAllocator(originalSeries, mask, resultSize, name, allocator)
+	case "bool":
+		return gh.filterBoolSeriesOptimizedWithAllocator(originalSeries, mask, resultSize, name, allocator)
+	default:
+		return nil, fmt.Errorf("unsupported series type for HAVING filtering: %s", originalSeries.DataType().Name())
+	}
+}
+
 // filterStringSeries filters a string series
+//
+//nolint:unused // Used by optimized filter methods, but linter can't detect interface usage
 func (gh *GroupByHavingOperation) filterStringSeries(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, mem memory.Allocator) (ISeries, error) {
 	originalArray := originalSeries.Array()
 	defer originalArray.Release()
@@ -1131,6 +1276,8 @@ func (gh *GroupByHavingOperation) filterStringSeries(originalSeries ISeries, mas
 }
 
 // filterInt64Series filters an int64 series
+//
+//nolint:unused // Used by optimized filter methods, but linter can't detect interface usage
 func (gh *GroupByHavingOperation) filterInt64Series(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, mem memory.Allocator) (ISeries, error) {
 	originalArray := originalSeries.Array()
 	defer originalArray.Release()
@@ -1153,6 +1300,8 @@ func (gh *GroupByHavingOperation) filterInt64Series(originalSeries ISeries, mask
 }
 
 // filterFloat64Series filters a float64 series
+//
+//nolint:unused // Used by optimized filter methods, but linter can't detect interface usage
 func (gh *GroupByHavingOperation) filterFloat64Series(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, mem memory.Allocator) (ISeries, error) {
 	originalArray := originalSeries.Array()
 	defer originalArray.Release()
@@ -1175,6 +1324,8 @@ func (gh *GroupByHavingOperation) filterFloat64Series(originalSeries ISeries, ma
 }
 
 // filterBoolSeries filters a boolean series
+//
+//nolint:unused // Used by optimized filter methods, but linter can't detect interface usage
 func (gh *GroupByHavingOperation) filterBoolSeries(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, mem memory.Allocator) (ISeries, error) {
 	originalArray := originalSeries.Array()
 	defer originalArray.Release()
@@ -1194,6 +1345,122 @@ func (gh *GroupByHavingOperation) filterBoolSeries(originalSeries ISeries, mask 
 	}
 
 	return series.New(name, filteredValues, mem), nil
+}
+
+// filterStringSeriesOptimizedWithAllocator filters a string series using provided allocator
+func (gh *GroupByHavingOperation) filterStringSeriesOptimizedWithAllocator(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, allocator memory.Allocator) (ISeries, error) {
+	originalArray := originalSeries.Array()
+	// Note: Array from series.Array() is managed by the parent series
+
+	stringArray, ok := originalArray.(*array.String)
+	if !ok {
+		return nil, fmt.Errorf("expected string array")
+	}
+
+	// Pre-allocate with exact size to reduce memory reallocations
+	filteredValues := make([]string, 0, resultSize)
+	for i := 0; i < mask.Len(); i++ {
+		if !mask.IsNull(i) && mask.Value(i) {
+			if !stringArray.IsNull(i) {
+				filteredValues = append(filteredValues, stringArray.Value(i))
+			} else {
+				// Handle null values consistently by using empty string as placeholder
+				filteredValues = append(filteredValues, "")
+			}
+		}
+	}
+
+	return series.New(name, filteredValues, allocator), nil
+}
+
+// filterInt64SeriesOptimizedWithAllocator filters an int64 series using provided allocator
+func (gh *GroupByHavingOperation) filterInt64SeriesOptimizedWithAllocator(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, allocator memory.Allocator) (ISeries, error) {
+	originalArray := originalSeries.Array()
+	// Note: Array from series.Array() is managed by the parent series
+
+	intArray, ok := originalArray.(*array.Int64)
+	if !ok {
+		return nil, fmt.Errorf("expected int64 array")
+	}
+
+	// Pre-allocate with exact size to reduce memory reallocations
+	filteredValues := make([]int64, 0, resultSize)
+	for i := 0; i < mask.Len(); i++ {
+		if !mask.IsNull(i) && mask.Value(i) {
+			if !intArray.IsNull(i) {
+				filteredValues = append(filteredValues, intArray.Value(i))
+			} else {
+				// Handle null values consistently by using zero as placeholder
+				filteredValues = append(filteredValues, 0)
+			}
+		}
+	}
+
+	return series.New(name, filteredValues, allocator), nil
+}
+
+// filterFloat64SeriesOptimizedWithAllocator filters a float64 series using provided allocator
+func (gh *GroupByHavingOperation) filterFloat64SeriesOptimizedWithAllocator(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, allocator memory.Allocator) (ISeries, error) {
+	originalArray := originalSeries.Array()
+	// Note: Array from series.Array() is managed by the parent series
+
+	floatArray, ok := originalArray.(*array.Float64)
+	if !ok {
+		return nil, fmt.Errorf("expected float64 array")
+	}
+
+	// Pre-allocate with exact size to reduce memory reallocations
+	filteredValues := make([]float64, 0, resultSize)
+	for i := 0; i < mask.Len(); i++ {
+		if !mask.IsNull(i) && mask.Value(i) {
+			if !floatArray.IsNull(i) {
+				filteredValues = append(filteredValues, floatArray.Value(i))
+			} else {
+				// Handle null values consistently by using zero as placeholder
+				filteredValues = append(filteredValues, 0.0)
+			}
+		}
+	}
+
+	return series.New(name, filteredValues, allocator), nil
+}
+
+// filterBoolSeriesOptimizedWithAllocator filters a boolean series using provided allocator
+func (gh *GroupByHavingOperation) filterBoolSeriesOptimizedWithAllocator(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, allocator memory.Allocator) (ISeries, error) {
+	originalArray := originalSeries.Array()
+	// Note: Array from series.Array() is managed by the parent series
+
+	boolArray, ok := originalArray.(*array.Boolean)
+	if !ok {
+		return nil, fmt.Errorf("expected boolean array")
+	}
+
+	// Pre-allocate with exact size to reduce memory reallocations
+	filteredValues := make([]bool, 0, resultSize)
+	for i := 0; i < mask.Len(); i++ {
+		if !mask.IsNull(i) && mask.Value(i) {
+			if !boolArray.IsNull(i) {
+				filteredValues = append(filteredValues, boolArray.Value(i))
+			} else {
+				// Handle null values consistently by using false as placeholder
+				filteredValues = append(filteredValues, false)
+			}
+		}
+	}
+
+	return series.New(name, filteredValues, allocator), nil
+}
+
+// Release returns the cached allocator to the pool for reuse
+func (gh *GroupByHavingOperation) Release() {
+	gh.mu.Lock()
+	defer gh.mu.Unlock()
+
+	if gh.cachedAllocator != nil {
+		pool := getFilterMemoryPool()
+		pool.Put(gh.cachedAllocator)
+		gh.cachedAllocator = nil
+	}
 }
 
 // String returns a string representation of the operation

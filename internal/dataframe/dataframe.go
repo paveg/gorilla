@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -20,7 +21,23 @@ import (
 	"github.com/paveg/gorilla/internal/validation"
 )
 
+// Global memory pool for GroupBy operations to reduce GC pressure
+var (
+	groupByMemoryPool *parallel.AllocatorPool
+	groupByPoolOnce   sync.Once
+)
+
+// getGroupByMemoryPool returns the shared memory pool for GroupBy operations
+func getGroupByMemoryPool() *parallel.AllocatorPool {
+	groupByPoolOnce.Do(func() {
+		groupByMemoryPool = parallel.NewAllocatorPool(runtime.NumCPU() * allocatorPoolMultiplier)
+	})
+	return groupByMemoryPool
+}
+
 const (
+	// Memory pool sizing constants
+	allocatorPoolMultiplier   = 2 // Factor to multiply NumCPU for allocator pool size
 	nanosPerSecond            = 1e9
 	minChunkSizeForJoin       = 100 // Minimum chunk size to avoid excessive overhead in parallel joins
 	groupParallelThresholdDiv = 10  // Divisor for calculating group parallel threshold from row threshold
@@ -272,8 +289,14 @@ func (df *DataFrame) sliceSeries(s ISeries, start, end int) ISeries {
 		return series.New(s.Name(), []string{}, mem)
 	}
 
-	// Use dedicated memory allocator to avoid sharing across goroutines
-	mem := memory.NewGoAllocator()
+	// Use memory pool allocator to reduce overhead
+	allocPool := getGroupByMemoryPool()
+	mem := allocPool.Get()
+	if mem == nil {
+		// Fallback if pool is exhausted
+		mem = memory.NewGoAllocator()
+	}
+	defer allocPool.Put(mem)
 
 	return createSlicedSeriesFromArray(s.Name(), originalArray, start, sliceLength, mem)
 }
@@ -751,7 +774,14 @@ func (gb *GroupBy) Agg(aggregations ...*expr.AggregationExpr) *DataFrame {
 func (gb *GroupBy) aggSequential(aggregations ...*expr.AggregationExpr) *DataFrame {
 	// Prepare result columns: group columns + aggregation columns
 	var resultSeries []ISeries
-	mem := memory.NewGoAllocator()
+	// Use shared allocator from memory pool to reduce overhead
+	allocPool := getGroupByMemoryPool()
+	mem := allocPool.Get()
+	if mem == nil {
+		// Fallback if pool is exhausted
+		mem = memory.NewGoAllocator()
+	}
+	defer allocPool.Put(mem)
 
 	// Add group columns to result
 	for _, groupCol := range gb.groupByCols {
@@ -801,7 +831,14 @@ func (gb *GroupBy) aggSequential(aggregations ...*expr.AggregationExpr) *DataFra
 func (gb *GroupBy) aggParallel(aggregations ...*expr.AggregationExpr) *DataFrame {
 	// Prepare result columns: group columns + aggregation columns
 	var resultSeries []ISeries
-	mem := memory.NewGoAllocator()
+	// Use shared allocator from memory pool to reduce overhead
+	allocPool := getGroupByMemoryPool()
+	mem := allocPool.Get()
+	if mem == nil {
+		// Fallback if pool is exhausted
+		mem = memory.NewGoAllocator()
+	}
+	defer allocPool.Put(mem)
 
 	// Add group columns to result (sequential since it's simple)
 	for _, groupCol := range gb.groupByCols {
