@@ -165,14 +165,14 @@ func (pool *AdvancedWorkerPool) Process(items []interface{}, worker func(interfa
 
 	// Submit work items - distribute to worker queues if work stealing is enabled
 	for i, item := range items {
-		workItem := workItem{
+		wi := workItem{
 			index:  i,
 			data:   item,
 			worker: worker,
 			result: results,
 		}
 
-		if !pool.distributeWorkItem(workItem, i) {
+		if !pool.distributeWorkItem(wi, i) {
 			close(results)
 			return nil
 		}
@@ -223,7 +223,7 @@ func (pool *AdvancedWorkerPool) ProcessWithPriority(tasks []PriorityTask, worker
 	for pool.priorityQueue.Len() > 0 {
 		item := heap.Pop(pool.priorityQueue).(*PriorityItem)
 
-		workItem := workItem{
+		wi := workItem{
 			index: item.Index,
 			data:  item.Task,
 			worker: func(data interface{}) interface{} {
@@ -232,7 +232,7 @@ func (pool *AdvancedWorkerPool) ProcessWithPriority(tasks []PriorityTask, worker
 			result: item.Result,
 		}
 
-		if !pool.distributeWorkItem(workItem, item.Index) {
+		if !pool.distributeWorkItem(wi, item.Index) {
 			return nil
 		}
 	}

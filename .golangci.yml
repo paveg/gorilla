@@ -4,7 +4,8 @@ run:
 
 linters-settings:
   govet:
-    shadow: true
+    enable:
+      - shadow
   gocyclo:
     min-complexity: 15
   dupl:

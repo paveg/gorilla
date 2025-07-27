@@ -36,17 +36,17 @@ func DefaultPerformanceThresholds() PerformanceThresholds {
 	// Detect CI environment and adjust thresholds accordingly
 	_, isCI := os.LookupEnv("CI")
 	_, isGithubActions := os.LookupEnv("GITHUB_ACTIONS")
-	
+
 	maxLatency := time.Millisecond // 1ms for local development
 	if isCI || isGithubActions {
 		maxLatency = 5 * time.Millisecond // 5ms for CI environments
 	}
-	
+
 	return PerformanceThresholds{
 		MaxLatencySmallDataset: maxLatency,
 		MinThroughputLargeData: 1000000.0, // 1M rows/sec
-		MaxMemoryOverhead:      0.80,       // 80% (baseline for current implementation)
-		MinParallelEfficiency:  0.80,       // 80%
+		MaxMemoryOverhead:      0.80,      // 80% (baseline for current implementation)
+		MinParallelEfficiency:  0.80,      // 80%
 	}
 }
 
