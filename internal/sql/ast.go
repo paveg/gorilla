@@ -238,6 +238,13 @@ func (o *OrderByItem) String() string {
 	return o.Expression.String() + " " + o.Direction.String()
 }
 
+// Constants for LIMIT clause handling
+const (
+	// OffsetOnlyLimit is a special value used in LimitClause.Count to indicate
+	// that this is an OFFSET-only query (no LIMIT constraint)
+	OffsetOnlyLimit = -1
+)
+
 // LimitClause represents the LIMIT clause
 type LimitClause struct {
 	Count  int64

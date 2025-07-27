@@ -1237,10 +1237,10 @@ func (p *Parser) parseStandaloneOffsetClause() (*LimitClause, bool) {
 		return nil, false
 	}
 
-	// For standalone OFFSET, we create a LimitClause with Count=-1 to indicate no limit
+	// For standalone OFFSET, we create a LimitClause with Count=OffsetOnlyLimit to indicate no limit
 	// This allows the executor to distinguish between LIMIT+OFFSET and OFFSET-only
 	limitClause := &LimitClause{
-		Count:  -1, // Special value indicating no LIMIT constraint
+		Count:  OffsetOnlyLimit, // Special value indicating no LIMIT constraint
 		Offset: offset,
 	}
 

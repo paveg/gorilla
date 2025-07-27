@@ -99,8 +99,8 @@ func (e *SQLExecutor) executeWithLimit(
 		return e.createEmptyDataFrame(fullResult), nil
 	}
 
-	// Handle OFFSET-only queries first (Count = -1 indicates no LIMIT)
-	if limitClause.Count == -1 {
+	// Handle OFFSET-only queries first (Count = OffsetOnlyLimit indicates no LIMIT)
+	if limitClause.Count == OffsetOnlyLimit {
 		// Validate offset bounds against actual data size
 		if offset >= totalRows {
 			// Return empty DataFrame with same schema
@@ -327,8 +327,8 @@ func (q *SQLQuery) executeWithLimit(lazy *dataframe.LazyFrame, limitClause *Limi
 		return emptyResult, nil
 	}
 
-	// Handle OFFSET-only queries first (Count = -1 indicates no LIMIT)
-	if limitClause.Count == -1 {
+	// Handle OFFSET-only queries first (Count = OffsetOnlyLimit indicates no LIMIT)
+	if limitClause.Count == OffsetOnlyLimit {
 		// Validate offset bounds against actual data size
 		if offset >= totalRows {
 			// Return empty DataFrame with same schema

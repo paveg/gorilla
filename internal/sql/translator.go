@@ -507,9 +507,9 @@ func (t *SQLTranslator) validateSelectStatement(stmt *SelectStatement) error {
 
 	// Validate LIMIT clause
 	if stmt.LimitClause != nil {
-		// Allow Count = -1 for OFFSET-only queries, and Count >= 0 for regular LIMIT
-		if stmt.LimitClause.Count < -1 {
-			return fmt.Errorf("LIMIT count must be non-negative or -1 for OFFSET-only, got %d", stmt.LimitClause.Count)
+		// Allow Count = OffsetOnlyLimit for OFFSET-only queries, and Count >= 0 for regular LIMIT
+		if stmt.LimitClause.Count < OffsetOnlyLimit {
+			return fmt.Errorf("invalid LIMIT count %d, must be non-negative or %d", stmt.LimitClause.Count, OffsetOnlyLimit)
 		}
 		if stmt.LimitClause.Offset < 0 {
 			return fmt.Errorf("OFFSET must be non-negative, got %d", stmt.LimitClause.Offset)
