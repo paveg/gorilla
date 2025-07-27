@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
+## [0.3.0] - 2025-07-27
+
+### Added
 - **HAVING clause support** with full SQL compatibility and high-performance optimization
   - Expression validation ensuring proper column references
   - Alias resolution for user-defined and auto-generated aggregation names
@@ -21,6 +25,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Semantic versioning infrastructure and release management tools
 - CLI version command with detailed build information
 - Version information accessible via library API
+
+### Changed
+- Improved memory management with mutex synchronization for thread-safe operations
+- Enhanced performance optimization framework with expression compilation and caching
+- Optimized parallel execution with adaptive chunking and worker pools
+
+### Fixed
+- Race conditions in GroupByHavingOperation for parallel execution safety
+- Type assertion error handling throughout test suite
+- CI test stability with environment-aware performance thresholds
+- Memory leak detection in HAVING operations with proper resource cleanup
 
 ## [0.1.0] - 2025-07-16
 
