@@ -47,8 +47,8 @@ func (e *SQLExecutor) Execute(query string) (*dataframe.DataFrame, error) {
 	}
 
 	// Validate SQL syntax
-	if err := e.translator.ValidateSQLSyntax(stmt); err != nil {
-		return nil, fmt.Errorf("validation error: %w", err)
+	if validationErr := e.translator.ValidateSQLSyntax(stmt); validationErr != nil {
+		return nil, fmt.Errorf("validation error: %w", validationErr)
 	}
 
 	// Translate to LazyFrame operations
@@ -140,8 +140,8 @@ func (e *SQLExecutor) Explain(query string) (string, error) {
 	}
 
 	// Validate SQL syntax
-	if err := e.translator.ValidateSQLSyntax(stmt); err != nil {
-		return "", fmt.Errorf("validation error: %w", err)
+	if validationErr := e.translator.ValidateSQLSyntax(stmt); validationErr != nil {
+		return "", fmt.Errorf("validation error: %w", validationErr)
 	}
 
 	// Translate to LazyFrame operations
@@ -217,8 +217,8 @@ func (e *SQLExecutor) PrepareQuery(query string) (*SQLQuery, error) {
 	}
 
 	// Validate SQL syntax
-	if err := e.translator.ValidateSQLSyntax(stmt); err != nil {
-		return nil, fmt.Errorf("validation error: %w", err)
+	if validationErr := e.translator.ValidateSQLSyntax(stmt); validationErr != nil {
+		return nil, fmt.Errorf("validation error: %w", validationErr)
 	}
 
 	return &SQLQuery{

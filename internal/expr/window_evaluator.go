@@ -117,9 +117,9 @@ func (e *Evaluator) evaluateLag(
 	// Get the offset (default to 1)
 	offset := int64(1)
 	if len(expr.args) > 1 {
-		offsetExpr, err := e.Evaluate(expr.args[1], columns)
-		if err != nil {
-			return nil, fmt.Errorf("evaluating LAG offset: %w", err)
+		offsetExpr, offsetErr := e.Evaluate(expr.args[1], columns)
+		if offsetErr != nil {
+			return nil, fmt.Errorf("evaluating LAG offset: %w", offsetErr)
 		}
 		defer offsetExpr.Release()
 
@@ -159,9 +159,9 @@ func (e *Evaluator) evaluateLead(
 	// Get the offset (default to 1)
 	offset := int64(1)
 	if len(expr.args) > 1 {
-		offsetExpr, err := e.Evaluate(expr.args[1], columns)
-		if err != nil {
-			return nil, fmt.Errorf("evaluating LEAD offset: %w", err)
+		offsetExpr, offsetErr := e.Evaluate(expr.args[1], columns)
+		if offsetErr != nil {
+			return nil, fmt.Errorf("evaluating LEAD offset: %w", offsetErr)
 		}
 		defer offsetExpr.Release()
 
