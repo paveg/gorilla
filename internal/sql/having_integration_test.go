@@ -19,7 +19,7 @@ func TestHavingCrossFeatureIntegration(t *testing.T) {
 	regions := series.New("region",
 		[]string{"North", "South", "North", "West", "South", "North", "East", "West", "South", "East"}, mem)
 	departments := series.New("department", []string{
-		"Engineering", "Sales", "Engineering", "HR", "Sales", 
+		"Engineering", "Sales", "Engineering", "HR", "Sales",
 		"Engineering", "Sales", "HR", "Engineering", "Sales",
 	}, mem)
 	salaries := series.New("salary",
@@ -64,8 +64,13 @@ func TestHavingCrossFeatureIntegration(t *testing.T) {
 		defer countArray.Release()
 
 		for i := 0; i < result.Len(); i++ {
-			avgSalary := avgArray.(*array.Float64).Value(i)
-			empCount := countArray.(*array.Int64).Value(i)
+			avgSalaryFloat64, ok := avgArray.(*array.Float64)
+			require.True(t, ok, "avg_salary column should be Float64 array")
+			avgSalary := avgSalaryFloat64.Value(i)
+
+			empCountInt64, ok := countArray.(*array.Int64)
+			require.True(t, ok, "emp_count column should be Int64 array")
+			empCount := empCountInt64.Value(i)
 
 			assert.True(t, avgSalary > 75000, "avg_salary should be > 75000, got %f", avgSalary)
 			assert.True(t, empCount >= 2, "emp_count should be >= 2, got %d", empCount)
@@ -97,8 +102,10 @@ func TestHavingCrossFeatureIntegration(t *testing.T) {
 			defer salaryArray.Release()
 
 			// First result should have higher or equal salary than second
-			salary1 := salaryArray.(*array.Float64).Value(0)
-			salary2 := salaryArray.(*array.Float64).Value(1)
+			salaryFloat64, ok := salaryArray.(*array.Float64)
+			require.True(t, ok, "total_salary column should be Float64 array")
+			salary1 := salaryFloat64.Value(0)
+			salary2 := salaryFloat64.Value(1)
 			assert.True(t, salary1 >= salary2, "First result salary %f should be >= second result salary %f", salary1, salary2)
 		}
 	})
@@ -134,9 +141,20 @@ func TestHavingCrossFeatureIntegration(t *testing.T) {
 			teamSizeCol, _ := result.Column("team_size")
 			totalExpCol, _ := result.Column("total_exp")
 
-			avgSal := avgSalCol.Array().(*array.Float64).Value(i)
-			teamSize := teamSizeCol.Array().(*array.Int64).Value(i)
-			totalExp := totalExpCol.Array().(*array.Float64).Value(i) // SUM returns float64
+			avgSalArray := avgSalCol.Array()
+			avgSalFloat64, ok := avgSalArray.(*array.Float64)
+			require.True(t, ok, "avg_sal column should be Float64 array")
+			avgSal := avgSalFloat64.Value(i)
+
+			teamSizeArray := teamSizeCol.Array()
+			teamSizeInt64, ok := teamSizeArray.(*array.Int64)
+			require.True(t, ok, "team_size column should be Int64 array")
+			teamSize := teamSizeInt64.Value(i)
+
+			totalExpArray := totalExpCol.Array()
+			totalExpFloat64, ok := totalExpArray.(*array.Float64) // SUM returns float64
+			require.True(t, ok, "total_exp column should be Float64 array")
+			totalExp := totalExpFloat64.Value(i)
 
 			assert.True(t, avgSal > 70000, "avg_sal should be > 70000, got %f", avgSal)
 			assert.True(t, teamSize >= 3, "team_size should be >= 3, got %d", teamSize)
@@ -251,8 +269,15 @@ func TestHavingWithJoinsIntegration(t *testing.T) {
 			avgSalCol, _ := result.Column("avg_salary")
 			empCountCol, _ := result.Column("emp_count")
 
-			avgSal := avgSalCol.Array().(*array.Float64).Value(i)
-			empCount := empCountCol.Array().(*array.Int64).Value(i)
+			avgSalArray := avgSalCol.Array()
+			avgSalFloat64, ok := avgSalArray.(*array.Float64)
+			require.True(t, ok, "avg_salary column should be Float64 array")
+			avgSal := avgSalFloat64.Value(i)
+
+			empCountArray := empCountCol.Array()
+			empCountInt64, ok := empCountArray.(*array.Int64)
+			require.True(t, ok, "emp_count column should be Int64 array")
+			empCount := empCountInt64.Value(i)
 
 			assert.True(t, avgSal > 70000, "avg_salary should be > 70000, got %f", avgSal)
 			assert.True(t, empCount >= 2, "emp_count should be >= 2, got %d", empCount)
@@ -301,8 +326,15 @@ func TestHavingComplexWorkflows(t *testing.T) {
 			orderCountCol, _ := result.Column("order_count")
 			totalSpentCol, _ := result.Column("total_spent")
 
-			orderCount := orderCountCol.Array().(*array.Int64).Value(i)
-			totalSpent := totalSpentCol.Array().(*array.Float64).Value(i)
+			orderCountArray := orderCountCol.Array()
+			orderCountInt64, ok := orderCountArray.(*array.Int64)
+			require.True(t, ok, "order_count column should be Int64 array")
+			orderCount := orderCountInt64.Value(i)
+
+			totalSpentArray := totalSpentCol.Array()
+			totalSpentFloat64, ok := totalSpentArray.(*array.Float64)
+			require.True(t, ok, "total_spent column should be Float64 array")
+			totalSpent := totalSpentFloat64.Value(i)
 
 			assert.True(t, totalSpent > 500, "total_spent should be > 500, got %f", totalSpent)
 			assert.True(t, orderCount >= 2, "order_count should be >= 2, got %d", orderCount)
@@ -332,8 +364,15 @@ func TestHavingComplexWorkflows(t *testing.T) {
 			timesOrderedCol, _ := result.Column("times_ordered")
 			totalQuantityCol, _ := result.Column("total_quantity")
 
-			timesOrdered := timesOrderedCol.Array().(*array.Int64).Value(i)
-			totalQuantity := totalQuantityCol.Array().(*array.Float64).Value(i) // SUM returns float64
+			timesOrderedArray := timesOrderedCol.Array()
+			timesOrderedInt64, ok := timesOrderedArray.(*array.Int64)
+			require.True(t, ok, "times_ordered column should be Int64 array")
+			timesOrdered := timesOrderedInt64.Value(i)
+
+			totalQuantityArray := totalQuantityCol.Array()
+			totalQuantityFloat64, ok := totalQuantityArray.(*array.Float64) // SUM returns float64
+			require.True(t, ok, "total_quantity column should be Float64 array")
+			totalQuantity := totalQuantityFloat64.Value(i)
 
 			assert.True(t, timesOrdered >= 2, "times_ordered should be >= 2, got %d", timesOrdered)
 			assert.True(t, totalQuantity >= 4, "total_quantity should be >= 4, got %f", totalQuantity)
@@ -362,8 +401,9 @@ func TestHavingErrorRecoveryAndRobustness(t *testing.T) {
 		}
 
 		for _, query := range invalidQueries {
-			result, err := executor.Execute(query)
-			assert.Error(t, err, "Query should fail: %s", query)
+			currentQuery := query
+			result, err := executor.Execute(currentQuery)
+			assert.Error(t, err, "Query should fail: %s", currentQuery)
 			if result != nil {
 				result.Release()
 			}
@@ -464,9 +504,20 @@ func TestHavingPerformanceRegression(t *testing.T) {
 			avgCol, _ := result.Column("avg_value")
 			maxCol, _ := result.Column("max_value")
 
-			count := countCol.Array().(*array.Int64).Value(i)
-			avgValue := avgCol.Array().(*array.Float64).Value(i)
-			maxValue := maxCol.Array().(*array.Float64).Value(i)
+			countArray := countCol.Array()
+			countInt64, ok := countArray.(*array.Int64)
+			require.True(t, ok, "count column should be Int64 array")
+			count := countInt64.Value(i)
+
+			avgArray := avgCol.Array()
+			avgFloat64, ok := avgArray.(*array.Float64)
+			require.True(t, ok, "avg_value column should be Float64 array")
+			avgValue := avgFloat64.Value(i)
+
+			maxArray := maxCol.Array()
+			maxFloat64, ok := maxArray.(*array.Float64)
+			require.True(t, ok, "max_value column should be Float64 array")
+			maxValue := maxFloat64.Value(i)
 
 			assert.True(t, count > 500, "count should be > 500, got %d", count)
 			assert.True(t, avgValue > 400, "avg_value should be > 400, got %f", avgValue)
