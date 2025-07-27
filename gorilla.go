@@ -74,8 +74,7 @@ import (
 	"github.com/paveg/gorilla/internal/dataframe"
 	"github.com/paveg/gorilla/internal/expr"
 	"github.com/paveg/gorilla/internal/series"
-	// TODO: Enable SQL import after fixing compilation errors
-	// "github.com/paveg/gorilla/internal/sql"
+	"github.com/paveg/gorilla/internal/sql"
 	"github.com/paveg/gorilla/internal/version"
 )
 
@@ -798,10 +797,9 @@ func ExampleDataFrameJoin() {
 //		panic(err)
 //	}
 //	defer result.Release()
-// TODO: Enable SQL after fixing compilation errors
-// type SQLExecutor struct {
-//	executor *sql.SQLExecutor
-// }
+type SQLExecutor struct {
+	executor *sql.SQLExecutor
+}
 
 // NewSQLExecutor creates a new SQL executor for DataFrame queries.
 //
@@ -823,12 +821,11 @@ func ExampleDataFrameJoin() {
 //	// Execute SQL queries
 //	result, err := executor.Execute("SELECT * FROM sales WHERE amount > 1000")
 //	defer result.Release()
-// TODO: Enable SQL after fixing compilation errors
-// func NewSQLExecutor(mem memory.Allocator) *SQLExecutor {
-//	return &SQLExecutor{
-//		executor: sql.NewSQLExecutor(mem),
-//	}
-// }
+func NewSQLExecutor(mem memory.Allocator) *SQLExecutor {
+	return &SQLExecutor{
+		executor: sql.NewSQLExecutor(mem),
+	}
+}
 
 // RegisterTable registers a DataFrame with a table name for SQL queries.
 //
@@ -846,8 +843,6 @@ func ExampleDataFrameJoin() {
 //
 //	// Now can use in SQL
 //	result, err := executor.Execute("SELECT * FROM employees WHERE dept_id IN (SELECT id FROM departments)")
-// TODO: Enable SQL after fixing compilation errors
-/*
 func (se *SQLExecutor) RegisterTable(name string, df *DataFrame) {
 	se.executor.RegisterTable(name, df.df)
 }
@@ -1049,4 +1044,3 @@ func ExampleSQLExecutor() {
 
 	fmt.Println(result)
 }
-*/
