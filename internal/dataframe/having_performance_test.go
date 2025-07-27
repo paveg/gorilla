@@ -813,10 +813,15 @@ func BenchmarkHavingPredicateComplexity(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			lazy := df.Lazy()
+			// Complex predicate with salary and experience conditions
+			salaryCondition := expr.Mean(expr.Col("salary")).As("avg_salary").Mul(expr.Lit(1.1)).Gt(expr.Lit(70000.0))
+			experienceCondition := expr.Sum(expr.Col("experience")).As("total_exp").
+				Div(expr.Count(expr.Col("department")).As("count")).Gt(expr.Lit(15.0))
+			complexPredicate := salaryCondition.And(experienceCondition)
+
 			groupByOp := &GroupByHavingOperation{
 				groupByCols: []string{"department"},
-				predicate: expr.Mean(expr.Col("salary")).As("avg_salary").Mul(expr.Lit(1.1)).Gt(expr.Lit(70000.0)).
-					And(expr.Sum(expr.Col("experience")).As("total_exp").Div(expr.Count(expr.Col("department")).As("count")).Gt(expr.Lit(15.0))),
+				predicate:   complexPredicate,
 			}
 			lazy.operations = append(lazy.operations, groupByOp)
 			result, err := lazy.Collect()
