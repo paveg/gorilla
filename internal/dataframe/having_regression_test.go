@@ -10,7 +10,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// PerformanceThresholds defines acceptable performance limits
+// PerformanceThresholds defines acceptable performance limits.
+// 
+// The 80% thresholds for memory overhead and parallel efficiency are intentionally
+// relaxed to establish a baseline for the current HAVING clause implementation.
+// These values represent acceptable trade-offs between functionality and performance:
+//
+// - MaxMemoryOverhead (80%): Allows for the additional memory required by HAVING
+//   operations while maintaining reasonable resource usage compared to manual filtering
+// - MinParallelEfficiency (80%): Ensures parallel execution provides meaningful
+//   performance benefits while accounting for coordination overhead
+//
+// Future optimizations should aim to improve these metrics while maintaining
+// functional correctness and code maintainability.
 type PerformanceThresholds struct {
 	MaxLatencySmallDataset time.Duration // <1ms for <1K rows
 	MinThroughputLargeData float64       // >1M rows/sec
