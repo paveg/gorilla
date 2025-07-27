@@ -659,10 +659,28 @@ func (c *CompiledHavingEvaluator) evaluateBoolOperation(
 	}
 }
 
-// generateTypeSignature generates a type signature for the expression
+// generateTypeSignature generates a deterministic type signature for the expression
 func (c *CompiledHavingEvaluator) generateTypeSignature(ex expr.Expr) string {
-	// Generate a signature based on the expression structure and types
-	return fmt.Sprintf("having_%p", ex) // Simplified implementation
+	// Generate a deterministic signature based on the expression structure
+	// This avoids using pointer addresses which are non-deterministic
+	switch e := ex.(type) {
+	case *expr.ColumnExpr:
+		return fmt.Sprintf("col_%s", e.Name())
+	case *expr.LiteralExpr:
+		return fmt.Sprintf("lit_%T_%v", e.Value(), e.Value())
+	case *expr.BinaryExpr:
+		leftSig := c.generateTypeSignature(e.Left())
+		rightSig := c.generateTypeSignature(e.Right())
+		return fmt.Sprintf("binary_%v_%s_%s", e.Op(), leftSig, rightSig)
+	case *expr.AggregationExpr:
+		colSig := c.generateTypeSignature(e.Column())
+		return fmt.Sprintf("agg_%v_%s", e.AggType(), colSig)
+	case *expr.FunctionExpr:
+		return fmt.Sprintf("func_%s_%d_args", e.Name(), len(e.Args()))
+	default:
+		// Fallback to type name for other expression types
+		return fmt.Sprintf("expr_%T", ex)
+	}
 }
 
 // evaluateConstantPredicate evaluates a constant predicate value against aggregated data
