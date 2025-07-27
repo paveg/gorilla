@@ -25,6 +25,8 @@ leveraging Arrow's columnar data format.
   support and automatic optimization strategies.
 - **GroupBy & Aggregations:** Efficient grouping with Sum, Count, Mean, Min, Max aggregations
   and parallel execution for large datasets.
+- **HAVING Clause Support:** Full SQL-compatible HAVING clause implementation for filtering
+  grouped data after aggregation with high-performance optimization.
 - **Streaming & Large Dataset Processing:** Handle datasets larger than memory with
   chunk-based processing and automatic disk spilling.
 - **Debug & Profiling:** Built-in execution plan visualization, performance profiling,
@@ -195,6 +197,45 @@ result, err := df.Lazy().
         gorilla.Sum(gorilla.Col("salary")).As("total_salary"),
         gorilla.Count(gorilla.Col("*")).As("employee_count"),
         gorilla.Mean(gorilla.Col("age")).As("avg_age"),
+    ).
+    Collect()
+defer result.Release()
+```
+
+### HAVING Clause Support
+
+Filter grouped data after aggregation with full SQL-compatible HAVING clause support:
+
+```go
+// HAVING with aggregation functions
+result, err := df.Lazy().
+    GroupBy("department").
+    Agg(
+        gorilla.Sum(gorilla.Col("salary")).As("total_salary"),
+        gorilla.Count(gorilla.Col("*")).As("employee_count"),
+    ).
+    Having(gorilla.Sum(gorilla.Col("salary")).Gt(gorilla.Lit(100000))).
+    Collect()
+defer result.Release()
+
+// HAVING with alias references
+result, err := df.Lazy().
+    GroupBy("department").
+    Agg(gorilla.Count(gorilla.Col("*")).As("emp_count")).
+    Having(gorilla.Col("emp_count").Gt(gorilla.Lit(5))).
+    Collect()
+defer result.Release()
+
+// Complex HAVING conditions
+result, err := df.Lazy().
+    GroupBy("department").
+    Agg(
+        gorilla.Mean(gorilla.Col("salary")).As("avg_salary"),
+        gorilla.Count(gorilla.Col("*")).As("count"),
+    ).
+    Having(
+        gorilla.Mean(gorilla.Col("salary")).Gt(gorilla.Lit(75000)).
+        And(gorilla.Col("count").Gte(gorilla.Lit(3))),
     ).
     Collect()
 defer result.Release()
