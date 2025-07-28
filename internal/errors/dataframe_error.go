@@ -296,7 +296,7 @@ func NewConfigurationError(param string, value interface{}, validOptions []strin
 
 // NewInvalidExpressionError creates an error for invalid expressions in operations
 func NewInvalidExpressionError(op, reason string) *DataFrameError {
-	return NewInvalidExpressionErrorWithHint(op, reason, 
+	return NewInvalidExpressionErrorWithHint(op, reason,
 		"Check the expression syntax and ensure all referenced columns exist")
 }
 
