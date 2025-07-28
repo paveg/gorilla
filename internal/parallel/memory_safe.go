@@ -6,6 +6,18 @@ import (
 	"sync/atomic"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/paveg/gorilla/internal/config"
+)
+
+const (
+	// DefaultMemoryThreshold is the default memory threshold for parallel operations (1GB)
+	DefaultMemoryThreshold = 1024 * 1024 * 1024
+	// DefaultGCPressureThreshold is the default GC pressure threshold
+	DefaultGCPressureThreshold = 0.8
+	// ModeratePressureOffset is the offset for moderate pressure threshold
+	ModeratePressureOffset = 0.2
+	// VeryHighPressureOffset is the offset for very high pressure threshold
+	VeryHighPressureOffset = 0.1
 )
 
 // AllocatorPool manages a pool of memory allocators for safe reuse in parallel processing
@@ -84,9 +96,10 @@ func (p *AllocatorPool) Close() {
 
 // MemoryMonitor tracks memory usage and provides adaptive parallelism control
 type MemoryMonitor struct {
-	threshold    int64 // Memory threshold in bytes
-	currentUsage int64 // Current memory usage (atomic)
-	maxParallel  int   // Maximum parallelism allowed
+	threshold           int64   // Memory threshold in bytes
+	currentUsage        int64   // Current memory usage (atomic)
+	maxParallel         int     // Maximum parallelism allowed
+	gcPressureThreshold float64 // GC pressure threshold for adaptive parallelism
 }
 
 // NewMemoryMonitor creates a new memory monitor with the specified threshold and max parallelism
@@ -96,8 +109,34 @@ func NewMemoryMonitor(threshold int64, maxParallel int) *MemoryMonitor {
 	}
 
 	return &MemoryMonitor{
-		threshold:   threshold,
-		maxParallel: maxParallel,
+		threshold:           threshold,
+		maxParallel:         maxParallel,
+		gcPressureThreshold: DefaultGCPressureThreshold,
+	}
+}
+
+// NewMemoryMonitorFromConfig creates a new memory monitor using configuration values
+func NewMemoryMonitorFromConfig(cfg config.Config) *MemoryMonitor {
+	threshold := cfg.MemoryThreshold
+	if threshold == 0 {
+		// Use a reasonable default if not configured
+		threshold = DefaultMemoryThreshold
+	}
+
+	maxParallel := cfg.MaxParallelism
+	if maxParallel <= 0 {
+		maxParallel = runtime.NumCPU()
+	}
+
+	gcThreshold := cfg.GCPressureThreshold
+	if gcThreshold == 0.0 {
+		gcThreshold = DefaultGCPressureThreshold
+	}
+
+	return &MemoryMonitor{
+		threshold:           threshold,
+		maxParallel:         maxParallel,
+		gcPressureThreshold: gcThreshold,
 	}
 }
 
@@ -119,10 +158,13 @@ func (m *MemoryMonitor) RecordDeallocation(size int64) {
 
 // AdjustParallelism returns the recommended parallelism level based on current memory pressure
 func (m *MemoryMonitor) AdjustParallelism() int {
+	// Define thresholds relative to the configured GC pressure threshold
+	// These are calculated as percentages of the configured threshold
+	veryHighPressureThreshold := m.gcPressureThreshold + VeryHighPressureOffset
+	highPressureThreshold := m.gcPressureThreshold // At gc threshold
+	moderatePressureThreshold := m.gcPressureThreshold - ModeratePressureOffset
+
 	const (
-		veryHighPressureThreshold  = 0.9
-		highPressureThreshold      = 0.8
-		moderatePressureThreshold  = 0.6
 		veryHighPressureDivider    = 4
 		highPressureDivider        = 2
 		moderatePressureMultiplier = 3
