@@ -298,7 +298,7 @@ func NewConfigurationError(param string, value interface{}, validOptions []strin
 func NewInvalidExpressionError(op, reason string) *DataFrameError {
 	return &DataFrameError{
 		Op:      op,
-		Message: fmt.Sprintf("Invalid expression: %s", reason),
+		Message: fmt.Sprintf("Invalid expression in %s: %s", op, reason),
 	}
 }
 
