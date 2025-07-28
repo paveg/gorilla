@@ -296,9 +296,16 @@ func NewConfigurationError(param string, value interface{}, validOptions []strin
 
 // NewInvalidExpressionError creates an error for invalid expressions in operations
 func NewInvalidExpressionError(op, reason string) *DataFrameError {
+	return NewInvalidExpressionErrorWithHint(op, reason, 
+		"Check the expression syntax and ensure all referenced columns exist")
+}
+
+// NewInvalidExpressionErrorWithHint creates an error for invalid expressions with a custom hint
+func NewInvalidExpressionErrorWithHint(op, reason, hint string) *DataFrameError {
 	return &DataFrameError{
 		Op:      op,
 		Message: fmt.Sprintf("Invalid expression in %s: %s", op, reason),
+		Hint:    hint,
 	}
 }
 
