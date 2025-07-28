@@ -50,7 +50,7 @@ func TestNewErrorTypes(t *testing.T) {
 
 		errMsg := err.Error()
 		assert.Contains(t, errMsg, "Filter operation failed")
-		assert.Contains(t, errMsg, "Invalid expression: Cannot use aggregation function in WHERE clause")
+		assert.Contains(t, errMsg, "Invalid expression in Filter: Cannot use aggregation function in WHERE clause")
 		assert.Contains(t, errMsg, "Check the expression syntax")
 	})
 }
