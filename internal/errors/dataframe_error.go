@@ -264,6 +264,51 @@ func NewIndexOutOfBoundsError(op string, index, maxIndex int) *DataFrameError {
 	}
 }
 
+// NewUnsupportedOperationError creates an error for unsupported operations with suggestions
+func NewUnsupportedOperationError(op, reason string, supportedOptions []string) *DataFrameError {
+	message := fmt.Sprintf("Unsupported operation in %s: %s", op, reason)
+	var hint string
+	if len(supportedOptions) > 0 {
+		hint = fmt.Sprintf("Supported options: %s", strings.Join(supportedOptions, ", "))
+	}
+
+	return &DataFrameError{
+		Op:      op,
+		Message: message,
+		Hint:    hint,
+	}
+}
+
+// NewConfigurationError creates an error for invalid configuration values
+func NewConfigurationError(param string, value interface{}, validOptions []string) *DataFrameError {
+	message := fmt.Sprintf("Invalid configuration for parameter '%s', value: %v", param, value)
+	var hint string
+	if len(validOptions) > 0 {
+		hint = fmt.Sprintf("Valid options: %s", strings.Join(validOptions, ", "))
+	}
+
+	return &DataFrameError{
+		Op:      "configuration",
+		Message: message,
+		Hint:    hint,
+	}
+}
+
+// NewInvalidExpressionError creates an error for invalid expressions in operations
+func NewInvalidExpressionError(op, reason string) *DataFrameError {
+	return NewInvalidExpressionErrorWithHint(op, reason,
+		"Check the expression syntax and ensure all referenced columns exist")
+}
+
+// NewInvalidExpressionErrorWithHint creates an error for invalid expressions with a custom hint
+func NewInvalidExpressionErrorWithHint(op, reason, hint string) *DataFrameError {
+	return &DataFrameError{
+		Op:      op,
+		Message: fmt.Sprintf("Invalid expression in %s: %s", op, reason),
+		Hint:    hint,
+	}
+}
+
 // findSimilarColumns finds column names similar to the search term using string similarity
 func findSimilarColumns(searchColumn string, availableColumns []string) []string {
 	type columnScore struct {

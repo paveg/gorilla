@@ -7,6 +7,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	dferrors "github.com/paveg/gorilla/internal/errors"
 )
 
 // Type name constants
@@ -79,9 +80,10 @@ func (e *Evaluator) EvaluateWithContext(expr Expr, columns map[string]arrow.Arra
 	case *WindowExpr:
 		return e.evaluateWindowWithContext(ex, columns, ctx)
 	case *InvalidExpr:
-		return nil, fmt.Errorf("invalid expression: %s", ex.Message())
+		return nil, dferrors.NewInvalidExpressionError("Evaluate", ex.Message())
 	default:
-		return nil, fmt.Errorf("unsupported expression type: %T", expr)
+		supportedTypes := []string{"ColumnExpr", "LiteralExpr", "BinaryExpr", "AggregationExpr", "FunctionExpr", "CaseExpr", "WindowExpr"}
+		return nil, dferrors.NewUnsupportedOperationError("Evaluate", fmt.Sprintf("expression type %T", expr), supportedTypes)
 	}
 }
 
@@ -338,7 +340,12 @@ func (e *Evaluator) evaluateAggregationValue(expr *AggregationExpr, columns map[
 	// Look up the aggregated column
 	arr, exists := columns[columnName]
 	if !exists {
-		return nil, fmt.Errorf("aggregated column not found: %s", columnName)
+		// Get available column names for suggestions
+		availableColumns := make([]string, 0, len(columns))
+		for colName := range columns {
+			availableColumns = append(availableColumns, colName)
+		}
+		return nil, dferrors.NewColumnNotFoundErrorWithSuggestions("Aggregation", columnName, availableColumns)
 	}
 
 	// Return a reference to the existing array
@@ -349,7 +356,12 @@ func (e *Evaluator) evaluateAggregationValue(expr *AggregationExpr, columns map[
 func (e *Evaluator) evaluateColumn(expr *ColumnExpr, columns map[string]arrow.Array) (arrow.Array, error) {
 	arr, exists := columns[expr.name]
 	if !exists {
-		return nil, fmt.Errorf("column not found: %s", expr.name)
+		// Get available column names for suggestions
+		availableColumns := make([]string, 0, len(columns))
+		for colName := range columns {
+			availableColumns = append(availableColumns, colName)
+		}
+		return nil, dferrors.NewColumnNotFoundErrorWithSuggestions("Column", expr.name, availableColumns)
 	}
 	// Return a reference to the existing array (caller should handle retention if needed)
 	arr.Retain()
@@ -359,7 +371,12 @@ func (e *Evaluator) evaluateColumn(expr *ColumnExpr, columns map[string]arrow.Ar
 func (e *Evaluator) evaluateColumnBoolean(expr *ColumnExpr, columns map[string]arrow.Array) (arrow.Array, error) {
 	arr, exists := columns[expr.name]
 	if !exists {
-		return nil, fmt.Errorf("column not found: %s", expr.name)
+		// Get available column names for suggestions
+		availableColumns := make([]string, 0, len(columns))
+		for colName := range columns {
+			availableColumns = append(availableColumns, colName)
+		}
+		return nil, dferrors.NewColumnNotFoundErrorWithSuggestions("BooleanColumn", expr.name, availableColumns)
 	}
 
 	// Check if it's already a boolean array
