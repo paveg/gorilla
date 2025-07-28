@@ -15,6 +15,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/paveg/gorilla/internal/config"
+	dferrors "github.com/paveg/gorilla/internal/errors"
 	"github.com/paveg/gorilla/internal/expr"
 	"github.com/paveg/gorilla/internal/parallel"
 	"github.com/paveg/gorilla/internal/series"
@@ -1881,12 +1882,12 @@ func (df *DataFrame) Correlation(col1, col2 string) (float64, error) {
 	// Validate columns exist
 	series1, exists1 := df.Column(col1)
 	if !exists1 {
-		return 0, fmt.Errorf("column %s not found", col1)
+		return 0, dferrors.NewColumnNotFoundErrorWithSuggestions("Correlation", col1, df.Columns())
 	}
 
 	series2, exists2 := df.Column(col2)
 	if !exists2 {
-		return 0, fmt.Errorf("column %s not found", col2)
+		return 0, dferrors.NewColumnNotFoundErrorWithSuggestions("Correlation", col2, df.Columns())
 	}
 
 	// Extract numeric values
@@ -2086,7 +2087,7 @@ func (df *DataFrame) RollingWindow(column string, windowSize int, operation stri
 	// Validate column exists
 	columnSeries, exists := df.Column(column)
 	if !exists {
-		return nil, fmt.Errorf("column %s not found", column)
+		return nil, dferrors.NewColumnNotFoundErrorWithSuggestions("RollingWindow", column, df.Columns())
 	}
 
 	if windowSize <= 0 {
@@ -2303,7 +2304,7 @@ func (df *DataFrame) applyRowNumber(partitionBy string, mem memory.Allocator) IS
 func (df *DataFrame) applyRank(orderBy, partitionBy string, mem memory.Allocator) (ISeries, error) {
 	orderSeries, exists := df.Column(orderBy)
 	if !exists {
-		return nil, fmt.Errorf("order by column %s not found", orderBy)
+		return nil, dferrors.NewColumnNotFoundErrorWithSuggestions("Rank", orderBy, df.Columns())
 	}
 
 	orderValues, err := df.extractNumericValues(orderSeries)
@@ -2342,7 +2343,7 @@ func (df *DataFrame) applyRank(orderBy, partitionBy string, mem memory.Allocator
 func (df *DataFrame) applyLag(column string, offset int, mem memory.Allocator) (ISeries, error) {
 	columnSeries, exists := df.Column(column)
 	if !exists {
-		return nil, fmt.Errorf("column %s not found", column)
+		return nil, dferrors.NewColumnNotFoundErrorWithSuggestions("Lag", column, df.Columns())
 	}
 
 	values, err := df.extractNumericValues(columnSeries)
@@ -2357,7 +2358,7 @@ func (df *DataFrame) applyLag(column string, offset int, mem memory.Allocator) (
 func (df *DataFrame) applyLead(column string, offset int, mem memory.Allocator) (ISeries, error) {
 	columnSeries, exists := df.Column(column)
 	if !exists {
-		return nil, fmt.Errorf("column %s not found", column)
+		return nil, dferrors.NewColumnNotFoundErrorWithSuggestions("Lead", column, df.Columns())
 	}
 
 	values, err := df.extractNumericValues(columnSeries)

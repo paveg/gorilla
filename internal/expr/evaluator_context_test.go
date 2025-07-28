@@ -514,7 +514,7 @@ func TestEvaluateWithContext_NonExistentColumn(t *testing.T) {
 	expr := Col("nonexistent")
 	_, err := eval.EvaluateWithContext(expr, columns, RowContext)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "column not found")
+	assert.Contains(t, err.Error(), "Column 'nonexistent' does not exist")
 }
 
 // Backward compatibility tests
@@ -775,7 +775,7 @@ func TestEvaluateWithContext_EmptyColumns(t *testing.T) {
 	expr := Col("nonexistent")
 	_, err := eval.EvaluateWithContext(expr, emptyColumns, RowContext)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "column not found")
+	assert.Contains(t, err.Error(), "Column 'nonexistent' does not exist")
 }
 
 func TestEvaluateWithContext_UnsupportedExpressionType(t *testing.T) {
@@ -791,7 +791,7 @@ func TestEvaluateWithContext_UnsupportedExpressionType(t *testing.T) {
 	// Test with nil expression (should cause unsupported type error)
 	_, err := eval.EvaluateWithContext(nil, columns, RowContext)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unsupported expression type")
+	assert.Contains(t, err.Error(), "Unsupported operation in Evaluate")
 }
 
 // Comprehensive integration test

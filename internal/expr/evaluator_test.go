@@ -80,7 +80,7 @@ func TestEvaluateColumn(t *testing.T) {
 	nonExistentExpr := Col("nonexistent")
 	_, err = eval.Evaluate(nonExistentExpr, columns)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "column not found")
+	assert.Contains(t, err.Error(), "Column 'nonexistent' does not exist")
 }
 
 func TestEvaluateLiteral(t *testing.T) {
