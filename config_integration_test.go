@@ -100,12 +100,12 @@ func TestConfigurationInheritance(t *testing.T) {
 	// After filtering age > 25: Bob (30, 60000), Charlie (35, 70000), Diana (40, 80000)
 	// The order is not guaranteed, so collect all values and verify they're all present
 	require.Equal(t, 3, float64Arr.Len())
-	
+
 	actualValues := make([]float64, 3)
-	for i := 0; i < 3; i++ {
+	for i := range actualValues {
 		actualValues[i] = float64Arr.Value(i)
 	}
-	
+
 	// Expected bonus values: Bob (6000), Charlie (7000), Diana (8000)
 	expectedValues := []float64{6000, 7000, 8000}
 	assert.ElementsMatch(t, expectedValues, actualValues)
