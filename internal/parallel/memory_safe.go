@@ -1,6 +1,7 @@
 package parallel
 
 import (
+	"math"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -160,9 +161,9 @@ func (m *MemoryMonitor) RecordDeallocation(size int64) {
 func (m *MemoryMonitor) AdjustParallelism() int {
 	// Define thresholds relative to the configured GC pressure threshold
 	// These are calculated as percentages of the configured threshold
-	veryHighPressureThreshold := m.gcPressureThreshold + VeryHighPressureOffset
+	veryHighPressureThreshold := math.Min(1.0, m.gcPressureThreshold+VeryHighPressureOffset)
 	highPressureThreshold := m.gcPressureThreshold // At gc threshold
-	moderatePressureThreshold := m.gcPressureThreshold - ModeratePressureOffset
+	moderatePressureThreshold := math.Max(0, m.gcPressureThreshold-ModeratePressureOffset)
 
 	const (
 		veryHighPressureDivider    = 4

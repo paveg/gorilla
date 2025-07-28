@@ -218,3 +218,29 @@ func TestMemoryConfigurationIntegration(t *testing.T) {
 	maxParallel := runtime.NumCPU()
 	assert.True(t, parallelism < maxParallel, "Parallelism should be reduced at 70%% usage with 60%% threshold")
 }
+
+// TestMemoryThresholdEdgeCases tests edge cases for memory pressure thresholds
+func TestMemoryThresholdEdgeCases(t *testing.T) {
+	// Test with very high GC pressure threshold (0.95)
+	highConfig := config.Config{
+		MemoryThreshold:     100 * 1024 * 1024, // 100MB
+		GCPressureThreshold: 0.95,
+		MaxParallelism:      8,
+	}
+
+	highMonitor := parallel.NewMemoryMonitorFromConfig(highConfig)
+	assert.NotNil(t, highMonitor)
+
+	// Test with very low GC pressure threshold (0.1)
+	lowConfig := config.Config{
+		MemoryThreshold:     100 * 1024 * 1024, // 100MB
+		GCPressureThreshold: 0.1,
+		MaxParallelism:      8,
+	}
+
+	lowMonitor := parallel.NewMemoryMonitorFromConfig(lowConfig)
+	assert.NotNil(t, lowMonitor)
+
+	// Both should work without panic or errors
+	// Edge cases are handled by math.Min and math.Max
+}
