@@ -4,9 +4,7 @@ import (
 	"fmt"
 	"math"
 	"sync"
-	"sync/atomic"
 	"testing"
-	"unicode/utf8"
 
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
@@ -168,7 +166,7 @@ func TestHavingEdgeCases_TypeHandling(t *testing.T) {
 		defer catArray.Release()
 
 		categoryName := catArray.(*array.String).Value(0)
-		assert.True(t, utf8.ValidString(categoryName), "Category name should be valid UTF-8")
+		// Verify Unicode string is preserved correctly
 		assert.Equal(t, "naïve", categoryName)
 	})
 
@@ -512,7 +510,8 @@ func TestHavingEdgeCases_ConcurrencyAndMemory(t *testing.T) {
 
 		const numOps = 20
 		var wg sync.WaitGroup
-		var successCount atomic.Int64
+		var successCount int64
+		var mu sync.Mutex
 
 		for i := 0; i < numOps; i++ {
 			wg.Add(1)
@@ -525,7 +524,9 @@ func TestHavingEdgeCases_ConcurrencyAndMemory(t *testing.T) {
 
 				if err == nil && result != nil {
 					result.Release()
-					successCount.Add(1)
+					mu.Lock()
+					successCount++
+					mu.Unlock()
 				}
 			}(i)
 		}
@@ -533,7 +534,7 @@ func TestHavingEdgeCases_ConcurrencyAndMemory(t *testing.T) {
 		wg.Wait()
 
 		// At least half operations should succeed
-		assert.GreaterOrEqual(t, successCount.Load(), int64(numOps/2), "At least half parallel operations should succeed")
+		assert.GreaterOrEqual(t, successCount, int64(numOps/2), "At least half parallel operations should succeed")
 	})
 
 	t.Run("PanicRecoveryInWorkerThreads", func(t *testing.T) {
