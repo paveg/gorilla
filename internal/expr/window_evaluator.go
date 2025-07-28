@@ -31,7 +31,7 @@ func (e *Evaluator) evaluateRank(
 		// Sort partition if ORDER BY is specified
 		sortedIndices := partition
 		if len(window.orderBy) > 0 {
-			sortedIndices = e.sortPartition(partition, window.orderBy, columns)
+			sortedIndices = e.sortPartitionOptimized(partition, window.orderBy, columns)
 		}
 
 		// Assign ranks within partition (same values get same rank)
@@ -75,7 +75,7 @@ func (e *Evaluator) evaluateDenseRank(
 	for _, partition := range partitions {
 		sortedIndices := partition
 		if len(window.orderBy) > 0 {
-			sortedIndices = e.sortPartition(partition, window.orderBy, columns)
+			sortedIndices = e.sortPartitionOptimized(partition, window.orderBy, columns)
 		}
 
 		currentRank := int64(1)
@@ -489,7 +489,7 @@ func (e *Evaluator) createLagResult(
 	for _, partition := range partitions {
 		sortedIndices := partition
 		if len(window.orderBy) > 0 {
-			sortedIndices = e.sortPartition(partition, window.orderBy, columns)
+			sortedIndices = e.sortPartitionOptimized(partition, window.orderBy, columns)
 		}
 
 		for i, idx := range sortedIndices {
@@ -554,7 +554,7 @@ func (e *Evaluator) createFirstLastResult(
 	for _, partition := range partitions {
 		sortedIndices := partition
 		if len(window.orderBy) > 0 {
-			sortedIndices = e.sortPartition(partition, window.orderBy, columns)
+			sortedIndices = e.sortPartitionOptimized(partition, window.orderBy, columns)
 		}
 
 		// Get first or last value
