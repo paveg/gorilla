@@ -71,6 +71,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/paveg/gorilla/internal/config"
 	"github.com/paveg/gorilla/internal/dataframe"
 	"github.com/paveg/gorilla/internal/expr"
 	"github.com/paveg/gorilla/internal/series"
@@ -392,6 +393,37 @@ func (d *DataFrame) Join(right *DataFrame, options *JoinOptions) (*DataFrame, er
 		return nil, err
 	}
 	return &DataFrame{df: result}, nil
+}
+
+// WithConfig returns a new DataFrame with the specified operation configuration.
+//
+// This allows per-DataFrame configuration overrides for parallel execution,
+// memory usage, and other operational parameters. The configuration is
+// inherited by lazy operations performed on this DataFrame.
+//
+// Parameters:
+//   - opConfig: The operation configuration to apply to this DataFrame
+//
+// Returns:
+//   - *DataFrame: A new DataFrame with the specified configuration
+//
+// Example:
+//
+//	config := config.OperationConfig{
+//		ForceParallel:   true,
+//		CustomChunkSize: 5000,
+//		MaxMemoryUsage:  1024 * 1024 * 100, // 100MB
+//	}
+//
+//	configuredDF := df.WithConfig(config)
+//	defer configuredDF.Release()
+//
+//	// All operations on configuredDF will use the custom configuration
+//	result := configuredDF.Lazy().
+//		Filter(Col("amount").Gt(Lit(1000))).
+//		Collect()
+func (d *DataFrame) WithConfig(opConfig config.OperationConfig) *DataFrame {
+	return &DataFrame{df: d.df.WithConfig(opConfig)}
 }
 
 // Lazy initiates a lazy operation on a DataFrame.

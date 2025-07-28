@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/paveg/gorilla/internal/config"
 )
 
 const (
@@ -14,6 +15,8 @@ const (
 	DefaultCheckInterval = 5 * time.Second
 	// HighMemoryPressureThreshold is the threshold for triggering cleanup
 	HighMemoryPressureThreshold = 0.8
+	// DefaultMemoryThreshold is the default memory threshold (1GB)
+	DefaultMemoryThreshold = 1024 * 1024 * 1024
 )
 
 // Releasable represents any resource that can be released to free memory.
@@ -183,14 +186,39 @@ type MemoryUsageMonitor struct {
 	monitoring bool
 	// Interval for checking memory usage
 	checkInterval time.Duration
+	// GC pressure threshold for triggering cleanup (0.0-1.0)
+	gcPressureThreshold float64
 }
 
 // NewMemoryUsageMonitor creates a new memory usage monitor with the specified spill threshold
 func NewMemoryUsageMonitor(spillThreshold int64) *MemoryUsageMonitor {
 	return &MemoryUsageMonitor{
-		spillThreshold: spillThreshold,
-		stopChan:       make(chan struct{}),
-		checkInterval:  DefaultCheckInterval,
+		spillThreshold:      spillThreshold,
+		stopChan:            make(chan struct{}),
+		checkInterval:       DefaultCheckInterval,
+		gcPressureThreshold: HighMemoryPressureThreshold, // Use default threshold
+	}
+}
+
+// NewMemoryUsageMonitorFromConfig creates a new memory usage monitor using configuration values
+func NewMemoryUsageMonitorFromConfig(cfg config.Config) *MemoryUsageMonitor {
+	spillThreshold := cfg.MemoryThreshold
+	if spillThreshold == 0 {
+		// If no threshold is set, use a reasonable default
+		spillThreshold = DefaultMemoryThreshold
+	}
+
+	gcThreshold := cfg.GCPressureThreshold
+	if gcThreshold == 0.0 {
+		// Use default threshold if not configured
+		gcThreshold = HighMemoryPressureThreshold
+	}
+
+	return &MemoryUsageMonitor{
+		spillThreshold:      spillThreshold,
+		stopChan:            make(chan struct{}),
+		checkInterval:       DefaultCheckInterval,
+		gcPressureThreshold: gcThreshold,
 	}
 }
 
@@ -300,8 +328,8 @@ func (m *MemoryUsageMonitor) checkMemoryPressure() {
 	// Calculate memory pressure based on heap size and system memory
 	pressure := float64(memStats.HeapInuse) / float64(memStats.Sys)
 
-	// If memory pressure is high (>80%), trigger cleanup
-	if pressure > HighMemoryPressureThreshold {
+	// If memory pressure exceeds configured threshold, trigger cleanup
+	if pressure > m.gcPressureThreshold {
 		m.mu.RLock()
 		callback := m.cleanupCallback
 		m.mu.RUnlock()
