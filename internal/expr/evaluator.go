@@ -1913,6 +1913,12 @@ func (e *Evaluator) evaluateIfFunction(expr *FunctionExpr, columns map[string]ar
 		return nil, fmt.Errorf("IF condition must be boolean, got %T", condition)
 	}
 
+	// Validate that both then and else values are of the same type
+	if thenValue.DataType().ID() != elseValue.DataType().ID() {
+		return nil, fmt.Errorf("IF function requires then and else values to be of the same type, got %s and %s",
+			thenValue.DataType(), elseValue.DataType())
+	}
+
 	// For now, implement simple case where both then and else are same type
 	// This is enough for basic HAVING clause functionality
 	switch thenValue.DataType().ID() {
@@ -1932,8 +1938,14 @@ func (e *Evaluator) evaluateIfFloat64Simple(condition *array.Boolean, thenValue,
 	builder := array.NewFloat64Builder(e.mem)
 	defer builder.Release()
 
-	thenFloat := thenValue.(*array.Float64)
-	elseFloat := elseValue.(*array.Float64)
+	thenFloat, ok := thenValue.(*array.Float64)
+	if !ok {
+		return nil, fmt.Errorf("expected thenValue to be *array.Float64, got %T", thenValue)
+	}
+	elseFloat, ok := elseValue.(*array.Float64)
+	if !ok {
+		return nil, fmt.Errorf("expected elseValue to be *array.Float64, got %T", elseValue)
+	}
 
 	for i := 0; i < condition.Len(); i++ {
 		if condition.IsNull(i) {
@@ -1961,8 +1973,14 @@ func (e *Evaluator) evaluateIfInt64Simple(condition *array.Boolean, thenValue, e
 	builder := array.NewInt64Builder(e.mem)
 	defer builder.Release()
 
-	thenInt := thenValue.(*array.Int64)
-	elseInt := elseValue.(*array.Int64)
+	thenInt, ok := thenValue.(*array.Int64)
+	if !ok {
+		return nil, fmt.Errorf("expected thenValue to be *array.Int64, got %T", thenValue)
+	}
+	elseInt, ok := elseValue.(*array.Int64)
+	if !ok {
+		return nil, fmt.Errorf("expected elseValue to be *array.Int64, got %T", elseValue)
+	}
 
 	for i := 0; i < condition.Len(); i++ {
 		if condition.IsNull(i) {
@@ -1990,8 +2008,14 @@ func (e *Evaluator) evaluateIfStringSimple(condition *array.Boolean, thenValue, 
 	builder := array.NewStringBuilder(e.mem)
 	defer builder.Release()
 
-	thenStr := thenValue.(*array.String)
-	elseStr := elseValue.(*array.String)
+	thenStr, ok := thenValue.(*array.String)
+	if !ok {
+		return nil, fmt.Errorf("expected thenValue to be *array.String, got %T", thenValue)
+	}
+	elseStr, ok := elseValue.(*array.String)
+	if !ok {
+		return nil, fmt.Errorf("expected elseValue to be *array.String, got %T", elseValue)
+	}
 
 	for i := 0; i < condition.Len(); i++ {
 		if condition.IsNull(i) {
@@ -2031,6 +2055,16 @@ func (e *Evaluator) evaluateConcatFunction(expr *FunctionExpr, columns map[strin
 		defer arr.Release()
 	}
 
+	// Validate all arrays have the same length
+	if len(argArrays) > 0 {
+		expectedLen := argArrays[0].Len()
+		for i, arr := range argArrays[1:] {
+			if arr.Len() != expectedLen {
+				return nil, fmt.Errorf("CONCAT argument %d has length %d, expected %d", i+1, arr.Len(), expectedLen)
+			}
+		}
+	}
+
 	// Build result
 	builder := array.NewStringBuilder(e.mem)
 	defer builder.Release()
@@ -2054,7 +2088,7 @@ func (e *Evaluator) evaluateConcatFunction(expr *FunctionExpr, columns map[strin
 			case *array.Float64:
 				result += fmt.Sprintf("%g", typedArr.Value(row))
 			default:
-				result += fmt.Sprintf("%v", arr)
+				return nil, fmt.Errorf("unsupported array type: %T", arr)
 			}
 		}
 
