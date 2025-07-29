@@ -1883,8 +1883,9 @@ func (e *Evaluator) evaluateCaseWithContext(expr *CaseExpr, columns map[string]a
 
 // evaluateIfFunction evaluates an IF function (condition, thenValue, elseValue)
 func (e *Evaluator) evaluateIfFunction(expr *FunctionExpr, columns map[string]arrow.Array) (arrow.Array, error) {
-	if len(expr.args) != 3 {
-		return nil, fmt.Errorf("IF function requires exactly 3 arguments, got %d", len(expr.args))
+	const ifFunctionArgCount = 3
+	if len(expr.args) != ifFunctionArgCount {
+		return nil, fmt.Errorf("IF function requires exactly %d arguments, got %d", ifFunctionArgCount, len(expr.args))
 	}
 
 	// Evaluate all arguments

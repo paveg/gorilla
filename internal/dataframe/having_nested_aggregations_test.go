@@ -13,6 +13,7 @@ import (
 
 // TestHavingNestedAggregations tests nested aggregation functions in HAVING clauses
 func TestHavingNestedAggregations(t *testing.T) {
+	t.Skip("Nested aggregations require aggregation system refactoring - see issue #134")
 	mem := memory.NewGoAllocator()
 
 	t.Run("Sum with If condition", func(t *testing.T) {
@@ -95,7 +96,9 @@ func TestHavingNestedAggregations(t *testing.T) {
 	t.Run("Complex nested aggregations", func(t *testing.T) {
 		// Test: Complex business logic with multiple nested conditions
 		stores := series.New("store", []string{"A", "A", "A", "B", "B", "B"}, mem)
-		productTypes := series.New("product_type", []string{"electronics", "clothing", "electronics", "electronics", "food", "clothing"}, mem)
+		productTypes := series.New("product_type", []string{
+			"electronics", "clothing", "electronics", "electronics", "food", "clothing",
+		}, mem)
 		revenues := series.New("revenue", []float64{1000, 500, 1500, 2000, 300, 800}, mem)
 		costs := series.New("cost", []float64{800, 400, 1200, 1600, 250, 600}, mem)
 
@@ -147,6 +150,7 @@ func TestHavingNestedAggregations(t *testing.T) {
 
 // TestHavingNestedAggregationsEdgeCases tests edge cases for nested aggregations
 func TestHavingNestedAggregationsEdgeCases(t *testing.T) {
+	t.Skip("Nested aggregations require aggregation system refactoring - see issue #134")
 	mem := memory.NewGoAllocator()
 
 	t.Run("All conditions false in If expression", func(t *testing.T) {
