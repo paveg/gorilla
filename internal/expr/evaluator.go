@@ -77,6 +77,8 @@ func (e *Evaluator) EvaluateWithContext(expr Expr, columns map[string]arrow.Arra
 		return e.evaluateFunctionWithContext(ex, columns, ctx)
 	case *AggregationExpr:
 		return e.evaluateAggregationWithContext(ex, columns, ctx)
+	case *CaseExpr:
+		return e.evaluateCaseWithContext(ex, columns, ctx)
 	case *WindowExpr:
 		return e.evaluateWindowWithContext(ex, columns, ctx)
 	case *InvalidExpr:
@@ -1296,6 +1298,10 @@ func (e *Evaluator) evaluateFunction(expr *FunctionExpr, columns map[string]arro
 		return e.evaluateDateSub(expr, columns)
 	case "date_diff":
 		return e.evaluateDateDiff(expr, columns)
+	case "if":
+		return e.evaluateIfFunction(expr, columns)
+	case "concat":
+		return e.evaluateConcatFunction(expr, columns)
 	default:
 		return nil, fmt.Errorf("unsupported function: %s", expr.name)
 	}
@@ -1868,4 +1874,195 @@ func (e *Evaluator) getPartitionKey(rowIndex int, partitionColumns []string, col
 		}
 	}
 	return key, nil
+}
+
+// evaluateCaseWithContext evaluates a CASE expression
+func (e *Evaluator) evaluateCaseWithContext(expr *CaseExpr, columns map[string]arrow.Array, ctx EvaluationContext) (arrow.Array, error) {
+	return nil, fmt.Errorf("CASE expressions not yet implemented")
+}
+
+// evaluateIfFunction evaluates an IF function (condition, thenValue, elseValue)
+func (e *Evaluator) evaluateIfFunction(expr *FunctionExpr, columns map[string]arrow.Array) (arrow.Array, error) {
+	if len(expr.args) != 3 {
+		return nil, fmt.Errorf("IF function requires exactly 3 arguments, got %d", len(expr.args))
+	}
+
+	// Evaluate all arguments
+	condition, err := e.Evaluate(expr.args[0], columns)
+	if err != nil {
+		return nil, fmt.Errorf("evaluating IF condition: %w", err)
+	}
+	defer condition.Release()
+
+	thenValue, err := e.Evaluate(expr.args[1], columns)
+	if err != nil {
+		return nil, fmt.Errorf("evaluating IF then value: %w", err)
+	}
+	defer thenValue.Release()
+
+	elseValue, err := e.Evaluate(expr.args[2], columns)
+	if err != nil {
+		return nil, fmt.Errorf("evaluating IF else value: %w", err)
+	}
+	defer elseValue.Release()
+
+	// Check condition is boolean
+	conditionBool, ok := condition.(*array.Boolean)
+	if !ok {
+		return nil, fmt.Errorf("IF condition must be boolean, got %T", condition)
+	}
+
+	// For now, implement simple case where both then and else are same type
+	// This is enough for basic HAVING clause functionality
+	switch thenValue.DataType().ID() {
+	case arrow.FLOAT64:
+		return e.evaluateIfFloat64Simple(conditionBool, thenValue, elseValue)
+	case arrow.INT64:
+		return e.evaluateIfInt64Simple(conditionBool, thenValue, elseValue)
+	case arrow.STRING:
+		return e.evaluateIfStringSimple(conditionBool, thenValue, elseValue)
+	default:
+		return nil, fmt.Errorf("IF function result type %s not yet supported", thenValue.DataType())
+	}
+}
+
+// evaluateIfFloat64Simple evaluates IF function with float64 result
+func (e *Evaluator) evaluateIfFloat64Simple(condition *array.Boolean, thenValue, elseValue arrow.Array) (arrow.Array, error) {
+	builder := array.NewFloat64Builder(e.mem)
+	defer builder.Release()
+
+	thenFloat := thenValue.(*array.Float64)
+	elseFloat := elseValue.(*array.Float64)
+
+	for i := 0; i < condition.Len(); i++ {
+		if condition.IsNull(i) {
+			builder.AppendNull()
+		} else if condition.Value(i) {
+			if thenFloat.IsNull(i) {
+				builder.AppendNull()
+			} else {
+				builder.Append(thenFloat.Value(i))
+			}
+		} else {
+			if elseFloat.IsNull(i) {
+				builder.AppendNull()
+			} else {
+				builder.Append(elseFloat.Value(i))
+			}
+		}
+	}
+
+	return builder.NewArray(), nil
+}
+
+// evaluateIfInt64Simple evaluates IF function with int64 result
+func (e *Evaluator) evaluateIfInt64Simple(condition *array.Boolean, thenValue, elseValue arrow.Array) (arrow.Array, error) {
+	builder := array.NewInt64Builder(e.mem)
+	defer builder.Release()
+
+	thenInt := thenValue.(*array.Int64)
+	elseInt := elseValue.(*array.Int64)
+
+	for i := 0; i < condition.Len(); i++ {
+		if condition.IsNull(i) {
+			builder.AppendNull()
+		} else if condition.Value(i) {
+			if thenInt.IsNull(i) {
+				builder.AppendNull()
+			} else {
+				builder.Append(thenInt.Value(i))
+			}
+		} else {
+			if elseInt.IsNull(i) {
+				builder.AppendNull()
+			} else {
+				builder.Append(elseInt.Value(i))
+			}
+		}
+	}
+
+	return builder.NewArray(), nil
+}
+
+// evaluateIfStringSimple evaluates IF function with string result
+func (e *Evaluator) evaluateIfStringSimple(condition *array.Boolean, thenValue, elseValue arrow.Array) (arrow.Array, error) {
+	builder := array.NewStringBuilder(e.mem)
+	defer builder.Release()
+
+	thenStr := thenValue.(*array.String)
+	elseStr := elseValue.(*array.String)
+
+	for i := 0; i < condition.Len(); i++ {
+		if condition.IsNull(i) {
+			builder.AppendNull()
+		} else if condition.Value(i) {
+			if thenStr.IsNull(i) {
+				builder.AppendNull()
+			} else {
+				builder.Append(thenStr.Value(i))
+			}
+		} else {
+			if elseStr.IsNull(i) {
+				builder.AppendNull()
+			} else {
+				builder.Append(elseStr.Value(i))
+			}
+		}
+	}
+
+	return builder.NewArray(), nil
+}
+
+// evaluateConcatFunction evaluates a CONCAT function
+func (e *Evaluator) evaluateConcatFunction(expr *FunctionExpr, columns map[string]arrow.Array) (arrow.Array, error) {
+	if len(expr.args) == 0 {
+		return nil, fmt.Errorf("CONCAT function requires at least 1 argument")
+	}
+
+	// Evaluate all arguments
+	argArrays := make([]arrow.Array, len(expr.args))
+	for i, arg := range expr.args {
+		arr, err := e.Evaluate(arg, columns)
+		if err != nil {
+			return nil, fmt.Errorf("evaluating CONCAT argument %d: %w", i, err)
+		}
+		argArrays[i] = arr
+		defer arr.Release()
+	}
+
+	// Build result
+	builder := array.NewStringBuilder(e.mem)
+	defer builder.Release()
+
+	for row := 0; row < argArrays[0].Len(); row++ {
+		var result string
+		hasNull := false
+
+		for _, arr := range argArrays {
+			if arr.IsNull(row) {
+				hasNull = true
+				break
+			}
+
+			// Convert to string based on type
+			switch typedArr := arr.(type) {
+			case *array.String:
+				result += typedArr.Value(row)
+			case *array.Int64:
+				result += fmt.Sprintf("%d", typedArr.Value(row))
+			case *array.Float64:
+				result += fmt.Sprintf("%g", typedArr.Value(row))
+			default:
+				result += fmt.Sprintf("%v", arr)
+			}
+		}
+
+		if hasNull {
+			builder.AppendNull()
+		} else {
+			builder.Append(result)
+		}
+	}
+
+	return builder.NewArray(), nil
 }
