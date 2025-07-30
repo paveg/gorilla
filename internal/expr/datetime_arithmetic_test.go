@@ -120,10 +120,16 @@ func TestDateAdd(t *testing.T) {
 			require.True(t, ok)
 			assert.Equal(t, tt.expectedLength, timestampResult.Len())
 
-			for i := 0; i < tt.expectedLength; i++ {
+			for i := range tt.expectedLength {
 				tsValue := int64(timestampResult.Value(i))
 				resultTime := time.Unix(tsValue/nanosPerSecond, tsValue%nanosPerSecond).UTC()
-				assert.True(t, tt.expectedTimes[i].Equal(resultTime), "Expected %v, got %v", tt.expectedTimes[i], resultTime)
+				assert.True(
+					t,
+					tt.expectedTimes[i].Equal(resultTime),
+					"Expected %v, got %v",
+					tt.expectedTimes[i],
+					resultTime,
+				)
 			}
 		})
 	}
@@ -197,10 +203,16 @@ func TestDateSub(t *testing.T) {
 			require.True(t, ok)
 			assert.Equal(t, tt.expectedLength, timestampResult.Len())
 
-			for i := 0; i < tt.expectedLength; i++ {
+			for i := range tt.expectedLength {
 				tsValue := int64(timestampResult.Value(i))
 				resultTime := time.Unix(tsValue/nanosPerSecond, tsValue%nanosPerSecond).UTC()
-				assert.True(t, tt.expectedTimes[i].Equal(resultTime), "Expected %v, got %v", tt.expectedTimes[i], resultTime)
+				assert.True(
+					t,
+					tt.expectedTimes[i].Equal(resultTime),
+					"Expected %v, got %v",
+					tt.expectedTimes[i],
+					resultTime,
+				)
 			}
 		})
 	}
@@ -274,7 +286,7 @@ func TestDateDiff(t *testing.T) {
 			require.True(t, ok)
 			assert.Equal(t, tt.expectedLength, int64Result.Len())
 
-			for i := 0; i < tt.expectedLength; i++ {
+			for i := range tt.expectedLength {
 				assert.Equal(t, tt.expectedValues[i], int64Result.Value(i))
 			}
 		})

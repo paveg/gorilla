@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestNewErrorTypes tests the new error types added for enhanced error handling
+// TestNewErrorTypes tests the new error types added for enhanced error handling.
 func TestNewErrorTypes(t *testing.T) {
 	t.Run("UnsupportedOperationError", func(t *testing.T) {
 		err := NewUnsupportedOperationError("Join", "Cannot join on boolean columns",
@@ -55,7 +55,7 @@ func TestNewErrorTypes(t *testing.T) {
 	})
 }
 
-// TestErrorEnhancementCompatibility tests that new error types work with existing enhancement features
+// TestErrorEnhancementCompatibility tests that new error types work with existing enhancement features.
 func TestErrorEnhancementCompatibility(t *testing.T) {
 	t.Run("UnsupportedOperationWithContext", func(t *testing.T) {
 		err := NewUnsupportedOperationError("Sort", "Cannot sort null values", []string{"ascending", "descending"}).

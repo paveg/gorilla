@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestDataFrameWithNewIntegerTypes tests DataFrame operations with the new integer types
+// TestDataFrameWithNewIntegerTypes tests DataFrame operations with the new integer types.
 func TestDataFrameWithNewIntegerTypes(t *testing.T) {
 	mem := memory.NewGoAllocator()
 

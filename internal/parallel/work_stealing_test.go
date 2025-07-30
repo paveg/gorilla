@@ -10,7 +10,7 @@ import (
 )
 
 // TestFunctionalWorkStealing tests that work stealing actually works by verifying
-// that workers can steal work from each other's queues
+// that workers can steal work from each other's queues.
 func TestFunctionalWorkStealing(t *testing.T) {
 	t.Run("work is distributed to worker queues", func(t *testing.T) {
 		pool := NewAdvancedWorkerPool(AdvancedWorkerPoolConfig{
@@ -49,7 +49,7 @@ func TestFunctionalWorkStealing(t *testing.T) {
 
 		// With 4 workers and 50 tasks distributed round-robin, some workers should
 		// finish early and steal from others
-		assert.Greater(t, metrics.WorkStealingCount, int64(0), "Work stealing should have occurred")
+		assert.Positive(t, metrics.WorkStealingCount, "Work stealing should have occurred")
 	})
 
 	t.Run("verify work distribution mechanism", func(t *testing.T) {
@@ -150,12 +150,12 @@ func TestFunctionalWorkStealing(t *testing.T) {
 			assert.Equal(t, int64(200), metrics.TotalTasksProcessed, "All tasks should be processed")
 		} else {
 			// If work stealing occurred, verify it's working correctly
-			assert.Greater(t, metrics.WorkStealingCount, int64(0), "Work stealing should have occurred due to imbalanced work")
+			assert.Positive(t, metrics.WorkStealingCount, "Work stealing should have occurred due to imbalanced work")
 		}
 	})
 }
 
-// TestWorkStealingQueue tests the work stealing queue implementation
+// TestWorkStealingQueue tests the work stealing queue implementation.
 func TestWorkStealingQueue(t *testing.T) {
 	t.Run("push and pop operations", func(t *testing.T) {
 		queue := newWorkStealingQueue()
@@ -196,11 +196,11 @@ func TestWorkStealingQueue(t *testing.T) {
 		stolen := make(chan workItem, numItems)
 
 		// Start stealers
-		for i := 0; i < numWorkers; i++ {
+		for range numWorkers {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				for j := 0; j < numItems/numWorkers; j++ {
+				for range numItems / numWorkers {
 					for {
 						if item := queue.steal(); item != nil {
 							stolen <- *item
@@ -213,7 +213,7 @@ func TestWorkStealingQueue(t *testing.T) {
 		}
 
 		// Push items
-		for i := 0; i < numItems; i++ {
+		for i := range numItems {
 			queue.pushLocal(workItem{index: i, data: i})
 		}
 

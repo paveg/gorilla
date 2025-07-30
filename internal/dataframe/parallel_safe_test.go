@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestSafeParallelProcessing tests memory-safe parallel DataFrame operations
+// TestSafeParallelProcessing tests memory-safe parallel DataFrame operations.
 func TestSafeParallelProcessing(t *testing.T) {
 	t.Run("safe chunk creation with independent allocators", func(t *testing.T) {
 		mem := memory.NewGoAllocator()
@@ -21,7 +21,7 @@ func TestSafeParallelProcessing(t *testing.T) {
 		size := 2000
 		names := make([]string, size)
 		ages := make([]int64, size)
-		for i := 0; i < size; i++ {
+		for i := range size {
 			names[i] = "User" + string(rune('A'+i%26))
 			ages[i] = int64(20 + i%50)
 		}
@@ -47,7 +47,7 @@ func TestSafeParallelProcessing(t *testing.T) {
 		// Create shared test data
 		size := 1500
 		values := make([]int64, size)
-		for i := 0; i < size; i++ {
+		for i := range size {
 			values[i] = int64(i)
 		}
 
@@ -60,7 +60,7 @@ func TestSafeParallelProcessing(t *testing.T) {
 		errors := make(chan error, numConcurrent)
 
 		// Run multiple concurrent parallel operations
-		for i := 0; i < numConcurrent; i++ {
+		for i := range numConcurrent {
 			wg.Add(1)
 			go func(workerID int) {
 				defer wg.Done()
@@ -102,7 +102,7 @@ func TestSafeParallelProcessing(t *testing.T) {
 
 		size := 5000
 		data := make([]int64, size)
-		for i := 0; i < size; i++ {
+		for i := range size {
 			data[i] = int64(i)
 		}
 
@@ -119,7 +119,7 @@ func TestSafeParallelProcessing(t *testing.T) {
 	})
 }
 
-// TestMemoryLeakPrevention tests that the new safe parallel processing prevents memory leaks
+// TestMemoryLeakPrevention tests that the new safe parallel processing prevents memory leaks.
 func TestMemoryLeakPrevention(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping memory leak test in short mode")
@@ -133,12 +133,12 @@ func TestMemoryLeakPrevention(t *testing.T) {
 		runtime.ReadMemStats(&memBefore)
 
 		// Perform repeated operations that previously caused memory leaks
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			mem := memory.NewGoAllocator()
 
 			size := 1000
 			data := make([]int64, size)
-			for j := 0; j < size; j++ {
+			for j := range size {
 				data[j] = int64(j)
 			}
 
@@ -171,7 +171,7 @@ func TestMemoryLeakPrevention(t *testing.T) {
 	})
 }
 
-// TestRaceConditionPrevention tests that the new implementation prevents race conditions
+// TestRaceConditionPrevention tests that the new implementation prevents race conditions.
 func TestRaceConditionPrevention(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping race condition test in short mode")
@@ -183,7 +183,7 @@ func TestRaceConditionPrevention(t *testing.T) {
 		// Create test data
 		size := 2000
 		data := make([]int64, size)
-		for i := 0; i < size; i++ {
+		for i := range size {
 			data[i] = int64(i)
 		}
 
@@ -197,7 +197,7 @@ func TestRaceConditionPrevention(t *testing.T) {
 		errors := make(chan error, numWorkers)
 
 		// Launch multiple workers accessing the same data
-		for i := 0; i < numWorkers; i++ {
+		for i := range numWorkers {
 			wg.Add(1)
 			go func(workerID int) {
 				defer wg.Done()
@@ -236,13 +236,13 @@ func TestRaceConditionPrevention(t *testing.T) {
 	})
 }
 
-// Benchmark safe vs unsafe parallel processing
+// Benchmark safe vs unsafe parallel processing.
 func BenchmarkSafeParallelProcessing(b *testing.B) {
 	mem := memory.NewGoAllocator()
 
 	size := 5000
 	data := make([]int64, size)
-	for i := 0; i < size; i++ {
+	for i := range size {
 		data[i] = int64(i)
 	}
 
@@ -253,7 +253,7 @@ func BenchmarkSafeParallelProcessing(b *testing.B) {
 	b.ResetTimer()
 
 	b.Run("safe parallel collection", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			result, err := df.SafeCollectParallel()
 			if err != nil {
 				b.Fatal(err)

@@ -1,6 +1,7 @@
 package dataframe
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 
@@ -10,7 +11,7 @@ import (
 	"github.com/paveg/gorilla/internal/parallel"
 )
 
-// Constants for join optimization thresholds
+// Constants for join optimization thresholds.
 const (
 	broadcastThreshold     = 1000  // rows for broadcast join
 	mergeJoinThreshold     = 10000 // rows where merge join becomes beneficial
@@ -21,7 +22,7 @@ const (
 	hashMapCapacityFactor  = 1.3   // capacity factor for initial hash map size
 )
 
-// JoinStrategy represents different join algorithms
+// JoinStrategy represents different join algorithms.
 type JoinStrategy int
 
 const (
@@ -31,20 +32,20 @@ const (
 	OptimizedHashJoinStrategy
 )
 
-// TableStats holds statistics about a DataFrame for optimization decisions
+// TableStats holds statistics about a DataFrame for optimization decisions.
 type TableStats struct {
 	RowCount      int
 	SortedColumns map[string]bool
 	Cardinality   map[string]int // distinct values per column
 }
 
-// JoinOptimizer selects optimal join strategy based on table statistics
+// JoinOptimizer selects optimal join strategy based on table statistics.
 type JoinOptimizer struct {
 	leftStats  TableStats
 	rightStats TableStats
 }
 
-// NewJoinOptimizer creates a new join optimizer with table statistics
+// NewJoinOptimizer creates a new join optimizer with table statistics.
 func NewJoinOptimizer(left, right *DataFrame) *JoinOptimizer {
 	return &JoinOptimizer{
 		leftStats:  computeTableStats(left),
@@ -52,7 +53,7 @@ func NewJoinOptimizer(left, right *DataFrame) *JoinOptimizer {
 	}
 }
 
-// SelectStrategy chooses the optimal join strategy based on table characteristics
+// SelectStrategy chooses the optimal join strategy based on table characteristics.
 func (jo *JoinOptimizer) SelectStrategy(leftKeys, rightKeys []string) JoinStrategy {
 	// Small right table: use broadcast join
 	if jo.rightStats.RowCount < broadcastThreshold {
@@ -77,7 +78,7 @@ func (jo *JoinOptimizer) SelectStrategy(leftKeys, rightKeys []string) JoinStrate
 	return HashJoinStrategy
 }
 
-// computeTableStats analyzes DataFrame characteristics for optimization
+// computeTableStats analyzes DataFrame characteristics for optimization.
 func computeTableStats(df *DataFrame) TableStats {
 	stats := TableStats{
 		RowCount:      df.Len(),
@@ -95,7 +96,7 @@ func computeTableStats(df *DataFrame) TableStats {
 	return stats
 }
 
-// isColumnSorted checks if a column is sorted in ascending order
+// isColumnSorted checks if a column is sorted in ascending order.
 func isColumnSorted(col ISeries) bool {
 	if col.Len() <= 1 {
 		return true
@@ -109,7 +110,7 @@ func isColumnSorted(col ISeries) bool {
 	return true
 }
 
-// compareValues compares two values in a series
+// compareValues compares two values in a series.
 func compareValues(col ISeries, i, j int) int {
 	// For numeric comparisons, convert to proper types
 	arr := col.Array()
@@ -174,7 +175,7 @@ func compareValues(col ISeries, i, j int) int {
 	}
 }
 
-// estimateCardinality estimates distinct values in a column
+// estimateCardinality estimates distinct values in a column.
 func estimateCardinality(col ISeries) int {
 	seen := make(map[string]bool)
 	for i := 0; i < col.Len(); i++ {
@@ -184,7 +185,7 @@ func estimateCardinality(col ISeries) int {
 	return len(seen)
 }
 
-// OptimizedJoin performs join using the selected optimal strategy
+// OptimizedJoin performs join using the selected optimal strategy.
 func (df *DataFrame) OptimizedJoin(right *DataFrame, options *JoinOptions) (*DataFrame, error) {
 	leftKeys, rightKeys := normalizeJoinKeys(options)
 
@@ -209,7 +210,7 @@ func (df *DataFrame) OptimizedJoin(right *DataFrame, options *JoinOptions) (*Dat
 	}
 }
 
-// broadcastJoin implements broadcast join for small right tables
+// broadcastJoin implements broadcast join for small right tables.
 func (df *DataFrame) broadcastJoin(
 	right *DataFrame, leftKeys, rightKeys []string, joinType JoinType,
 ) (*DataFrame, error) {
@@ -234,7 +235,7 @@ func (df *DataFrame) broadcastJoin(
 	results := make([]chunkResult, numChunks)
 	var wg sync.WaitGroup
 
-	for chunkIdx := 0; chunkIdx < numChunks; chunkIdx++ {
+	for chunkIdx := range numChunks {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
@@ -296,12 +297,12 @@ func (df *DataFrame) broadcastJoin(
 	return df.buildJoinResult(right, leftIndices, rightIndices, mem)
 }
 
-// mergeJoin implements merge join for sorted data
+// mergeJoin implements merge join for sorted data.
 func (df *DataFrame) mergeJoin(
 	right *DataFrame, leftKeys, rightKeys []string, joinType JoinType,
 ) (*DataFrame, error) {
 	if len(leftKeys) != 1 || len(rightKeys) != 1 {
-		return nil, fmt.Errorf("merge join currently supports only single-column joins")
+		return nil, errors.New("merge join currently supports only single-column joins")
 	}
 
 	mem := memory.NewGoAllocator()
@@ -426,7 +427,7 @@ func (df *DataFrame) mergeJoin(
 	return df.buildJoinResult(right, leftIndices, rightIndices, mem)
 }
 
-// compareKeys compares two join keys
+// compareKeys compares two join keys.
 func compareKeys(key1, key2 string) int {
 	if key1 < key2 {
 		return -1
@@ -436,7 +437,7 @@ func compareKeys(key1, key2 string) int {
 	return 0
 }
 
-// compareTypedValues compares values from series at given indices
+// compareTypedValues compares values from series at given indices.
 func compareTypedValues(leftSeries ISeries, leftIdx int, rightSeries ISeries, rightIdx int) int {
 	leftArr := leftSeries.Array()
 	defer leftArr.Release()
@@ -508,7 +509,7 @@ func compareTypedValues(leftSeries ISeries, leftIdx int, rightSeries ISeries, ri
 	return compareKeys(leftKey, rightKey)
 }
 
-// OptimizedHashMap uses xxhash for better performance
+// OptimizedHashMap uses xxhash for better performance.
 type OptimizedHashMap struct {
 	buckets    [][]hashEntry
 	capacity   int
@@ -521,7 +522,7 @@ type hashEntry struct {
 	value []int
 }
 
-// NewOptimizedHashMap creates a new optimized hash map
+// NewOptimizedHashMap creates a new optimized hash map.
 func NewOptimizedHashMap(estimatedSize int) *OptimizedHashMap {
 	capacity := nextPowerOfTwo(int(float64(estimatedSize) * hashMapCapacityFactor))
 	return &OptimizedHashMap{
@@ -531,7 +532,7 @@ func NewOptimizedHashMap(estimatedSize int) *OptimizedHashMap {
 	}
 }
 
-// Put adds a key-value pair to the hash map
+// Put adds a key-value pair to the hash map.
 func (ohm *OptimizedHashMap) Put(key string, value int) {
 	hash := xxhash.Sum64String(key)
 	bucketIdx := int(hash&0x7FFFFFFF) % ohm.capacity
@@ -557,7 +558,7 @@ func (ohm *OptimizedHashMap) Put(key string, value int) {
 	}
 }
 
-// Get retrieves values for a key
+// Get retrieves values for a key.
 func (ohm *OptimizedHashMap) Get(key string) ([]int, bool) {
 	hash := xxhash.Sum64String(key)
 	bucketIdx := int(hash&0x7FFFFFFF) % ohm.capacity
@@ -571,7 +572,7 @@ func (ohm *OptimizedHashMap) Get(key string) ([]int, bool) {
 	return nil, false
 }
 
-// resize doubles the capacity and rehashes all entries
+// resize doubles the capacity and rehashes all entries.
 func (ohm *OptimizedHashMap) resize() {
 	newCapacity := ohm.capacity * hashMapGrowthFactor
 	newBuckets := make([][]hashEntry, newCapacity)
@@ -589,7 +590,7 @@ func (ohm *OptimizedHashMap) resize() {
 	ohm.capacity = newCapacity
 }
 
-// nextPowerOfTwo returns the next power of two >= n
+// nextPowerOfTwo returns the next power of two >= n.
 func nextPowerOfTwo(n int) int {
 	if n <= 1 {
 		return 1
@@ -601,7 +602,7 @@ func nextPowerOfTwo(n int) int {
 	return power
 }
 
-// optimizedHashJoin uses the optimized hash map for better performance
+// optimizedHashJoin uses the optimized hash map for better performance.
 func (df *DataFrame) optimizedHashJoin(
 	right *DataFrame, leftKeys, rightKeys []string, joinType JoinType,
 ) (*DataFrame, error) {
@@ -624,7 +625,7 @@ func (df *DataFrame) optimizedHashJoin(
 		}
 
 		chunks := make([]chunkData, numChunks)
-		for i := 0; i < numChunks; i++ {
+		for i := range numChunks {
 			start := i * chunkSize
 			end := start + chunkSize
 			if end > right.Len() {
@@ -724,14 +725,14 @@ func (df *DataFrame) optimizedHashJoin(
 	return df.buildJoinResult(right, leftIndices, rightIndices, mem)
 }
 
-// MergeJoinOptimizer tracks if DataFrames are pre-sorted
+// MergeJoinOptimizer tracks if DataFrames are pre-sorted.
 type MergeJoinOptimizer struct {
 	leftSorted  bool
 	rightSorted bool
 	sortKeys    []string
 }
 
-// NewMergeJoinOptimizer creates a merge join optimizer
+// NewMergeJoinOptimizer creates a merge join optimizer.
 func NewMergeJoinOptimizer(leftSorted, rightSorted bool, sortKeys []string) *MergeJoinOptimizer {
 	return &MergeJoinOptimizer{
 		leftSorted:  leftSorted,
@@ -740,7 +741,7 @@ func NewMergeJoinOptimizer(leftSorted, rightSorted bool, sortKeys []string) *Mer
 	}
 }
 
-// Join performs optimized merge join
+// Join performs optimized merge join.
 func (mjo *MergeJoinOptimizer) Join(left, right *DataFrame, options *JoinOptions) (*DataFrame, error) {
 	// Set sorted flags in join options
 	enhancedOptions := *options

@@ -117,9 +117,9 @@ func TestSeriesValue(t *testing.T) {
 	assert.Equal(t, "third", series.Value(2))
 
 	// Test invalid indices (should return zero value)
-	assert.Equal(t, "", series.Value(-1))
-	assert.Equal(t, "", series.Value(3))
-	assert.Equal(t, "", series.Value(100))
+	assert.Empty(t, series.Value(-1))
+	assert.Empty(t, series.Value(3))
+	assert.Empty(t, series.Value(100))
 }
 
 func TestSeriesDataType(t *testing.T) {

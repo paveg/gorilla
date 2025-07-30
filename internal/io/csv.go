@@ -14,13 +14,13 @@ import (
 )
 
 const (
-	// Boolean string constants
+	// Boolean string constants.
 	trueStr  = "true"
 	falseStr = "false"
 	boolType = "bool"
 )
 
-// Read reads CSV data and returns a DataFrame
+// Read reads CSV data and returns a DataFrame.
 func (r *CSVReader) Read() (*dataframe.DataFrame, error) {
 	// Create CSV reader
 	csvReader := csv.NewReader(r.reader)
@@ -55,7 +55,7 @@ func (r *CSVReader) Read() (*dataframe.DataFrame, error) {
 		// Generate default column names
 		numCols := len(records[0])
 		headers = make([]string, numCols)
-		for i := 0; i < numCols; i++ {
+		for i := range numCols {
 			headers[i] = fmt.Sprintf("column_%d", i)
 		}
 		dataRows = records
@@ -78,7 +78,7 @@ func (r *CSVReader) Read() (*dataframe.DataFrame, error) {
 	// Transpose data to work with columns
 	numCols := len(headers)
 	columns := make([][]string, numCols)
-	for i := 0; i < numCols; i++ {
+	for i := range numCols {
 		columns[i] = make([]string, len(dataRows))
 		for j, row := range dataRows {
 			if i < len(row) {
@@ -103,7 +103,7 @@ func (r *CSVReader) Read() (*dataframe.DataFrame, error) {
 	return dataframe.New(seriesList...), nil
 }
 
-// createSeriesFromStrings creates a series from string data, inferring the appropriate type
+// createSeriesFromStrings creates a series from string data, inferring the appropriate type.
 func (r *CSVReader) createSeriesFromStrings(name string, data []string) (dataframe.ISeries, error) {
 	if len(data) == 0 {
 		return series.NewSafe(name, []string{}, r.mem)
@@ -125,7 +125,7 @@ func (r *CSVReader) createSeriesFromStrings(name string, data []string) (datafra
 	}
 }
 
-// inferDataType determines the most appropriate data type for the given string data
+// inferDataType determines the most appropriate data type for the given string data.
 func (r *CSVReader) inferDataType(data []string) string {
 	canBeInt := true
 	canBeFloat := true
@@ -181,7 +181,7 @@ func (r *CSVReader) inferDataType(data []string) string {
 	return "string"
 }
 
-// createBoolSeries creates a boolean series from string data
+// createBoolSeries creates a boolean series from string data.
 func (r *CSVReader) createBoolSeries(name string, data []string) (dataframe.ISeries, error) {
 	boolData := make([]bool, len(data))
 	for i, value := range data {
@@ -194,7 +194,7 @@ func (r *CSVReader) createBoolSeries(name string, data []string) (dataframe.ISer
 	return series.NewSafe(name, boolData, r.mem)
 }
 
-// createIntSeries creates an integer series from string data
+// createIntSeries creates an integer series from string data.
 func (r *CSVReader) createIntSeries(name string, data []string) (dataframe.ISeries, error) {
 	intData := make([]int64, len(data))
 	for i, value := range data {
@@ -208,7 +208,7 @@ func (r *CSVReader) createIntSeries(name string, data []string) (dataframe.ISeri
 	return series.NewSafe(name, intData, r.mem)
 }
 
-// createFloatSeries creates a float series from string data
+// createFloatSeries creates a float series from string data.
 func (r *CSVReader) createFloatSeries(name string, data []string) (dataframe.ISeries, error) {
 	floatData := make([]float64, len(data))
 	for i, value := range data {
@@ -222,7 +222,7 @@ func (r *CSVReader) createFloatSeries(name string, data []string) (dataframe.ISe
 	return series.NewSafe(name, floatData, r.mem)
 }
 
-// Write writes the DataFrame to CSV format
+// Write writes the DataFrame to CSV format.
 func (w *CSVWriter) Write(df *dataframe.DataFrame) error {
 	csvWriter := csv.NewWriter(w.writer)
 	csvWriter.Comma = w.options.Delimiter
@@ -257,7 +257,7 @@ func (w *CSVWriter) Write(df *dataframe.DataFrame) error {
 	return nil
 }
 
-// getValueAsString extracts a value from a column at the given index as a string
+// getValueAsString extracts a value from a column at the given index as a string.
 func (w *CSVWriter) getValueAsString(column dataframe.ISeries, index int) string {
 	arr := column.Array()
 	defer arr.Release()

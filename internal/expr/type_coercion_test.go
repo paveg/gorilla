@@ -182,7 +182,7 @@ func TestTypePromotionRules(t *testing.T) {
 	}
 }
 
-// getPromotedType determines the promoted type for mixed arithmetic operations
+// getPromotedType determines the promoted type for mixed arithmetic operations.
 func getPromotedType(leftType, rightType string) string {
 	// Type promotion hierarchy for arithmetic operations
 	typeHierarchy := map[string]int{

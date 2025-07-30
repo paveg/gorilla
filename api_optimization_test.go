@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestDirectExpressionAccess tests accessing expression types directly
+// TestDirectExpressionAccess tests accessing expression types directly.
 func TestDirectExpressionAccess(t *testing.T) {
 	t.Run("direct column expression access", func(t *testing.T) {
 		// Should be able to access ColumnExpr directly
@@ -46,7 +46,7 @@ func TestDirectExpressionAccess(t *testing.T) {
 	})
 }
 
-// TestOptimizedExpressionPerformance tests performance improvements
+// TestOptimizedExpressionPerformance tests performance improvements.
 func TestOptimizedExpressionPerformance(t *testing.T) {
 	t.Run("no type assertions in expression building", func(t *testing.T) {
 		// This test verifies that expression building doesn't require type assertions
@@ -76,7 +76,7 @@ func TestOptimizedExpressionPerformance(t *testing.T) {
 	})
 }
 
-// TestBackwardCompatibility tests that the optimized API is backward compatible
+// TestBackwardCompatibility tests that the optimized API is backward compatible.
 func TestBackwardCompatibility(t *testing.T) {
 	t.Run("existing DataFrame operations still work", func(t *testing.T) {
 		mem := memory.NewGoAllocator()
@@ -148,7 +148,7 @@ func TestBackwardCompatibility(t *testing.T) {
 	})
 }
 
-// TestTypeAliasCompatibility tests that type aliases work where possible
+// TestTypeAliasCompatibility tests that type aliases work where possible.
 func TestTypeAliasCompatibility(t *testing.T) {
 	t.Run("expression interfaces are compatible", func(t *testing.T) {
 		// Test that we can work with expr.Expr interface directly
@@ -167,11 +167,11 @@ func TestTypeAliasCompatibility(t *testing.T) {
 	})
 }
 
-// BenchmarkExpressionPerformance benchmarks the performance improvements
+// BenchmarkExpressionPerformance benchmarks the performance improvements.
 func BenchmarkExpressionPerformance(b *testing.B) {
 	b.Run("Direct_Expression_Creation", func(b *testing.B) {
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			col := Col("test")
 			lit := Lit(int64(i))
 			_ = col.Gt(lit)
@@ -180,7 +180,7 @@ func BenchmarkExpressionPerformance(b *testing.B) {
 
 	b.Run("Complex_Expression_Chain", func(b *testing.B) {
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			col := Col("salary")
 			_ = col.Mul(Lit(1.1))
 			expr2 := col.Gt(Lit(50000))
@@ -191,7 +191,7 @@ func BenchmarkExpressionPerformance(b *testing.B) {
 
 	b.Run("Aggregation_Expression_Creation", func(b *testing.B) {
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			col := Col("values")
 			sum := Sum(col)
 			_ = sum.As("total")

@@ -8,21 +8,21 @@ import (
 	"github.com/paveg/gorilla/internal/expr"
 )
 
-// TokenType represents the type of a SQL token
+// TokenType represents the type of a SQL token.
 type TokenType int
 
 const (
-	// Special tokens
+	// Special tokens.
 	EOF TokenType = iota
 	ILLEGAL
 
-	// Literals
+	// Literals.
 	IDENT  // column names, table names, function names
 	INT    // integers
 	FLOAT  // floating point numbers
 	STRING // string literals
 
-	// Keywords
+	// Keywords.
 	SELECT
 	FROM
 	WHERE
@@ -54,7 +54,7 @@ const (
 	MAX
 	DISTINCT
 
-	// Operators
+	// Operators.
 	EQ    // =
 	NE    // != or <>
 	LT    // <
@@ -67,7 +67,7 @@ const (
 	DIV   // /
 	MOD   // %
 
-	// Delimiters
+	// Delimiters.
 	COMMA     // ,
 	SEMICOLON // ;
 	LPAREN    // (
@@ -75,14 +75,14 @@ const (
 	DOT       // .
 )
 
-// Token represents a single SQL token
+// Token represents a single SQL token.
 type Token struct {
 	Type     TokenType
 	Literal  string
 	Position int
 }
 
-// Lexer tokenizes SQL input
+// Lexer tokenizes SQL input.
 type Lexer struct {
 	input        string
 	position     int  // current position in input (points to current char)
@@ -90,14 +90,14 @@ type Lexer struct {
 	ch           byte // current char under examination
 }
 
-// NewLexer creates a new lexer instance
+// NewLexer creates a new lexer instance.
 func NewLexer(input string) *Lexer {
 	l := &Lexer{input: input}
 	l.readChar()
 	return l
 }
 
-// readChar reads the next character and advances position
+// readChar reads the next character and advances position.
 func (l *Lexer) readChar() {
 	if l.readPosition >= len(l.input) {
 		l.ch = 0 // ASCII NUL represents "EOF"
@@ -108,7 +108,7 @@ func (l *Lexer) readChar() {
 	l.readPosition++
 }
 
-// peekChar returns the next character without advancing position
+// peekChar returns the next character without advancing position.
 func (l *Lexer) peekChar() byte {
 	if l.readPosition >= len(l.input) {
 		return 0
@@ -116,7 +116,7 @@ func (l *Lexer) peekChar() byte {
 	return l.input[l.readPosition]
 }
 
-// NextToken scans the input and returns the next token
+// NextToken scans the input and returns the next token.
 func (l *Lexer) NextToken() Token {
 	var tok Token
 
@@ -200,14 +200,14 @@ func (l *Lexer) NextToken() Token {
 	return tok
 }
 
-// skipWhitespace skips whitespace characters
+// skipWhitespace skips whitespace characters.
 func (l *Lexer) skipWhitespace() {
 	for l.ch == ' ' || l.ch == '\t' || l.ch == '\n' || l.ch == '\r' {
 		l.readChar()
 	}
 }
 
-// readIdentifier reads an identifier (column name, table name, keyword)
+// readIdentifier reads an identifier (column name, table name, keyword).
 func (l *Lexer) readIdentifier() string {
 	position := l.position
 	for isLetter(l.ch) || isDigit(l.ch) || l.ch == '_' {
@@ -216,7 +216,7 @@ func (l *Lexer) readIdentifier() string {
 	return l.input[position:l.position]
 }
 
-// readNumber reads a number (integer or float)
+// readNumber reads a number (integer or float).
 func (l *Lexer) readNumber() (TokenType, string) {
 	position := l.position
 	tokenType := INT
@@ -237,7 +237,7 @@ func (l *Lexer) readNumber() (TokenType, string) {
 	return tokenType, l.input[position:l.position]
 }
 
-// readString reads a string literal
+// readString reads a string literal.
 func (l *Lexer) readString() string {
 	quote := l.ch
 	l.readChar() // consume opening quote
@@ -252,17 +252,17 @@ func (l *Lexer) readString() string {
 	return result
 }
 
-// isLetter checks if character is a letter
+// isLetter checks if character is a letter.
 func isLetter(ch byte) bool {
 	return 'a' <= ch && ch <= 'z' || 'A' <= ch && ch <= 'Z' || ch == '_'
 }
 
-// isDigit checks if character is a digit
+// isDigit checks if character is a digit.
 func isDigit(ch byte) bool {
 	return '0' <= ch && ch <= '9'
 }
 
-// Keywords map for identifier lookup
+// Keywords map for identifier lookup.
 var keywords = map[string]TokenType{
 	"SELECT":   SELECT,
 	"FROM":     FROM,
@@ -296,7 +296,7 @@ var keywords = map[string]TokenType{
 	"DISTINCT": DISTINCT,
 }
 
-// lookupIdent checks if identifier is a keyword
+// lookupIdent checks if identifier is a keyword.
 func lookupIdent(ident string) TokenType {
 	if tok, ok := keywords[strings.ToUpper(ident)]; ok {
 		return tok
@@ -304,7 +304,7 @@ func lookupIdent(ident string) TokenType {
 	return IDENT
 }
 
-// Parser parses SQL tokens into AST
+// Parser parses SQL tokens into AST.
 type Parser struct {
 	lexer *Lexer
 
@@ -314,7 +314,7 @@ type Parser struct {
 	errors []string
 }
 
-// NewParser creates a new parser instance
+// NewParser creates a new parser instance.
 func NewParser(lexer *Lexer) *Parser {
 	p := &Parser{
 		lexer:  lexer,
@@ -328,18 +328,18 @@ func NewParser(lexer *Lexer) *Parser {
 	return p
 }
 
-// nextToken advances both curToken and peekToken
+// nextToken advances both curToken and peekToken.
 func (p *Parser) nextToken() {
 	p.curToken = p.peekToken
 	p.peekToken = p.lexer.NextToken()
 }
 
-// Errors returns parse errors
+// Errors returns parse errors.
 func (p *Parser) Errors() []string {
 	return p.errors
 }
 
-// ParseSQL parses a SQL statement
+// ParseSQL parses a SQL statement.
 func (p *Parser) ParseSQL() SQLStatement {
 	switch p.curToken.Type {
 	case SELECT:
@@ -350,7 +350,7 @@ func (p *Parser) ParseSQL() SQLStatement {
 	}
 }
 
-// parseSelectStatement parses a SELECT statement
+// parseSelectStatement parses a SELECT statement.
 func (p *Parser) parseSelectStatement() *SelectStatement {
 	stmt := &SelectStatement{}
 
@@ -434,7 +434,7 @@ func (p *Parser) parseSelectStatement() *SelectStatement {
 	return stmt
 }
 
-// parseSelectList parses the SELECT list
+// parseSelectList parses the SELECT list.
 func (p *Parser) parseSelectList() ([]SelectItem, bool) {
 	var items []SelectItem
 
@@ -457,7 +457,7 @@ func (p *Parser) parseSelectList() ([]SelectItem, bool) {
 	return items, true
 }
 
-// isValidAlias checks if a token can be used as an alias
+// isValidAlias checks if a token can be used as an alias.
 func (p *Parser) isValidAlias() bool {
 	switch p.peekToken.Type {
 	case IDENT, COUNT, SUM, AVG, MIN, MAX:
@@ -468,7 +468,7 @@ func (p *Parser) isValidAlias() bool {
 	}
 }
 
-// parseSelectItem parses a single SELECT item
+// parseSelectItem parses a single SELECT item.
 func (p *Parser) parseSelectItem() (SelectItem, bool) {
 	// Handle wildcard
 	if p.curTokenIs(MULT) {
@@ -503,7 +503,7 @@ func (p *Parser) parseSelectItem() (SelectItem, bool) {
 	}, true
 }
 
-// Precedence constants for expression parsing
+// Precedence constants for expression parsing.
 const (
 	_ int = iota
 	LOWEST
@@ -516,7 +516,7 @@ const (
 	CALL        // myFunction(X)
 )
 
-// precedences maps tokens to their precedence
+// precedences maps tokens to their precedence.
 var precedences = map[TokenType]int{
 	AND:    LOGICAL,
 	OR:     LOGICAL,
@@ -533,7 +533,7 @@ var precedences = map[TokenType]int{
 	LPAREN: CALL,
 }
 
-// parseExpression parses expressions using Pratt parser
+// parseExpression parses expressions using Pratt parser.
 func (p *Parser) parseExpression(precedence int) (expr.Expr, bool) {
 	// Parse prefix expression
 	left, ok := p.parsePrefix()
@@ -552,7 +552,7 @@ func (p *Parser) parseExpression(precedence int) (expr.Expr, bool) {
 	return left, true
 }
 
-// parsePrefix parses prefix expressions
+// parsePrefix parses prefix expressions.
 func (p *Parser) parsePrefix() (expr.Expr, bool) {
 	switch p.curToken.Type {
 	case IDENT:
@@ -582,7 +582,7 @@ func (p *Parser) parsePrefix() (expr.Expr, bool) {
 	}
 }
 
-// parseInfix parses infix expressions
+// parseInfix parses infix expressions.
 func (p *Parser) parseInfix(left expr.Expr) (expr.Expr, bool) {
 	switch p.peekToken.Type {
 	case EQ, NE, LT, LE, GT, GE, PLUS, MINUS, MULT, DIV, MOD:
@@ -600,7 +600,7 @@ func (p *Parser) parseInfix(left expr.Expr) (expr.Expr, bool) {
 	return left, true
 }
 
-// Helper functions for token checking
+// Helper functions for token checking.
 func (p *Parser) curTokenIs(t TokenType) bool {
 	return p.curToken.Type == t
 }
@@ -636,7 +636,7 @@ func (p *Parser) addError(msg string) {
 	p.errors = append(p.errors, msg)
 }
 
-// Parse helper functions (implementations for remaining parse methods will be added in subsequent files)
+// Parse helper functions (implementations for remaining parse methods will be added in subsequent files).
 func (p *Parser) parseIdentifier() (expr.Expr, bool) {
 	// Check if this is a function call (identifier followed by LPAREN)
 	if p.peekTokenIs(LPAREN) {
@@ -1062,7 +1062,7 @@ func (p *Parser) parseExpressionList(end TokenType) ([]expr.Expr, bool) {
 	return args, true
 }
 
-// Placeholder implementations for remaining clause parsers
+// Placeholder implementations for remaining clause parsers.
 func (p *Parser) parseFromClause() (*FromClause, bool) {
 	if !p.expectPeek(IDENT) {
 		return nil, false
@@ -1219,7 +1219,7 @@ func (p *Parser) parseLimitClause() (*LimitClause, bool) {
 	return limitClause, true
 }
 
-// parseStandaloneOffsetClause parses an OFFSET clause without a LIMIT
+// parseStandaloneOffsetClause parses an OFFSET clause without a LIMIT.
 func (p *Parser) parseStandaloneOffsetClause() (*LimitClause, bool) {
 	if !p.expectPeek(INT) {
 		return nil, false
@@ -1247,7 +1247,7 @@ func (p *Parser) parseStandaloneOffsetClause() (*LimitClause, bool) {
 	return limitClause, true
 }
 
-// ParseSQL is the main entry point for SQL parsing
+// ParseSQL is the main entry point for SQL parsing.
 func ParseSQL(input string) (SQLStatement, error) {
 	lexer := NewLexer(input)
 	parser := NewParser(lexer)

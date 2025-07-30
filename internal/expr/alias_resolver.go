@@ -1,6 +1,7 @@
 package expr
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -148,7 +149,7 @@ func (ar *AliasResolver) GetColumnNameFromExpression(exprStr string) (string, bo
 // ValidateAlias checks if the given alias is valid and unambiguous.
 func (ar *AliasResolver) ValidateAlias(alias string) error {
 	if alias == "" {
-		return fmt.Errorf("alias cannot be empty")
+		return errors.New("alias cannot be empty")
 	}
 
 	// Check if alias can be resolved

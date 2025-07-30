@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Helper function to create binary expressions with literals
+// Helper function to create binary expressions with literals.
 func createBinaryLiteral(left interface{}, op expr.BinaryOp, right interface{}) expr.Expr {
 	// For testing purposes, we'll create a struct that mimics BinaryExpr
 	return &mockBinaryExpr{
@@ -20,7 +20,7 @@ func createBinaryLiteral(left interface{}, op expr.BinaryOp, right interface{}) 
 	}
 }
 
-// Mock binary expression for testing constant folding
+// Mock binary expression for testing constant folding.
 type mockBinaryExpr struct {
 	left  expr.Expr
 	op    expr.BinaryOp
@@ -47,7 +47,7 @@ func (m *mockBinaryExpr) Right() expr.Expr {
 	return m.right
 }
 
-// Mock unary expression for testing
+// Mock unary expression for testing.
 type mockUnaryExpr struct {
 	op      expr.UnaryOp
 	operand expr.Expr
@@ -69,7 +69,7 @@ func (m *mockUnaryExpr) Operand() expr.Expr {
 	return m.operand
 }
 
-// Mock function expression for testing
+// Mock function expression for testing.
 type mockFunctionExpr struct {
 	name string
 	args []expr.Expr

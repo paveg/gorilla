@@ -10,13 +10,13 @@ import (
 )
 
 const (
-	// DefaultChunkSize is the default size for processing chunks
+	// DefaultChunkSize is the default size for processing chunks.
 	DefaultChunkSize = 1000
-	// BytesPerValue is the estimated bytes per DataFrame value
+	// BytesPerValue is the estimated bytes per DataFrame value.
 	BytesPerValue = 8
 )
 
-// StreamingProcessor handles processing of datasets larger than memory
+// StreamingProcessor handles processing of datasets larger than memory.
 type StreamingProcessor struct {
 	// Chunk size for processing data in batches
 	chunkSize int
@@ -30,7 +30,7 @@ type StreamingProcessor struct {
 	closed bool
 }
 
-// NewStreamingProcessor creates a new streaming processor with specified chunk size
+// NewStreamingProcessor creates a new streaming processor with specified chunk size.
 func NewStreamingProcessor(chunkSize int, allocator memory.Allocator, monitor *MemoryUsageMonitor) *StreamingProcessor {
 	if chunkSize <= 0 {
 		chunkSize = DefaultChunkSize
@@ -43,7 +43,7 @@ func NewStreamingProcessor(chunkSize int, allocator memory.Allocator, monitor *M
 	}
 }
 
-// ChunkReader represents a source of data chunks for streaming processing
+// ChunkReader represents a source of data chunks for streaming processing.
 type ChunkReader interface {
 	// ReadChunk reads the next chunk of data
 	ReadChunk() (*DataFrame, error)
@@ -53,7 +53,7 @@ type ChunkReader interface {
 	Close() error
 }
 
-// ChunkWriter represents a destination for processed data chunks
+// ChunkWriter represents a destination for processed data chunks.
 type ChunkWriter interface {
 	// WriteChunk writes a processed chunk of data
 	WriteChunk(*DataFrame) error
@@ -61,7 +61,7 @@ type ChunkWriter interface {
 	Close() error
 }
 
-// StreamingOperation represents an operation that can be applied to data chunks
+// StreamingOperation represents an operation that can be applied to data chunks.
 type StreamingOperation interface {
 	// Apply applies the operation to a data chunk
 	Apply(*DataFrame) (*DataFrame, error)
@@ -69,7 +69,7 @@ type StreamingOperation interface {
 	Release()
 }
 
-// ProcessStreaming processes data in streaming fashion using chunks
+// ProcessStreaming processes data in streaming fashion using chunks.
 func (sp *StreamingProcessor) ProcessStreaming(
 	reader ChunkReader, writer ChunkWriter, operations []StreamingOperation,
 ) error {
@@ -94,7 +94,7 @@ func (sp *StreamingProcessor) ProcessStreaming(
 		// Read next chunk
 		chunk, err := reader.ReadChunk()
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 			return fmt.Errorf("failed to read chunk: %w", err)
@@ -135,7 +135,7 @@ func (sp *StreamingProcessor) ProcessStreaming(
 	return nil
 }
 
-// processChunk applies a series of operations to a data chunk
+// processChunk applies a series of operations to a data chunk.
 func (sp *StreamingProcessor) processChunk(chunk *DataFrame, operations []StreamingOperation) (*DataFrame, error) {
 	current := chunk
 
@@ -160,13 +160,13 @@ func (sp *StreamingProcessor) processChunk(chunk *DataFrame, operations []Stream
 	return current, nil
 }
 
-// forceGC forces garbage collection to reclaim memory
+// forceGC forces garbage collection to reclaim memory.
 func (sp *StreamingProcessor) forceGC() {
 	// This will be implemented with proper GC triggering
 	// For now, we'll just mark the need for cleanup
 }
 
-// Close closes the streaming processor and releases resources
+// Close closes the streaming processor and releases resources.
 func (sp *StreamingProcessor) Close() error {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
@@ -179,13 +179,13 @@ func (sp *StreamingProcessor) Close() error {
 	return nil
 }
 
-// MemoryAwareChunkReader wraps a ChunkReader with memory monitoring
+// MemoryAwareChunkReader wraps a ChunkReader with memory monitoring.
 type MemoryAwareChunkReader struct {
 	reader  ChunkReader
 	monitor *MemoryUsageMonitor
 }
 
-// NewMemoryAwareChunkReader creates a new memory-aware chunk reader
+// NewMemoryAwareChunkReader creates a new memory-aware chunk reader.
 func NewMemoryAwareChunkReader(reader ChunkReader, monitor *MemoryUsageMonitor) *MemoryAwareChunkReader {
 	return &MemoryAwareChunkReader{
 		reader:  reader,
@@ -193,7 +193,7 @@ func NewMemoryAwareChunkReader(reader ChunkReader, monitor *MemoryUsageMonitor) 
 	}
 }
 
-// ReadChunk reads the next chunk and records memory usage
+// ReadChunk reads the next chunk and records memory usage.
 func (mr *MemoryAwareChunkReader) ReadChunk() (*DataFrame, error) {
 	chunk, err := mr.reader.ReadChunk()
 	if err != nil {
@@ -209,24 +209,24 @@ func (mr *MemoryAwareChunkReader) ReadChunk() (*DataFrame, error) {
 	return chunk, nil
 }
 
-// HasNext returns true if there are more chunks to read
+// HasNext returns true if there are more chunks to read.
 func (mr *MemoryAwareChunkReader) HasNext() bool {
 	return mr.reader.HasNext()
 }
 
-// Close closes the underlying reader
+// Close closes the underlying reader.
 func (mr *MemoryAwareChunkReader) Close() error {
 	return mr.reader.Close()
 }
 
-// estimateMemoryUsage estimates the memory usage of a DataFrame
+// estimateMemoryUsage estimates the memory usage of a DataFrame.
 func (mr *MemoryAwareChunkReader) estimateMemoryUsage(df *DataFrame) int64 {
 	// This is a simplified estimation
 	// In a real implementation, we would calculate based on column types and data
 	return int64(df.Len() * df.Width() * BytesPerValue)
 }
 
-// SpillableBatch represents a batch of data that can be spilled to disk
+// SpillableBatch represents a batch of data that can be spilled to disk.
 type SpillableBatch struct {
 	data     *DataFrame
 	spilled  bool
@@ -234,7 +234,7 @@ type SpillableBatch struct {
 	mu       sync.RWMutex
 }
 
-// NewSpillableBatch creates a new spillable batch
+// NewSpillableBatch creates a new spillable batch.
 func NewSpillableBatch(data *DataFrame) *SpillableBatch {
 	return &SpillableBatch{
 		data: data,
@@ -258,7 +258,7 @@ func (sb *SpillableBatch) GetData() (*DataFrame, error) {
 	return sb.loadFromSpill()
 }
 
-// Spill spills the batch to disk and releases memory
+// Spill spills the batch to disk and releases memory.
 func (sb *SpillableBatch) Spill() error {
 	sb.mu.Lock()
 	defer sb.mu.Unlock()
@@ -280,7 +280,7 @@ func (sb *SpillableBatch) Spill() error {
 	return nil
 }
 
-// spillToDisk spills the data to disk storage
+// spillToDisk spills the data to disk storage.
 func (sb *SpillableBatch) spillToDisk() {
 	// This is a placeholder implementation
 	// In a real implementation, we would serialize the DataFrame to disk
@@ -307,7 +307,7 @@ func (sb *SpillableBatch) loadFromSpill() (*DataFrame, error) {
 	return nil, errors.New("loading from spill not implemented in this version")
 }
 
-// Release releases the batch resources
+// Release releases the batch resources.
 func (sb *SpillableBatch) Release() {
 	sb.mu.Lock()
 	defer sb.mu.Unlock()
@@ -326,14 +326,14 @@ func (sb *SpillableBatch) Release() {
 	}
 }
 
-// BatchManager manages a collection of spillable batches
+// BatchManager manages a collection of spillable batches.
 type BatchManager struct {
 	batches []*SpillableBatch
 	monitor *MemoryUsageMonitor
 	mu      sync.RWMutex
 }
 
-// NewBatchManager creates a new batch manager
+// NewBatchManager creates a new batch manager.
 func NewBatchManager(monitor *MemoryUsageMonitor) *BatchManager {
 	return &BatchManager{
 		batches: make([]*SpillableBatch, 0),
@@ -341,7 +341,7 @@ func NewBatchManager(monitor *MemoryUsageMonitor) *BatchManager {
 	}
 }
 
-// AddBatch adds a new batch to the manager
+// AddBatch adds a new batch to the manager.
 func (bm *BatchManager) AddBatch(data *DataFrame) {
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
@@ -350,7 +350,7 @@ func (bm *BatchManager) AddBatch(data *DataFrame) {
 	bm.batches = append(bm.batches, batch)
 }
 
-// SpillLRU spills the least recently used batch to free memory
+// SpillLRU spills the least recently used batch to free memory.
 func (bm *BatchManager) SpillLRU() error {
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
@@ -365,7 +365,7 @@ func (bm *BatchManager) SpillLRU() error {
 	return errors.New("no batches available for spilling")
 }
 
-// ReleaseAll releases all batches and clears the manager
+// ReleaseAll releases all batches and clears the manager.
 func (bm *BatchManager) ReleaseAll() {
 	bm.mu.Lock()
 	defer bm.mu.Unlock()

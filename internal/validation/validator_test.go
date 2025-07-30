@@ -1,7 +1,6 @@
 package validation
 
 import (
-	"errors"
 	"reflect"
 	"testing"
 
@@ -10,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// MockColumnProvider implements ColumnProvider for testing
+// MockColumnProvider implements ColumnProvider for testing.
 type MockColumnProvider struct {
 	columns []string
 	length  int
@@ -58,7 +57,7 @@ func TestColumnValidator(t *testing.T) {
 		require.Error(t, err)
 
 		var dfErr *dferrors.DataFrameError
-		require.True(t, errors.As(err, &dfErr))
+		require.ErrorAs(t, err, &dfErr)
 		assert.Equal(t, "Sort", dfErr.Op)
 		assert.Equal(t, "age", dfErr.Column)
 		assert.Equal(t, "column does not exist", dfErr.Message)
@@ -70,7 +69,7 @@ func TestColumnValidator(t *testing.T) {
 		require.Error(t, err)
 
 		var dfErr *dferrors.DataFrameError
-		require.True(t, errors.As(err, &dfErr))
+		require.ErrorAs(t, err, &dfErr)
 		assert.Equal(t, "missing", dfErr.Column)
 	})
 }
@@ -88,7 +87,7 @@ func TestLengthValidator(t *testing.T) {
 		require.Error(t, err)
 
 		var dfErr *dferrors.DataFrameError
-		require.True(t, errors.As(err, &dfErr))
+		require.ErrorAs(t, err, &dfErr)
 		assert.Equal(t, "SortBy", dfErr.Op)
 		assert.Contains(t, dfErr.Message, "expected length 3, got 2")
 	})
@@ -119,7 +118,7 @@ func TestTypeValidator(t *testing.T) {
 		require.Error(t, err)
 
 		var dfErr *dferrors.DataFrameError
-		require.True(t, errors.As(err, &dfErr))
+		require.ErrorAs(t, err, &dfErr)
 		assert.Equal(t, "series creation", dfErr.Op)
 		assert.Contains(t, dfErr.Message, "complex128")
 	})
@@ -138,7 +137,7 @@ func TestIndexValidator(t *testing.T) {
 		require.Error(t, err)
 
 		var dfErr *dferrors.DataFrameError
-		require.True(t, errors.As(err, &dfErr))
+		require.ErrorAs(t, err, &dfErr)
 		assert.Equal(t, "indexing", dfErr.Op)
 		assert.Contains(t, dfErr.Message, "index 5 out of bounds [0, 5)")
 	})
@@ -149,7 +148,7 @@ func TestIndexValidator(t *testing.T) {
 		require.Error(t, err)
 
 		var dfErr *dferrors.DataFrameError
-		require.True(t, errors.As(err, &dfErr))
+		require.ErrorAs(t, err, &dfErr)
 		assert.Contains(t, dfErr.Message, "index -1 out of bounds")
 	})
 }
@@ -179,7 +178,7 @@ func TestEmptyDataFrameValidator(t *testing.T) {
 		require.Error(t, err)
 
 		var dfErr *dferrors.DataFrameError
-		require.True(t, errors.As(err, &dfErr))
+		require.ErrorAs(t, err, &dfErr)
 		assert.Equal(t, "Sort", dfErr.Op)
 		assert.Equal(t, "operation not supported on empty DataFrame", dfErr.Message)
 	})
@@ -211,7 +210,7 @@ func TestCompoundValidator(t *testing.T) {
 		require.Error(t, err)
 
 		var dfErr *dferrors.DataFrameError
-		require.True(t, errors.As(err, &dfErr))
+		require.ErrorAs(t, err, &dfErr)
 		assert.Equal(t, "missing", dfErr.Column)
 	})
 
@@ -224,7 +223,7 @@ func TestCompoundValidator(t *testing.T) {
 		require.Error(t, err)
 
 		var dfErr *dferrors.DataFrameError
-		require.True(t, errors.As(err, &dfErr))
+		require.ErrorAs(t, err, &dfErr)
 		assert.Equal(t, "SortBy", dfErr.Op)
 		assert.Contains(t, dfErr.Message, "expected length 3, got 2")
 	})

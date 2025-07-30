@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// BenchmarkHavingOverheadAnalysis compares overhead vs base operation
+// BenchmarkHavingOverheadAnalysis compares overhead vs base operation.
 func BenchmarkHavingOverheadAnalysis(b *testing.B) {
 	mem := memory.NewGoAllocator()
 
@@ -20,7 +20,7 @@ func BenchmarkHavingOverheadAnalysis(b *testing.B) {
 	salaries := make([]float64, size)
 
 	deptNames := []string{"Engineering", "Sales", "HR", "Marketing", "Support", "Finance"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(40000 + (i * 5))
 	}
@@ -36,7 +36,7 @@ func BenchmarkHavingOverheadAnalysis(b *testing.B) {
 		var totalBaselineBytes uint64
 
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			var beforeStats runtime.MemStats
 			runtime.ReadMemStats(&beforeStats)
 
@@ -78,7 +78,7 @@ func BenchmarkHavingOverheadAnalysis(b *testing.B) {
 		var totalHavingBytes uint64
 
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			var beforeStats runtime.MemStats
 			runtime.ReadMemStats(&beforeStats)
 
@@ -124,7 +124,7 @@ func BenchmarkHavingOverheadAnalysis(b *testing.B) {
 		var totalManualBytes uint64
 
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			var beforeStats runtime.MemStats
 			runtime.ReadMemStats(&beforeStats)
 
@@ -172,7 +172,7 @@ func BenchmarkHavingOverheadAnalysis(b *testing.B) {
 	})
 }
 
-// TestHavingOverheadCalculation calculates actual overhead percentage
+// TestHavingOverheadCalculation calculates actual overhead percentage.
 func TestHavingOverheadCalculation(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
@@ -181,7 +181,7 @@ func TestHavingOverheadCalculation(t *testing.T) {
 	salaries := make([]float64, size)
 
 	deptNames := []string{"Engineering", "Sales", "HR"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(40000 + (i * 50))
 	}
@@ -250,7 +250,7 @@ func TestHavingOverheadCalculation(t *testing.T) {
 	}
 }
 
-// BenchmarkHavingFilterEfficiency tests different filtering approaches
+// BenchmarkHavingFilterEfficiency tests different filtering approaches.
 func BenchmarkHavingFilterEfficiency(b *testing.B) {
 	mem := memory.NewGoAllocator()
 
@@ -259,7 +259,7 @@ func BenchmarkHavingFilterEfficiency(b *testing.B) {
 	salaries := make([]float64, size)
 
 	deptNames := []string{"A", "B", "C", "D", "E"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(35000 + (i * 8))
 	}
@@ -271,7 +271,7 @@ func BenchmarkHavingFilterEfficiency(b *testing.B) {
 
 	b.Run("Optimized filter (pooled allocators)", func(b *testing.B) {
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			lazy := df.Lazy()
 			groupByOp := &GroupByHavingOperation{
 				groupByCols: []string{"department"},
@@ -290,7 +290,7 @@ func BenchmarkHavingFilterEfficiency(b *testing.B) {
 
 	b.Run("Traditional filter (new allocators)", func(b *testing.B) {
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			// Use separate operations to simulate non-optimized approach
 			aggregated, err := df.Lazy().
 				GroupBy("department").

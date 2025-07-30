@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestAllocatorPool tests the memory allocator pool for safe reuse
+// TestAllocatorPool tests the memory allocator pool for safe reuse.
 func TestAllocatorPool(t *testing.T) {
 	t.Run("basic pool operations", func(t *testing.T) {
 		pool := NewAllocatorPool(2) // Pool size of 2
@@ -44,11 +44,11 @@ func TestAllocatorPool(t *testing.T) {
 		var wg sync.WaitGroup
 		errors := make(chan error, numGoroutines)
 
-		for i := 0; i < numGoroutines; i++ {
+		for range numGoroutines {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				for j := 0; j < operationsPerGoroutine; j++ {
+				for range operationsPerGoroutine {
 					alloc := pool.Get()
 					if alloc == nil {
 						errors <- assert.AnError
@@ -73,7 +73,7 @@ func TestAllocatorPool(t *testing.T) {
 	})
 }
 
-// TestMemoryMonitor tests memory pressure detection and adaptive behavior
+// TestMemoryMonitor tests memory pressure detection and adaptive behavior.
 func TestMemoryMonitor(t *testing.T) {
 	t.Run("memory pressure detection", func(t *testing.T) {
 		monitor := NewMemoryMonitor(1024, 4) // 1KB threshold, 4 max workers
@@ -107,7 +107,7 @@ func TestMemoryMonitor(t *testing.T) {
 	})
 }
 
-// TestChunkProcessor tests isolated chunk processing
+// TestChunkProcessor tests isolated chunk processing.
 func TestChunkProcessor(t *testing.T) {
 	t.Run("independent memory allocation", func(t *testing.T) {
 		pool := NewAllocatorPool(2)
@@ -140,7 +140,7 @@ func TestChunkProcessor(t *testing.T) {
 		var wg sync.WaitGroup
 		errors := make(chan error, numProcessors)
 
-		for i := 0; i < numProcessors; i++ {
+		for i := range numProcessors {
 			wg.Add(1)
 			go func(id int) {
 				defer wg.Done()
@@ -170,7 +170,7 @@ func TestChunkProcessor(t *testing.T) {
 	})
 }
 
-// TestSafeDataFrameCopy tests thread-safe DataFrame copying
+// TestSafeDataFrameCopy tests thread-safe DataFrame copying.
 func TestSafeDataFrameCopy(t *testing.T) {
 	t.Run("concurrent access to safe copy", func(t *testing.T) {
 		// Test with mock data until full DataFrame integration
@@ -181,7 +181,7 @@ func TestSafeDataFrameCopy(t *testing.T) {
 		var wg sync.WaitGroup
 		errors := make(chan error, numGoroutines)
 
-		for i := 0; i < numGoroutines; i++ {
+		for range numGoroutines {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -220,7 +220,7 @@ func TestSafeDataFrameCopy(t *testing.T) {
 	})
 }
 
-// Benchmark allocator pool performance
+// Benchmark allocator pool performance.
 func BenchmarkAllocatorPool(b *testing.B) {
 	pool := NewAllocatorPool(runtime.NumCPU())
 	defer pool.Close()

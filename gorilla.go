@@ -208,7 +208,7 @@ type GroupBy struct {
 //
 //	result, err := df.Lazy().Filter(final).Collect()
 
-// JoinType represents the type of join operation
+// JoinType represents the type of join operation.
 type JoinType int
 
 const (
@@ -218,7 +218,7 @@ const (
 	FullOuterJoin
 )
 
-// JoinOptions specifies parameters for join operations
+// JoinOptions specifies parameters for join operations.
 type JoinOptions struct {
 	Type      JoinType
 	LeftKey   string   // Single join key for left DataFrame

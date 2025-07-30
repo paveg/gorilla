@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestDataFrameWithConfig tests the public WithConfig method
+// TestDataFrameWithConfig tests the public WithConfig method.
 func TestDataFrameWithConfig(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
@@ -50,7 +50,7 @@ func TestDataFrameWithConfig(t *testing.T) {
 	assert.Equal(t, 2, result.Len()) // Bob and Charlie
 }
 
-// TestConfigurationInheritance tests that configuration is inherited through operations
+// TestConfigurationInheritance tests that configuration is inherited through operations.
 func TestConfigurationInheritance(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
@@ -111,7 +111,7 @@ func TestConfigurationInheritance(t *testing.T) {
 	assert.ElementsMatch(t, expectedValues, actualValues)
 }
 
-// TestConfigLoadFromFile tests loading configuration from external files
+// TestConfigLoadFromFile tests loading configuration from external files.
 func TestConfigLoadFromFile(t *testing.T) {
 	// Test that configuration can be loaded from YAML/JSON files
 	// This verifies the integration mentioned in the README
@@ -137,7 +137,7 @@ func TestConfigLoadFromFile(t *testing.T) {
 	assert.True(t, jsonConfig.PredicatePushdown)
 }
 
-// TestReadmeExample tests the exact example from README.md
+// TestReadmeExample tests the exact example from README.md.
 func TestReadmeExample(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
@@ -167,7 +167,7 @@ func TestReadmeExample(t *testing.T) {
 	assert.Equal(t, 2, result.Len())
 }
 
-// TestDefaultOperationConfig tests behavior with default/empty configuration
+// TestDefaultOperationConfig tests behavior with default/empty configuration.
 func TestDefaultOperationConfig(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
@@ -194,7 +194,7 @@ func TestDefaultOperationConfig(t *testing.T) {
 	assert.Equal(t, 1, result.Width())
 }
 
-// TestMemoryConfigurationIntegration tests that memory configuration options are used
+// TestMemoryConfigurationIntegration tests that memory configuration options are used.
 func TestMemoryConfigurationIntegration(t *testing.T) {
 	// Test that MemoryUsageMonitor uses configuration values
 	testConfig := config.Config{
@@ -220,10 +220,10 @@ func TestMemoryConfigurationIntegration(t *testing.T) {
 
 	// With 70% usage and 60% threshold, should reduce parallelism
 	maxParallel := runtime.NumCPU()
-	assert.True(t, parallelism < maxParallel, "Parallelism should be reduced at 70%% usage with 60%% threshold")
+	assert.Less(t, parallelism, maxParallel, "Parallelism should be reduced at 70%% usage with 60%% threshold")
 }
 
-// TestMemoryThresholdEdgeCases tests edge cases for memory pressure thresholds
+// TestMemoryThresholdEdgeCases tests edge cases for memory pressure thresholds.
 func TestMemoryThresholdEdgeCases(t *testing.T) {
 	// Test with very high GC pressure threshold (0.95)
 	highConfig := config.Config{

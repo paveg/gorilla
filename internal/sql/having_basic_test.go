@@ -16,7 +16,11 @@ func TestBasicHavingTranslation(t *testing.T) {
 	translator := NewSQLTranslator(mem)
 
 	// Create test data
-	departments := series.New("department", []string{"Engineering", "Sales", "Engineering", "Sales", "Engineering"}, mem)
+	departments := series.New(
+		"department",
+		[]string{"Engineering", "Sales", "Engineering", "Sales", "Engineering"},
+		mem,
+	)
 	salaries := series.New("salary", []float64{90000, 75000, 85000, 80000, 95000}, mem)
 
 	df := dataframe.New(departments, salaries)

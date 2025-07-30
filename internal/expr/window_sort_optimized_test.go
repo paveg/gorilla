@@ -155,8 +155,8 @@ func TestSortPartitionOptimized(t *testing.T) {
 		size := 10000
 		values := make([]int64, size)
 		indices := make([]int, size)
-		for i := 0; i < size; i++ {
-			values[i] = rand.Int63n(1000) //nolint:gosec // Weak random OK for benchmarks
+		for i := range size {
+			values[i] = rand.Int63n(1000)
 			indices[i] = i
 		}
 
@@ -224,8 +224,8 @@ func TestSortPartitionParallel(t *testing.T) {
 		size := parallelSortThreshold * 3
 		values := make([]int64, size)
 		indices := make([]int, size)
-		for i := 0; i < size; i++ {
-			values[i] = rand.Int63n(10000) //nolint:gosec // Weak random OK for benchmarks
+		for i := range size {
+			values[i] = rand.Int63n(10000)
 			indices[i] = i
 		}
 

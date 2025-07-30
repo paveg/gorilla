@@ -4,7 +4,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 )
 
-// ISeries provides a type-erased interface for Series of any type
+// ISeries provides a type-erased interface for Series of any type.
 type ISeries interface {
 	Name() string
 	Len() int

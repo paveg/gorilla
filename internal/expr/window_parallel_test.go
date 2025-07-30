@@ -17,7 +17,7 @@ func TestWindowParallelConfig(t *testing.T) {
 	assert.Equal(t, 4, config.MinPartitionsForParallel)
 	assert.Equal(t, 1000, config.MinRowsForParallelSort)
 	assert.True(t, config.AdaptiveParallelization)
-	assert.Greater(t, config.MaxWorkers, 0)
+	assert.Positive(t, config.MaxWorkers)
 }
 
 func TestShouldUseParallelExecution(t *testing.T) {
@@ -235,8 +235,8 @@ func TestParallelProcessingCorrectness(t *testing.T) {
 	deptNames := []string{"Engineering", "Sales", "Marketing", "HR", "Finance"}
 
 	// Create data with known rankings
-	for deptIdx := 0; deptIdx < numDepartments; deptIdx++ {
-		for rowIdx := 0; rowIdx < rowsPerDepartment; rowIdx++ {
+	for deptIdx := range numDepartments {
+		for rowIdx := range rowsPerDepartment {
 			globalIdx := deptIdx*rowsPerDepartment + rowIdx
 			departments[globalIdx] = deptNames[deptIdx]
 			// Create salaries in descending order within each department
@@ -282,8 +282,8 @@ func TestParallelProcessingCorrectness(t *testing.T) {
 		assert.Equal(t, totalRows, rankArray.Len())
 
 		// Verify that within each department, ranks are correct
-		for deptIdx := 0; deptIdx < numDepartments; deptIdx++ {
-			for rowIdx := 0; rowIdx < rowsPerDepartment; rowIdx++ {
+		for deptIdx := range numDepartments {
+			for rowIdx := range rowsPerDepartment {
 				globalIdx := deptIdx*rowsPerDepartment + rowIdx
 				expectedRank := int64(rowIdx + 1) // Since salaries are in descending order
 				actualRank := rankArray.Value(globalIdx)
@@ -297,7 +297,7 @@ func TestParallelProcessingCorrectness(t *testing.T) {
 
 	t.Run("parallel vs sequential consistency across multiple runs", func(t *testing.T) {
 		// Run multiple times to check for race conditions
-		for run := 0; run < 5; run++ {
+		for run := range 5 {
 			t.Run(fmt.Sprintf("run_%d", run), func(t *testing.T) {
 				parallelResult, err := evaluator.evaluateRankParallel(window, columns, totalRows)
 				require.NoError(t, err)
@@ -339,7 +339,7 @@ func TestParallelSortingThreshold(t *testing.T) {
 	// Create simple test columns for sorting
 	salaryBuilder := array.NewInt64Builder(mem)
 	defer salaryBuilder.Release()
-	for i := 0; i < 2000; i++ {
+	for i := range 2000 {
 		salaryBuilder.Append(int64(i))
 	}
 	salaryArray := salaryBuilder.NewArray()
@@ -356,7 +356,7 @@ func TestParallelSortingThreshold(t *testing.T) {
 	t.Run("small partition uses sequential sort", func(t *testing.T) {
 		// This should use sequential sort (we can't directly test this, but we can verify it works)
 		result := evaluator.sortPartitionParallel(smallPartition, orderBy, columns)
-		assert.Equal(t, len(smallPartition), len(result))
+		assert.Len(t, result, len(smallPartition))
 
 		// Verify it's sorted
 		for i := 1; i < len(result); i++ {
@@ -367,7 +367,7 @@ func TestParallelSortingThreshold(t *testing.T) {
 	t.Run("large partition uses parallel sort", func(t *testing.T) {
 		// This should trigger parallel sort consideration (though it may fall back)
 		result := evaluator.sortPartitionParallel(largePartition, orderBy, columns)
-		assert.Equal(t, len(largePartition), len(result))
+		assert.Len(t, result, len(largePartition))
 
 		// Verify it's sorted
 		for i := 1; i < len(result); i++ {
@@ -595,8 +595,8 @@ func TestParallelLagLeadCorrectness(t *testing.T) {
 	deptNames := []string{"Engineering", "Sales", "Marketing", "HR", "Finance"}
 
 	// Create data with known order within each department
-	for deptIdx := 0; deptIdx < numDepartments; deptIdx++ {
-		for rowIdx := 0; rowIdx < rowsPerDepartment; rowIdx++ {
+	for deptIdx := range numDepartments {
+		for rowIdx := range rowsPerDepartment {
 			globalIdx := deptIdx*rowsPerDepartment + rowIdx
 			departments[globalIdx] = deptNames[deptIdx]
 			// Create salaries in descending order within each department
@@ -659,7 +659,7 @@ func TestParallelLagLeadCorrectness(t *testing.T) {
 		assert.Equal(t, totalRows, lagArraySequential.Len())
 
 		// The most important test: parallel and sequential produce same results
-		for i := 0; i < totalRows; i++ {
+		for i := range totalRows {
 			parVal, parIsNull := getInt64Value(lagArrayParallel, i)
 			seqVal, seqIsNull := getInt64Value(lagArraySequential, i)
 
@@ -675,7 +675,7 @@ func TestParallelLagLeadCorrectness(t *testing.T) {
 		// Basic verification that LAG function is working (not testing exact values)
 		nullCount := 0
 		nonNullCount := 0
-		for i := 0; i < totalRows; i++ {
+		for i := range totalRows {
 			if lagArrayParallel.IsNull(i) {
 				nullCount++
 			} else {
@@ -684,8 +684,8 @@ func TestParallelLagLeadCorrectness(t *testing.T) {
 		}
 
 		// Should have some nulls (first row of each partition) and some non-nulls
-		assert.Greater(t, nullCount, 0, "Should have some NULL LAG values")
-		assert.Greater(t, nonNullCount, 0, "Should have some non-NULL LAG values")
+		assert.Positive(t, nullCount, "Should have some NULL LAG values")
+		assert.Positive(t, nonNullCount, "Should have some non-NULL LAG values")
 
 		// With 5 departments, we should have at least 5 nulls (first row of each partition)
 		assert.GreaterOrEqual(t, nullCount, numDepartments,
@@ -702,7 +702,7 @@ func TestParallelLagLeadCorrectness(t *testing.T) {
 		}
 
 		// Run multiple times to check for race conditions
-		for run := 0; run < 3; run++ {
+		for run := range 3 {
 			t.Run(fmt.Sprintf("run_%d", run), func(t *testing.T) {
 				parallelResult, err := evaluator.evaluateLagParallel(lagExpr, window, columns, totalRows)
 				require.NoError(t, err)
@@ -733,7 +733,7 @@ func TestParallelLagLeadCorrectness(t *testing.T) {
 	})
 }
 
-// Helper function to get int64 value and null status
+// Helper function to get int64 value and null status.
 func getInt64Value(arr *array.Int64, idx int) (int64, bool) {
 	if arr.IsNull(idx) {
 		return 0, true
@@ -754,7 +754,7 @@ func BenchmarkParallelVsSequentialRank(b *testing.B) {
 	departments := make([]string, totalRows)
 	salaries := make([]int64, totalRows)
 
-	for i := 0; i < totalRows; i++ {
+	for i := range totalRows {
 		departments[i] = fmt.Sprintf("Dept_%d", i%numDepartments)
 		salaries[i] = int64(i * 3 % 10000) // Semi-random salaries
 	}
@@ -790,7 +790,7 @@ func BenchmarkParallelVsSequentialRank(b *testing.B) {
 
 	b.Run("Sequential", func(b *testing.B) {
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			result, err := evaluator.evaluateRank(window, columns, totalRows)
 			if err != nil {
 				b.Fatal(err)
@@ -801,7 +801,7 @@ func BenchmarkParallelVsSequentialRank(b *testing.B) {
 
 	b.Run("Parallel", func(b *testing.B) {
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			result, err := evaluator.evaluateRankParallel(window, columns, totalRows)
 			if err != nil {
 				b.Fatal(err)
@@ -824,7 +824,7 @@ func BenchmarkParallelVsSequentialLagLead(b *testing.B) {
 	departments := make([]string, totalRows)
 	salaries := make([]int64, totalRows)
 
-	for i := 0; i < totalRows; i++ {
+	for i := range totalRows {
 		departments[i] = fmt.Sprintf("Dept_%d", i%numDepartments)
 		salaries[i] = int64(i * 3 % 10000) // Semi-random salaries
 	}
@@ -876,7 +876,7 @@ func BenchmarkParallelVsSequentialLagLead(b *testing.B) {
 
 	b.Run("LAG_Sequential", func(b *testing.B) {
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			result, err := evaluator.evaluateLag(lagExpr, window, columns, totalRows)
 			if err != nil {
 				b.Fatal(err)
@@ -887,7 +887,7 @@ func BenchmarkParallelVsSequentialLagLead(b *testing.B) {
 
 	b.Run("LAG_Parallel", func(b *testing.B) {
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			result, err := evaluator.evaluateLagParallel(lagExpr, window, columns, totalRows)
 			if err != nil {
 				b.Fatal(err)
@@ -898,7 +898,7 @@ func BenchmarkParallelVsSequentialLagLead(b *testing.B) {
 
 	b.Run("LEAD_Sequential", func(b *testing.B) {
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			result, err := evaluator.evaluateLead(leadExpr, window, columns, totalRows)
 			if err != nil {
 				b.Fatal(err)
@@ -909,7 +909,7 @@ func BenchmarkParallelVsSequentialLagLead(b *testing.B) {
 
 	b.Run("LEAD_Parallel", func(b *testing.B) {
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			result, err := evaluator.evaluateLeadParallel(leadExpr, window, columns, totalRows)
 			if err != nil {
 				b.Fatal(err)

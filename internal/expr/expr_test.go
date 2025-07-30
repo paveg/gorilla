@@ -177,7 +177,7 @@ func TestInvalidExpr(t *testing.T) {
 		invalidExpr := Invalid("")
 
 		assert.Equal(t, ExprInvalid, invalidExpr.Type())
-		assert.Equal(t, "", invalidExpr.Message())
+		assert.Empty(t, invalidExpr.Message())
 		assert.Equal(t, "invalid()", invalidExpr.String())
 	})
 

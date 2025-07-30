@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestWorkerIdleBehavior tests that workers don't busy-wait when idle
+// TestWorkerIdleBehavior tests that workers don't busy-wait when idle.
 func TestWorkerIdleBehavior(t *testing.T) {
 	t.Run("workers use blocking receive instead of busy-waiting", func(t *testing.T) {
 		pool := NewAdvancedWorkerPool(AdvancedWorkerPoolConfig{
@@ -86,7 +86,7 @@ func TestWorkerIdleBehavior(t *testing.T) {
 	})
 }
 
-// TestWorkerIdleStrategy tests different idle strategies
+// TestWorkerIdleStrategy tests different idle strategies.
 func TestWorkerIdleStrategy(t *testing.T) {
 	t.Run("exponential backoff for work stealing attempts", func(t *testing.T) {
 		pool := NewAdvancedWorkerPool(AdvancedWorkerPoolConfig{
@@ -109,7 +109,7 @@ func TestWorkerIdleStrategy(t *testing.T) {
 		results := make([][]int, 3)
 
 		// Submit multiple batches concurrently to create contention
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			wg.Add(1)
 			go func(batch int) {
 				defer wg.Done()
@@ -123,7 +123,7 @@ func TestWorkerIdleStrategy(t *testing.T) {
 		wg.Wait()
 
 		// Verify all work was completed correctly
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			assert.Len(t, results[i], 10)
 		}
 
@@ -135,7 +135,7 @@ func TestWorkerIdleStrategy(t *testing.T) {
 	})
 }
 
-// TestWorkerResourceEfficiency tests that the new implementation is more resource efficient
+// TestWorkerResourceEfficiency tests that the new implementation is more resource efficient.
 func TestWorkerResourceEfficiency(t *testing.T) {
 	t.Run("idle workers don't consume excessive CPU", func(t *testing.T) {
 		pool := NewAdvancedWorkerPool(AdvancedWorkerPoolConfig{
@@ -159,7 +159,7 @@ func TestWorkerResourceEfficiency(t *testing.T) {
 	})
 }
 
-// BenchmarkWorkerIdlePerformance benchmarks the idle behavior performance
+// BenchmarkWorkerIdlePerformance benchmarks the idle behavior performance.
 func BenchmarkWorkerIdlePerformance(b *testing.B) {
 	b.Run("idle_workers_efficiency", func(b *testing.B) {
 		pool := NewAdvancedWorkerPool(AdvancedWorkerPoolConfig{
@@ -175,7 +175,7 @@ func BenchmarkWorkerIdlePerformance(b *testing.B) {
 
 		b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			// Submit work periodically to test responsiveness
 			if i%100 == 0 {
 				ProcessGeneric(pool, []int{1, 2, 3}, func(x int) int {
@@ -189,7 +189,7 @@ func BenchmarkWorkerIdlePerformance(b *testing.B) {
 	})
 }
 
-// TestWorkerIdleBackoffBehavior tests the exponential backoff behavior
+// TestWorkerIdleBackoffBehavior tests the exponential backoff behavior.
 func TestWorkerIdleBackoffBehavior(t *testing.T) {
 	t.Run("backoff increases when no work is available", func(t *testing.T) {
 		pool := NewAdvancedWorkerPool(AdvancedWorkerPoolConfig{

@@ -8,34 +8,34 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 )
 
-// Configuration constants for optimization thresholds
+// Configuration constants for optimization thresholds.
 const (
-	// parallelSortThreshold is the minimum partition size to use parallel sorting
+	// parallelSortThreshold is the minimum partition size to use parallel sorting.
 	parallelSortThreshold = 10000
 
-	// maxWorkers limits the number of parallel sort workers
+	// maxWorkers limits the number of parallel sort workers.
 	maxWorkers = 4
 
-	// smallPartitionThreshold is the threshold below which to use original sorting
+	// smallPartitionThreshold is the threshold below which to use original sorting.
 	smallPartitionThreshold = 100
 
-	// minWorkersForParallel is the minimum number of workers needed for parallel sorting
+	// minWorkersForParallel is the minimum number of workers needed for parallel sorting.
 	minWorkersForParallel = 2
 )
 
-// SortKey represents pre-computed sort keys for a row
+// SortKey represents pre-computed sort keys for a row.
 type SortKey struct {
 	index int
 	keys  []interface{}
 }
 
-// Comparator interface for type-specific comparison
+// Comparator interface for type-specific comparison.
 type Comparator interface {
 	Compare(arr arrow.Array, i, j int) int
 	CompareValues(v1, v2 interface{}) int
 }
 
-// compareNullsSortOptimized handles null comparison for any comparator
+// compareNullsSortOptimized handles null comparison for any comparator.
 func compareNullsSortOptimized(arr arrow.Array, i, j int) int {
 	if arr.IsNull(i) && arr.IsNull(j) {
 		return 0
@@ -49,7 +49,7 @@ func compareNullsSortOptimized(arr arrow.Array, i, j int) int {
 	return 0
 }
 
-// compareValuesSortOptimized compares two values with ascending/descending order
+// compareValuesSortOptimized compares two values with ascending/descending order.
 func compareValuesSortOptimized[T interface {
 	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~float32 | ~float64 | ~string
 }](v1, v2 T, ascending bool) int {
@@ -68,7 +68,7 @@ func compareValuesSortOptimized[T interface {
 	return -result
 }
 
-// compareInterfaceValuesSortOptimized compares interface values with null handling
+// compareInterfaceValuesSortOptimized compares interface values with null handling.
 func compareInterfaceValuesSortOptimized[T interface {
 	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~float32 | ~float64 | ~string
 }](v1, v2 interface{}, ascending bool) int {
@@ -84,7 +84,7 @@ func compareInterfaceValuesSortOptimized[T interface {
 	return compareValuesSortOptimized(v1.(T), v2.(T), ascending)
 }
 
-// Int64Comparator provides optimized int64 comparison
+// Int64Comparator provides optimized int64 comparison.
 type Int64Comparator struct {
 	ascending bool
 }
@@ -102,7 +102,7 @@ func (c *Int64Comparator) CompareValues(v1, v2 interface{}) int {
 	return compareInterfaceValuesSortOptimized[int64](v1, v2, c.ascending)
 }
 
-// Float64Comparator provides optimized float64 comparison
+// Float64Comparator provides optimized float64 comparison.
 type Float64Comparator struct {
 	ascending bool
 }
@@ -120,7 +120,7 @@ func (c *Float64Comparator) CompareValues(v1, v2 interface{}) int {
 	return compareInterfaceValuesSortOptimized[float64](v1, v2, c.ascending)
 }
 
-// StringComparator provides optimized string comparison
+// StringComparator provides optimized string comparison.
 type StringComparator struct {
 	ascending bool
 }
@@ -138,7 +138,7 @@ func (c *StringComparator) CompareValues(v1, v2 interface{}) int {
 	return compareInterfaceValuesSortOptimized[string](v1, v2, c.ascending)
 }
 
-// BooleanComparator provides optimized boolean comparison
+// BooleanComparator provides optimized boolean comparison.
 type BooleanComparator struct {
 	ascending bool
 }
@@ -193,7 +193,7 @@ func (c *BooleanComparator) CompareValues(v1, v2 interface{}) int {
 	return 0
 }
 
-// createComparator creates a type-specific comparator for an arrow array
+// createComparator creates a type-specific comparator for an arrow array.
 func createComparator(arr arrow.Array, ascending bool) Comparator {
 	switch arr.(type) {
 	case *array.Int64:
@@ -209,7 +209,7 @@ func createComparator(arr arrow.Array, ascending bool) Comparator {
 	}
 }
 
-// sortPartitionOptimized is an optimized version of sortPartition
+// sortPartitionOptimized is an optimized version of sortPartition.
 func (e *Evaluator) sortPartitionOptimized(
 	partition []int,
 	orderBy []OrderByExpr,
@@ -233,7 +233,7 @@ func (e *Evaluator) sortPartitionOptimized(
 	return e.sortPartitionWithKeys(partition, orderBy, columns)
 }
 
-// sortPartitionWithKeys sorts using pre-computed sort keys
+// sortPartitionWithKeys sorts using pre-computed sort keys.
 func (e *Evaluator) sortPartitionWithKeys(
 	partition []int,
 	orderBy []OrderByExpr,
@@ -285,7 +285,7 @@ func (e *Evaluator) sortPartitionWithKeys(
 	return result
 }
 
-// sortPartitionParallelOptimized performs parallel sorting for large partitions
+// sortPartitionParallelOptimized performs parallel sorting for large partitions.
 func (e *Evaluator) sortPartitionParallelOptimized(
 	partition []int,
 	orderBy []OrderByExpr,
@@ -310,7 +310,7 @@ func (e *Evaluator) sortPartitionParallelOptimized(
 
 	// Split partition into chunks
 	chunks := make([][]int, numWorkers)
-	for i := 0; i < numWorkers; i++ {
+	for i := range numWorkers {
 		start := i * chunkSize
 		end := start + chunkSize
 		if i == numWorkers-1 {
@@ -323,7 +323,7 @@ func (e *Evaluator) sortPartitionParallelOptimized(
 	var wg sync.WaitGroup
 	sortedChunks := make([][]int, numWorkers)
 
-	for i := 0; i < numWorkers; i++ {
+	for i := range numWorkers {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
@@ -337,7 +337,7 @@ func (e *Evaluator) sortPartitionParallelOptimized(
 	return e.mergeSortedChunks(sortedChunks, orderBy, columns)
 }
 
-// mergeSortedChunks merges multiple sorted chunks into a single sorted result
+// mergeSortedChunks merges multiple sorted chunks into a single sorted result.
 func (e *Evaluator) mergeSortedChunks(
 	chunks [][]int,
 	orderBy []OrderByExpr,

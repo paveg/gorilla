@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestNewIntegerTypes tests the additional integer types mentioned in Issue #20
+// TestNewIntegerTypes tests the additional integer types mentioned in Issue #20.
 func TestNewIntegerTypes(t *testing.T) {
 	mem := memory.NewGoAllocator()
 

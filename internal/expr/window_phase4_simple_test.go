@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestPhase4WindowFunctionCreation tests that the new window functions can be created
+// TestPhase4WindowFunctionCreation tests that the new window functions can be created.
 func TestPhase4WindowFunctionCreation(t *testing.T) {
 	// Test PERCENT_RANK function creation
 	percentRank := PercentRank()
@@ -29,7 +29,7 @@ func TestPhase4WindowFunctionCreation(t *testing.T) {
 	assert.Len(t, ntile.args, 1)
 }
 
-// TestGroupsFrameType tests GROUPS frame type
+// TestGroupsFrameType tests GROUPS frame type.
 func TestGroupsFrameType(t *testing.T) {
 	// Create window with GROUPS frame
 	window := NewWindow().
@@ -43,7 +43,7 @@ func TestGroupsFrameType(t *testing.T) {
 	assert.Equal(t, BoundaryCurrentRow, window.frame.end.boundaryType)
 }
 
-// TestWindowExpressionCreation tests window expression creation with new functions
+// TestWindowExpressionCreation tests window expression creation with new functions.
 func TestWindowExpressionCreation(t *testing.T) {
 	// Test PERCENT_RANK with window
 	percentRankExpr := PercentRank().Over(

@@ -5,33 +5,33 @@ import (
 	"strings"
 )
 
-// Add new expression types for window functions
+// Add new expression types for window functions.
 const (
 	ExprWindow ExprType = iota + 100
 	ExprWindowFunction
 )
 
-// WindowSpec represents a window specification for window functions
+// WindowSpec represents a window specification for window functions.
 type WindowSpec struct {
 	partitionBy []string
 	orderBy     []OrderByExpr
 	frame       *WindowFrame
 }
 
-// OrderByExpr represents a column ordering specification
+// OrderByExpr represents a column ordering specification.
 type OrderByExpr struct {
 	column    string
 	ascending bool
 }
 
-// WindowFrame represents the frame specification for window functions
+// WindowFrame represents the frame specification for window functions.
 type WindowFrame struct {
 	frameType FrameType
 	start     *FrameBoundary
 	end       *FrameBoundary
 }
 
-// FrameType represents the type of window frame
+// FrameType represents the type of window frame.
 type FrameType int
 
 const (
@@ -40,13 +40,13 @@ const (
 	FrameTypeGroups
 )
 
-// FrameBoundary represents a frame boundary
+// FrameBoundary represents a frame boundary.
 type FrameBoundary struct {
 	boundaryType BoundaryType
 	offset       int
 }
 
-// BoundaryType represents the type of frame boundary
+// BoundaryType represents the type of frame boundary.
 type BoundaryType int
 
 const (
@@ -57,7 +57,7 @@ const (
 	BoundaryUnboundedFollowing
 )
 
-// WindowExpr represents a window function expression
+// WindowExpr represents a window function expression.
 type WindowExpr struct {
 	function Expr
 	window   *WindowSpec
@@ -71,45 +71,45 @@ type WindowFunctionExpr struct {
 
 // Window construction functions
 
-// NewWindow creates a new window specification
+// NewWindow creates a new window specification.
 func NewWindow() *WindowSpec {
 	return &WindowSpec{}
 }
 
-// PartitionBy sets the partition columns for the window
+// PartitionBy sets the partition columns for the window.
 func (w *WindowSpec) PartitionBy(columns ...string) *WindowSpec {
 	w.partitionBy = columns
 	return w
 }
 
-// OrderBy adds an ordering specification to the window
+// OrderBy adds an ordering specification to the window.
 func (w *WindowSpec) OrderBy(column string, ascending bool) *WindowSpec {
 	w.orderBy = append(w.orderBy, OrderByExpr{column: column, ascending: ascending})
 	return w
 }
 
-// Rows sets a ROWS frame for the window
+// Rows sets a ROWS frame for the window.
 func (w *WindowSpec) Rows(frame *WindowFrame) *WindowSpec {
 	frame.frameType = FrameTypeRows
 	w.frame = frame
 	return w
 }
 
-// Range sets a RANGE frame for the window
+// Range sets a RANGE frame for the window.
 func (w *WindowSpec) Range(frame *WindowFrame) *WindowSpec {
 	frame.frameType = FrameTypeRange
 	w.frame = frame
 	return w
 }
 
-// Groups sets a GROUPS frame for the window
+// Groups sets a GROUPS frame for the window.
 func (w *WindowSpec) Groups(frame *WindowFrame) *WindowSpec {
 	frame.frameType = FrameTypeGroups
 	w.frame = frame
 	return w
 }
 
-// String returns the string representation of the window spec
+// String returns the string representation of the window spec.
 func (w *WindowSpec) String() string {
 	var parts []string
 
@@ -138,7 +138,7 @@ func (w *WindowSpec) String() string {
 
 // Frame construction functions
 
-// Between creates a window frame between two boundaries
+// Between creates a window frame between two boundaries.
 func Between(start, end *FrameBoundary) *WindowFrame {
 	return &WindowFrame{
 		start: start,
@@ -146,37 +146,38 @@ func Between(start, end *FrameBoundary) *WindowFrame {
 	}
 }
 
-// UnboundedPreceding creates an unbounded preceding boundary
+// UnboundedPreceding creates an unbounded preceding boundary.
 func UnboundedPreceding() *FrameBoundary {
 	return &FrameBoundary{boundaryType: BoundaryUnboundedPreceding}
 }
 
-// Preceding creates a preceding boundary with offset
+// Preceding creates a preceding boundary with offset.
 func Preceding(offset int) *FrameBoundary {
 	return &FrameBoundary{boundaryType: BoundaryPreceding, offset: offset}
 }
 
-// CurrentRow creates a current row boundary
+// CurrentRow creates a current row boundary.
 func CurrentRow() *FrameBoundary {
 	return &FrameBoundary{boundaryType: BoundaryCurrentRow}
 }
 
-// Following creates a following boundary with offset
+// Following creates a following boundary with offset.
 func Following(offset int) *FrameBoundary {
 	return &FrameBoundary{boundaryType: BoundaryFollowing, offset: offset}
 }
 
-// UnboundedFollowing creates an unbounded following boundary
+// UnboundedFollowing creates an unbounded following boundary.
 func UnboundedFollowing() *FrameBoundary {
 	return &FrameBoundary{boundaryType: BoundaryUnboundedFollowing}
 }
 
-// String returns the string representation of the frame
+// String returns the string representation of the frame.
 func (f *WindowFrame) String() string {
 	frameTypeName := "ROWS"
-	if f.frameType == FrameTypeRange {
+	switch f.frameType {
+	case FrameTypeRange:
 		frameTypeName = "RANGE"
-	} else if f.frameType == FrameTypeGroups {
+	case FrameTypeGroups:
 		frameTypeName = "GROUPS"
 	}
 
@@ -184,7 +185,7 @@ func (f *WindowFrame) String() string {
 		frameTypeName, f.start.String(), f.end.String())
 }
 
-// String returns the string representation of the boundary
+// String returns the string representation of the boundary.
 func (b *FrameBoundary) String() string {
 	switch b.boundaryType {
 	case BoundaryUnboundedPreceding:
@@ -204,28 +205,28 @@ func (b *FrameBoundary) String() string {
 
 // Window function expressions
 
-// Type returns the expression type
+// Type returns the expression type.
 func (w *WindowExpr) Type() ExprType {
 	return ExprWindow
 }
 
-// String returns the string representation
+// String returns the string representation.
 func (w *WindowExpr) String() string {
 	return fmt.Sprintf("%s %s", w.function.String(), w.window.String())
 }
 
 // SupportsContext returns whether this expression can be evaluated in the given context
-// WindowExpr typically requires RowContext as it operates on row-level data with window semantics
+// WindowExpr typically requires RowContext as it operates on row-level data with window semantics.
 func (w *WindowExpr) SupportsContext(ctx EvaluationContext) bool {
 	return ctx == RowContext
 }
 
-// Type returns the expression type
+// Type returns the expression type.
 func (w *WindowFunctionExpr) Type() ExprType {
 	return ExprWindowFunction
 }
 
-// String returns the string representation
+// String returns the string representation.
 func (w *WindowFunctionExpr) String() string {
 	if len(w.args) == 0 {
 		return fmt.Sprintf("%s()", w.funcName)
@@ -239,12 +240,12 @@ func (w *WindowFunctionExpr) String() string {
 }
 
 // SupportsContext returns whether this expression can be evaluated in the given context
-// WindowFunctionExpr can only be evaluated in RowContext
+// WindowFunctionExpr can only be evaluated in RowContext.
 func (w *WindowFunctionExpr) SupportsContext(ctx EvaluationContext) bool {
 	return ctx == RowContext
 }
 
-// Over creates a window expression with the specified window
+// Over creates a window expression with the specified window.
 func (w *WindowFunctionExpr) Over(window *WindowSpec) *WindowExpr {
 	return &WindowExpr{
 		function: w,
@@ -254,7 +255,7 @@ func (w *WindowFunctionExpr) Over(window *WindowSpec) *WindowExpr {
 
 // Window function constructors
 
-// RowNumber creates a ROW_NUMBER() window function
+// RowNumber creates a ROW_NUMBER() window function.
 func RowNumber() *WindowFunctionExpr {
 	return &WindowFunctionExpr{
 		funcName: "ROW_NUMBER",
@@ -262,7 +263,7 @@ func RowNumber() *WindowFunctionExpr {
 	}
 }
 
-// Rank creates a RANK() window function
+// Rank creates a RANK() window function.
 func Rank() *WindowFunctionExpr {
 	return &WindowFunctionExpr{
 		funcName: "RANK",
@@ -270,7 +271,7 @@ func Rank() *WindowFunctionExpr {
 	}
 }
 
-// DenseRank creates a DENSE_RANK() window function
+// DenseRank creates a DENSE_RANK() window function.
 func DenseRank() *WindowFunctionExpr {
 	return &WindowFunctionExpr{
 		funcName: "DENSE_RANK",
@@ -278,7 +279,7 @@ func DenseRank() *WindowFunctionExpr {
 	}
 }
 
-// Lag creates a LAG() window function
+// Lag creates a LAG() window function.
 func Lag(expr Expr, offset int) *WindowFunctionExpr {
 	return &WindowFunctionExpr{
 		funcName: "LAG",
@@ -286,7 +287,7 @@ func Lag(expr Expr, offset int) *WindowFunctionExpr {
 	}
 }
 
-// Lead creates a LEAD() window function
+// Lead creates a LEAD() window function.
 func Lead(expr Expr, offset int) *WindowFunctionExpr {
 	return &WindowFunctionExpr{
 		funcName: "LEAD",
@@ -294,7 +295,7 @@ func Lead(expr Expr, offset int) *WindowFunctionExpr {
 	}
 }
 
-// FirstValue creates a FIRST_VALUE() window function
+// FirstValue creates a FIRST_VALUE() window function.
 func FirstValue(expr Expr) *WindowFunctionExpr {
 	return &WindowFunctionExpr{
 		funcName: "FIRST_VALUE",
@@ -302,7 +303,7 @@ func FirstValue(expr Expr) *WindowFunctionExpr {
 	}
 }
 
-// LastValue creates a LAST_VALUE() window function
+// LastValue creates a LAST_VALUE() window function.
 func LastValue(expr Expr) *WindowFunctionExpr {
 	return &WindowFunctionExpr{
 		funcName: "LAST_VALUE",
@@ -310,7 +311,7 @@ func LastValue(expr Expr) *WindowFunctionExpr {
 	}
 }
 
-// PercentRank creates a PERCENT_RANK() window function
+// PercentRank creates a PERCENT_RANK() window function.
 func PercentRank() *WindowFunctionExpr {
 	return &WindowFunctionExpr{
 		funcName: "PERCENT_RANK",
@@ -318,7 +319,7 @@ func PercentRank() *WindowFunctionExpr {
 	}
 }
 
-// CumeDist creates a CUME_DIST() window function
+// CumeDist creates a CUME_DIST() window function.
 func CumeDist() *WindowFunctionExpr {
 	return &WindowFunctionExpr{
 		funcName: "CUME_DIST",
@@ -326,7 +327,7 @@ func CumeDist() *WindowFunctionExpr {
 	}
 }
 
-// NthValue creates a NTH_VALUE() window function
+// NthValue creates a NTH_VALUE() window function.
 func NthValue(expr Expr, n int) *WindowFunctionExpr {
 	return &WindowFunctionExpr{
 		funcName: "NTH_VALUE",
@@ -334,7 +335,7 @@ func NthValue(expr Expr, n int) *WindowFunctionExpr {
 	}
 }
 
-// Ntile creates a NTILE() window function
+// Ntile creates a NTILE() window function.
 func Ntile(buckets int) *WindowFunctionExpr {
 	return &WindowFunctionExpr{
 		funcName: "NTILE",
@@ -342,7 +343,7 @@ func Ntile(buckets int) *WindowFunctionExpr {
 	}
 }
 
-// Over creates a window expression with the specified window for aggregation functions
+// Over creates a window expression with the specified window for aggregation functions.
 func (a *AggregationExpr) Over(window *WindowSpec) *WindowExpr {
 	return &WindowExpr{
 		function: a,

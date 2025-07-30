@@ -2,10 +2,12 @@
 package dataframe
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -21,13 +23,13 @@ import (
 	"github.com/paveg/gorilla/internal/validation"
 )
 
-// Global memory pool for GroupBy operations to reduce GC pressure
+// Global memory pool for GroupBy operations to reduce GC pressure.
 var (
 	groupByMemoryPool *parallel.AllocatorPool
 	groupByPoolOnce   sync.Once
 )
 
-// getGroupByMemoryPool returns the shared memory pool for GroupBy operations
+// getGroupByMemoryPool returns the shared memory pool for GroupBy operations.
 func getGroupByMemoryPool() *parallel.AllocatorPool {
 	groupByPoolOnce.Do(func() {
 		groupByMemoryPool = parallel.NewAllocatorPool(runtime.NumCPU() * allocatorPoolMultiplier)
@@ -36,7 +38,7 @@ func getGroupByMemoryPool() *parallel.AllocatorPool {
 }
 
 const (
-	// Memory pool sizing constants
+	// Memory pool sizing constants.
 	allocatorPoolMultiplier   = 2 // Factor to multiply NumCPU for allocator pool size
 	nanosPerSecond            = 1e9
 	minChunkSizeForJoin       = 100 // Minimum chunk size to avoid excessive overhead in parallel joins
@@ -80,7 +82,7 @@ type DataFrame struct {
 	operationConfig *config.OperationConfig // Optional per-operation configuration
 }
 
-// JoinType represents the type of join operation
+// JoinType represents the type of join operation.
 type JoinType int
 
 const (
@@ -90,7 +92,7 @@ const (
 	FullOuterJoin
 )
 
-// JoinOptions specifies parameters for join operations
+// JoinOptions specifies parameters for join operations.
 type JoinOptions struct {
 	Type      JoinType
 	LeftKey   string   // Single join key for left DataFrame
@@ -149,7 +151,7 @@ func New(series ...ISeries) *DataFrame {
 	}
 }
 
-// Columns returns the names of all columns in order
+// Columns returns the names of all columns in order.
 func (df *DataFrame) Columns() []string {
 	if len(df.order) == 0 {
 		return []string{}
@@ -157,7 +159,7 @@ func (df *DataFrame) Columns() []string {
 	return append([]string(nil), df.order...)
 }
 
-// Len returns the number of rows (assumes all columns have same length)
+// Len returns the number of rows (assumes all columns have same length).
 func (df *DataFrame) Len() int {
 	if len(df.columns) == 0 {
 		return 0
@@ -177,17 +179,17 @@ func (df *DataFrame) Len() int {
 	return 0
 }
 
-// NumRows returns the number of rows (alias for Len for compatibility)
+// NumRows returns the number of rows (alias for Len for compatibility).
 func (df *DataFrame) NumRows() int {
 	return df.Len()
 }
 
-// Width returns the number of columns
+// Width returns the number of columns.
 func (df *DataFrame) Width() int {
 	return len(df.columns)
 }
 
-// Column returns the series for the given column name
+// Column returns the series for the given column name.
 func (df *DataFrame) Column(name string) (ISeries, bool) {
 	series, exists := df.columns[name]
 	return series, exists
@@ -242,7 +244,7 @@ func (df *DataFrame) Select(names ...string) *DataFrame {
 	}
 }
 
-// Drop returns a new DataFrame without the specified columns
+// Drop returns a new DataFrame without the specified columns.
 func (df *DataFrame) Drop(names ...string) *DataFrame {
 	dropSet := make(map[string]bool)
 	for _, name := range names {
@@ -265,13 +267,13 @@ func (df *DataFrame) Drop(names ...string) *DataFrame {
 	}
 }
 
-// HasColumn checks if a column exists
+// HasColumn checks if a column exists.
 func (df *DataFrame) HasColumn(name string) bool {
 	_, exists := df.columns[name]
 	return exists
 }
 
-// WithConfig returns a new DataFrame with the specified operation configuration
+// WithConfig returns a new DataFrame with the specified operation configuration.
 func (df *DataFrame) WithConfig(opConfig config.OperationConfig) *DataFrame {
 	return &DataFrame{
 		columns:         df.columns,
@@ -280,7 +282,7 @@ func (df *DataFrame) WithConfig(opConfig config.OperationConfig) *DataFrame {
 	}
 }
 
-// String returns a string representation of the DataFrame
+// String returns a string representation of the DataFrame.
 func (df *DataFrame) String() string {
 	if len(df.columns) == 0 {
 		return "DataFrame[empty]"
@@ -296,7 +298,7 @@ func (df *DataFrame) String() string {
 	return strings.Join(parts, "\n")
 }
 
-// Slice creates a new DataFrame containing rows from start (inclusive) to end (exclusive)
+// Slice creates a new DataFrame containing rows from start (inclusive) to end (exclusive).
 func (df *DataFrame) Slice(start, end int) *DataFrame {
 	if start < 0 || end < 0 || start >= end {
 		return New() // Return empty DataFrame for invalid range
@@ -322,7 +324,7 @@ func (df *DataFrame) Slice(start, end int) *DataFrame {
 	return New(slicedSeries...)
 }
 
-// Sort returns a new DataFrame sorted by the specified column
+// Sort returns a new DataFrame sorted by the specified column.
 func (df *DataFrame) Sort(column string, ascending bool) (*DataFrame, error) {
 	if err := validation.ValidateColumns(df, "Sort", column); err != nil {
 		return nil, err
@@ -331,7 +333,7 @@ func (df *DataFrame) Sort(column string, ascending bool) (*DataFrame, error) {
 	return df.SortBy([]string{column}, []bool{ascending})
 }
 
-// SortBy returns a new DataFrame sorted by multiple columns
+// SortBy returns a new DataFrame sorted by multiple columns.
 func (df *DataFrame) SortBy(columns []string, ascending []bool) (*DataFrame, error) {
 	// Validate input arrays have the same length
 	if err := validation.ValidateLength(len(columns), len(ascending), "SortBy",
@@ -365,7 +367,7 @@ func (df *DataFrame) SortBy(columns []string, ascending []bool) (*DataFrame, err
 }
 
 // sliceSeries creates a new series containing elements from start to end
-// This method is thread-safe and creates completely independent data copies
+// This method is thread-safe and creates completely independent data copies.
 func (df *DataFrame) sliceSeries(s ISeries, start, end int) ISeries {
 	originalArray := s.Array()
 	if originalArray == nil {
@@ -394,7 +396,7 @@ func (df *DataFrame) sliceSeries(s ISeries, start, end int) ISeries {
 	return createSlicedSeriesFromArray(s.Name(), originalArray, start, sliceLength, mem)
 }
 
-// createSlicedSeriesFromArray creates a series from an array slice with independent memory
+// createSlicedSeriesFromArray creates a series from an array slice with independent memory.
 func createSlicedSeriesFromArray(
 	name string, originalArray arrow.Array, start, length int, mem memory.Allocator,
 ) ISeries {
@@ -431,19 +433,19 @@ func createSlicedSeriesFromArray(
 	}
 }
 
-// ArrowValueArray represents an Arrow array with value access
+// ArrowValueArray represents an Arrow array with value access.
 type ArrowValueArray[T any] interface {
 	Len() int
 	IsNull(int) bool
 	Value(int) T
 }
 
-// createSlicedSeries creates a typed series slice using generics
+// createSlicedSeries creates a typed series slice using generics.
 func createSlicedSeries[T any](
 	name string, typedArr ArrowValueArray[T], start, length int, mem memory.Allocator,
 ) ISeries {
 	values := make([]T, length)
-	for i := 0; i < length; i++ {
+	for i := range length {
 		srcIndex := start + i
 		if srcIndex < typedArr.Len() && !typedArr.IsNull(srcIndex) {
 			values[i] = typedArr.Value(srcIndex)
@@ -452,72 +454,72 @@ func createSlicedSeries[T any](
 	return series.New(name, values, mem)
 }
 
-// createSlicedStringSeries creates a string series slice
+// createSlicedStringSeries creates a string series slice.
 func createSlicedStringSeries(name string, typedArr *array.String, start, length int, mem memory.Allocator) ISeries {
 	return createSlicedSeries(name, typedArr, start, length, mem)
 }
 
-// createSlicedInt64Series creates an int64 series slice
+// createSlicedInt64Series creates an int64 series slice.
 func createSlicedInt64Series(name string, typedArr *array.Int64, start, length int, mem memory.Allocator) ISeries {
 	return createSlicedSeries(name, typedArr, start, length, mem)
 }
 
-// createSlicedInt32Series creates an int32 series slice
+// createSlicedInt32Series creates an int32 series slice.
 func createSlicedInt32Series(name string, typedArr *array.Int32, start, length int, mem memory.Allocator) ISeries {
 	return createSlicedSeries(name, typedArr, start, length, mem)
 }
 
-// createSlicedInt16Series creates an int16 series slice
+// createSlicedInt16Series creates an int16 series slice.
 func createSlicedInt16Series(name string, typedArr *array.Int16, start, length int, mem memory.Allocator) ISeries {
 	return createSlicedSeries(name, typedArr, start, length, mem)
 }
 
-// createSlicedInt8Series creates an int8 series slice
+// createSlicedInt8Series creates an int8 series slice.
 func createSlicedInt8Series(name string, typedArr *array.Int8, start, length int, mem memory.Allocator) ISeries {
 	return createSlicedSeries(name, typedArr, start, length, mem)
 }
 
-// createSlicedUint64Series creates a uint64 series slice
+// createSlicedUint64Series creates a uint64 series slice.
 func createSlicedUint64Series(name string, typedArr *array.Uint64, start, length int, mem memory.Allocator) ISeries {
 	return createSlicedSeries(name, typedArr, start, length, mem)
 }
 
-// createSlicedUint32Series creates a uint32 series slice
+// createSlicedUint32Series creates a uint32 series slice.
 func createSlicedUint32Series(name string, typedArr *array.Uint32, start, length int, mem memory.Allocator) ISeries {
 	return createSlicedSeries(name, typedArr, start, length, mem)
 }
 
-// createSlicedUint16Series creates a uint16 series slice
+// createSlicedUint16Series creates a uint16 series slice.
 func createSlicedUint16Series(name string, typedArr *array.Uint16, start, length int, mem memory.Allocator) ISeries {
 	return createSlicedSeries(name, typedArr, start, length, mem)
 }
 
-// createSlicedUint8Series creates a uint8 series slice
+// createSlicedUint8Series creates a uint8 series slice.
 func createSlicedUint8Series(name string, typedArr *array.Uint8, start, length int, mem memory.Allocator) ISeries {
 	return createSlicedSeries(name, typedArr, start, length, mem)
 }
 
-// createSlicedFloat64Series creates a float64 series slice
+// createSlicedFloat64Series creates a float64 series slice.
 func createSlicedFloat64Series(name string, typedArr *array.Float64, start, length int, mem memory.Allocator) ISeries {
 	return createSlicedSeries(name, typedArr, start, length, mem)
 }
 
-// createSlicedFloat32Series creates a float32 series slice
+// createSlicedFloat32Series creates a float32 series slice.
 func createSlicedFloat32Series(name string, typedArr *array.Float32, start, length int, mem memory.Allocator) ISeries {
 	return createSlicedSeries(name, typedArr, start, length, mem)
 }
 
-// createSlicedBoolSeries creates a boolean series slice
+// createSlicedBoolSeries creates a boolean series slice.
 func createSlicedBoolSeries(name string, typedArr *array.Boolean, start, length int, mem memory.Allocator) ISeries {
 	return createSlicedSeries(name, typedArr, start, length, mem)
 }
 
-// createSlicedTimestampSeries creates a timestamp series slice
+// createSlicedTimestampSeries creates a timestamp series slice.
 func createSlicedTimestampSeries(
 	name string, typedArr *array.Timestamp, start, length int, mem memory.Allocator,
 ) ISeries {
 	values := make([]time.Time, length)
-	for i := 0; i < length; i++ {
+	for i := range length {
 		srcIndex := start + i
 		if srcIndex < typedArr.Len() && !typedArr.IsNull(srcIndex) {
 			// Convert Arrow timestamp back to time.Time
@@ -530,7 +532,7 @@ func createSlicedTimestampSeries(
 }
 
 // Concat concatenates multiple DataFrames vertically (row-wise)
-// All DataFrames must have the same column structure
+// All DataFrames must have the same column structure.
 func (df *DataFrame) Concat(others ...*DataFrame) *DataFrame {
 	if len(others) == 0 {
 		return df // Return copy of current DataFrame
@@ -561,7 +563,7 @@ func (df *DataFrame) Concat(others ...*DataFrame) *DataFrame {
 	return New(concatenatedSeries...)
 }
 
-// hasSameSchema checks if two DataFrames have the same column structure
+// hasSameSchema checks if two DataFrames have the same column structure.
 func (df *DataFrame) hasSameSchema(other *DataFrame) bool {
 	if len(df.order) != len(other.order) {
 		return false
@@ -589,7 +591,7 @@ func (df *DataFrame) hasSameSchema(other *DataFrame) bool {
 	return true
 }
 
-// concatSeries concatenates multiple series of the same type
+// concatSeries concatenates multiple series of the same type.
 func (df *DataFrame) concatSeries(name string, seriesList []ISeries) ISeries {
 	if len(seriesList) == 0 {
 		return series.New(name, []string{}, memory.NewGoAllocator())
@@ -626,7 +628,7 @@ func (df *DataFrame) concatSeries(name string, seriesList []ISeries) ISeries {
 	}
 }
 
-// concatStringSeries concatenates string series
+// concatStringSeries concatenates string series.
 func (df *DataFrame) concatStringSeries(
 	name string, seriesList []ISeries, totalLength int, mem memory.Allocator,
 ) ISeries {
@@ -635,7 +637,7 @@ func (df *DataFrame) concatStringSeries(
 	})
 }
 
-// concatInt64Series concatenates int64 series
+// concatInt64Series concatenates int64 series.
 func (df *DataFrame) concatInt64Series(
 	name string, seriesList []ISeries, totalLength int, mem memory.Allocator,
 ) ISeries {
@@ -644,7 +646,7 @@ func (df *DataFrame) concatInt64Series(
 	})
 }
 
-// concatFloat64Series concatenates float64 series
+// concatFloat64Series concatenates float64 series.
 func (df *DataFrame) concatFloat64Series(
 	name string, seriesList []ISeries, totalLength int, mem memory.Allocator,
 ) ISeries {
@@ -653,7 +655,7 @@ func (df *DataFrame) concatFloat64Series(
 	})
 }
 
-// concatBoolSeries concatenates boolean series
+// concatBoolSeries concatenates boolean series.
 func (df *DataFrame) concatBoolSeries(
 	name string, seriesList []ISeries, totalLength int, mem memory.Allocator,
 ) ISeries {
@@ -662,7 +664,7 @@ func (df *DataFrame) concatBoolSeries(
 	})
 }
 
-// concatTypedSeries is a generic helper for concatenating typed series
+// concatTypedSeries is a generic helper for concatenating typed series.
 func concatTypedSeries[T any](
 	name string, seriesList []ISeries, totalLength int, mem memory.Allocator,
 	defaultValue T, getValue func(arrow.Array, int) T,
@@ -682,7 +684,7 @@ func concatTypedSeries[T any](
 	return series.New(name, values, mem)
 }
 
-// copySeries creates a copy of a series
+// copySeries creates a copy of a series.
 func (df *DataFrame) copySeries(s ISeries) ISeries {
 	originalArray := s.Array()
 	defer originalArray.Release()
@@ -733,14 +735,14 @@ func (df *DataFrame) copySeries(s ISeries) ISeries {
 	}
 }
 
-// Release releases all underlying Arrow memory
+// Release releases all underlying Arrow memory.
 func (df *DataFrame) Release() {
 	for _, series := range df.columns {
 		series.Release()
 	}
 }
 
-// safeDataType safely gets the data type from a series, returning nil if the series has a nil array
+// safeDataType safely gets the data type from a series, returning nil if the series has a nil array.
 func safeDataType(s ISeries) (result arrow.DataType) {
 	if s == nil {
 		return nil
@@ -757,14 +759,14 @@ func safeDataType(s ISeries) (result arrow.DataType) {
 	return s.DataType()
 }
 
-// GroupBy represents a grouped DataFrame for aggregation operations
+// GroupBy represents a grouped DataFrame for aggregation operations.
 type GroupBy struct {
 	df          *DataFrame
 	groupByCols []string
 	groups      map[string][]int // group key -> row indices
 }
 
-// GroupBy creates a GroupBy object for the specified columns
+// GroupBy creates a GroupBy object for the specified columns.
 func (df *DataFrame) GroupBy(columns ...string) *GroupBy {
 	// Validate columns exist
 	for _, col := range columns {
@@ -784,7 +786,7 @@ func (df *DataFrame) GroupBy(columns ...string) *GroupBy {
 	}
 }
 
-// buildGroups creates a hash map of group keys to row indices
+// buildGroups creates a hash map of group keys to row indices.
 func (df *DataFrame) buildGroups(columns []string) map[string][]int {
 	groups := make(map[string][]int)
 	rowCount := df.Len()
@@ -809,7 +811,7 @@ func (df *DataFrame) buildGroups(columns []string) map[string][]int {
 	}()
 
 	// Build groups
-	for rowIdx := 0; rowIdx < rowCount; rowIdx++ {
+	for rowIdx := range rowCount {
 		groupKey := df.buildGroupKey(columnArrays, rowIdx)
 		groups[groupKey] = append(groups[groupKey], rowIdx)
 	}
@@ -817,7 +819,7 @@ func (df *DataFrame) buildGroups(columns []string) map[string][]int {
 	return groups
 }
 
-// buildGroupKey creates a unique string key for a group based on row values
+// buildGroupKey creates a unique string key for a group based on row values.
 func (df *DataFrame) buildGroupKey(columnArrays []arrow.Array, rowIdx int) string {
 	var keyParts []string
 
@@ -836,11 +838,11 @@ func (df *DataFrame) buildGroupKey(columnArrays []arrow.Array, rowIdx int) strin
 		case *array.String:
 			keyParts = append(keyParts, typedArr.Value(rowIdx))
 		case *array.Int64:
-			keyParts = append(keyParts, fmt.Sprintf("%d", typedArr.Value(rowIdx)))
+			keyParts = append(keyParts, strconv.FormatInt(typedArr.Value(rowIdx), 10))
 		case *array.Float64:
 			keyParts = append(keyParts, fmt.Sprintf("%f", typedArr.Value(rowIdx)))
 		case *array.Boolean:
-			keyParts = append(keyParts, fmt.Sprintf("%t", typedArr.Value(rowIdx)))
+			keyParts = append(keyParts, strconv.FormatBool(typedArr.Value(rowIdx)))
 		default:
 			keyParts = append(keyParts, "unknown")
 		}
@@ -849,7 +851,7 @@ func (df *DataFrame) buildGroupKey(columnArrays []arrow.Array, rowIdx int) strin
 	return strings.Join(keyParts, "|")
 }
 
-// Agg performs aggregation operations on the grouped data
+// Agg performs aggregation operations on the grouped data.
 func (gb *GroupBy) Agg(aggregations ...*expr.AggregationExpr) *DataFrame {
 	if len(aggregations) == 0 || len(gb.groups) == 0 {
 		return New()
@@ -865,7 +867,7 @@ func (gb *GroupBy) Agg(aggregations ...*expr.AggregationExpr) *DataFrame {
 	return gb.aggSequential(aggregations...)
 }
 
-// aggSequential performs aggregation sequentially
+// aggSequential performs aggregation sequentially.
 func (gb *GroupBy) aggSequential(aggregations ...*expr.AggregationExpr) *DataFrame {
 	// Prepare result columns: group columns + aggregation columns
 	var resultSeries []ISeries
@@ -915,14 +917,17 @@ func (gb *GroupBy) aggSequential(aggregations ...*expr.AggregationExpr) *DataFra
 		if originalSeries, exists := gb.df.Column(columnName); exists {
 			aggValues := gb.performAggregation(originalSeries, agg)
 			aggColumnName := gb.getAggregationColumnName(agg, columnName)
-			resultSeries = append(resultSeries, gb.createAggregationSeries(aggColumnName, aggValues, agg.AggType(), mem))
+			resultSeries = append(
+				resultSeries,
+				gb.createAggregationSeries(aggColumnName, aggValues, agg.AggType(), mem),
+			)
 		}
 	}
 
 	return New(resultSeries...)
 }
 
-// aggParallel performs aggregation using parallel processing
+// aggParallel performs aggregation using parallel processing.
 func (gb *GroupBy) aggParallel(aggregations ...*expr.AggregationExpr) *DataFrame {
 	// Prepare result columns: group columns + aggregation columns
 	var resultSeries []ISeries
@@ -1007,7 +1012,7 @@ func (gb *GroupBy) aggParallel(aggregations ...*expr.AggregationExpr) *DataFrame
 	return New(resultSeries...)
 }
 
-// extractGroupColumnValues extracts unique values for group columns
+// extractGroupColumnValues extracts unique values for group columns.
 func (gb *GroupBy) extractGroupColumnValues(series ISeries) []string {
 	var values []string
 	originalArray := series.Array()
@@ -1030,11 +1035,11 @@ func (gb *GroupBy) extractGroupColumnValues(series ISeries) []string {
 				case *array.String:
 					values = append(values, typedArr.Value(rowIdx))
 				case *array.Int64:
-					values = append(values, fmt.Sprintf("%d", typedArr.Value(rowIdx)))
+					values = append(values, strconv.FormatInt(typedArr.Value(rowIdx), 10))
 				case *array.Float64:
 					values = append(values, fmt.Sprintf("%f", typedArr.Value(rowIdx)))
 				case *array.Boolean:
-					values = append(values, fmt.Sprintf("%t", typedArr.Value(rowIdx)))
+					values = append(values, strconv.FormatBool(typedArr.Value(rowIdx)))
 				default:
 					values = append(values, "")
 				}
@@ -1047,7 +1052,7 @@ func (gb *GroupBy) extractGroupColumnValues(series ISeries) []string {
 	return values
 }
 
-// performAggregation performs the specified aggregation on a series
+// performAggregation performs the specified aggregation on a series.
 func (gb *GroupBy) performAggregation(series ISeries, agg *expr.AggregationExpr) []float64 {
 	var results []float64
 	originalArray := series.Array()
@@ -1069,7 +1074,7 @@ func (gb *GroupBy) performAggregation(series ISeries, agg *expr.AggregationExpr)
 	return results
 }
 
-// aggregateGroup performs aggregation on a single group
+// aggregateGroup performs aggregation on a single group.
 func (gb *GroupBy) aggregateGroup(arr arrow.Array, indices []int, aggType expr.AggregationType) float64 {
 	if len(indices) == 0 {
 		return 0.0
@@ -1101,7 +1106,7 @@ func (gb *GroupBy) aggregateGroup(arr arrow.Array, indices []int, aggType expr.A
 	}
 }
 
-// sumGroup calculates sum for a group
+// sumGroup calculates sum for a group.
 func (gb *GroupBy) sumGroup(arr arrow.Array, indices []int) float64 {
 	var sum float64
 	for _, idx := range indices {
@@ -1117,7 +1122,7 @@ func (gb *GroupBy) sumGroup(arr arrow.Array, indices []int) float64 {
 	return sum
 }
 
-// extractNumericValue extracts a numeric value from an array at the given index
+// extractNumericValue extracts a numeric value from an array at the given index.
 func (gb *GroupBy) extractNumericValue(arr arrow.Array, idx int) (float64, bool) {
 	if idx >= arr.Len() || arr.IsNull(idx) {
 		return 0, false
@@ -1133,7 +1138,7 @@ func (gb *GroupBy) extractNumericValue(arr arrow.Array, idx int) (float64, bool)
 	}
 }
 
-// minGroup calculates minimum for a group
+// minGroup calculates minimum for a group.
 func (gb *GroupBy) minGroup(arr arrow.Array, indices []int) float64 {
 	var minimum float64
 	first := true
@@ -1150,7 +1155,7 @@ func (gb *GroupBy) minGroup(arr arrow.Array, indices []int) float64 {
 	return minimum
 }
 
-// maxGroup calculates maximum for a group
+// maxGroup calculates maximum for a group.
 func (gb *GroupBy) maxGroup(arr arrow.Array, indices []int) float64 {
 	var maximum float64
 	first := true
@@ -1167,7 +1172,7 @@ func (gb *GroupBy) maxGroup(arr arrow.Array, indices []int) float64 {
 	return maximum
 }
 
-// getAggregationColumnName generates a name for the aggregation column
+// getAggregationColumnName generates a name for the aggregation column.
 func (gb *GroupBy) getAggregationColumnName(agg *expr.AggregationExpr, columnName string) string {
 	if agg.Alias() != "" {
 		return agg.Alias()
@@ -1190,7 +1195,7 @@ func (gb *GroupBy) getAggregationColumnName(agg *expr.AggregationExpr, columnNam
 	return fmt.Sprintf("%s_%s", aggName, columnName)
 }
 
-// createAggregationSeries creates a series for aggregation results
+// createAggregationSeries creates a series for aggregation results.
 func (gb *GroupBy) createAggregationSeries(
 	name string, values []float64, aggType expr.AggregationType, mem memory.Allocator,
 ) ISeries {
@@ -1207,7 +1212,7 @@ func (gb *GroupBy) createAggregationSeries(
 	return series.New(name, values, mem)
 }
 
-// Join performs a join operation between two DataFrames
+// Join performs a join operation between two DataFrames.
 func (df *DataFrame) Join(right *DataFrame, options *JoinOptions) (*DataFrame, error) {
 	// Determine join keys
 	leftKeys, rightKeys := normalizeJoinKeys(options)
@@ -1233,7 +1238,7 @@ func (df *DataFrame) Join(right *DataFrame, options *JoinOptions) (*DataFrame, e
 	return df.sequentialJoin(right, leftKeys, rightKeys, options.Type)
 }
 
-// normalizeJoinKeys extracts the actual keys to use for joining
+// normalizeJoinKeys extracts the actual keys to use for joining.
 func normalizeJoinKeys(options *JoinOptions) ([]string, []string) {
 	if len(options.LeftKeys) > 0 && len(options.RightKeys) > 0 {
 		return options.LeftKeys, options.RightKeys
@@ -1241,7 +1246,7 @@ func normalizeJoinKeys(options *JoinOptions) ([]string, []string) {
 	return []string{options.LeftKey}, []string{options.RightKey}
 }
 
-// validateJoinKeys ensures all join keys exist in both DataFrames
+// validateJoinKeys ensures all join keys exist in both DataFrames.
 func validateJoinKeys(left, right *DataFrame, leftKeys, rightKeys []string) error {
 	for _, key := range leftKeys {
 		if !left.HasColumn(key) {
@@ -1258,7 +1263,7 @@ func validateJoinKeys(left, right *DataFrame, leftKeys, rightKeys []string) erro
 	return nil
 }
 
-// sequentialJoin performs join operation using sequential hash-based algorithm
+// sequentialJoin performs join operation using sequential hash-based algorithm.
 func (df *DataFrame) sequentialJoin(
 	right *DataFrame, leftKeys, rightKeys []string, joinType JoinType,
 ) (*DataFrame, error) {
@@ -1291,7 +1296,7 @@ func (df *DataFrame) sequentialJoin(
 	return df.buildJoinResult(right, leftIndices, rightIndices, mem)
 }
 
-// parallelJoin performs join operation using parallel hash-based algorithm
+// parallelJoin performs join operation using parallel hash-based algorithm.
 func (df *DataFrame) parallelJoin(
 	right *DataFrame, leftKeys, rightKeys []string, joinType JoinType,
 ) (*DataFrame, error) {
@@ -1326,7 +1331,7 @@ func (df *DataFrame) parallelJoin(
 	return df.buildJoinResult(right, leftIndices, rightIndices, mem)
 }
 
-// buildParallelHashMap builds a hash map from DataFrame using parallel processing
+// buildParallelHashMap builds a hash map from DataFrame using parallel processing.
 func (df *DataFrame) buildParallelHashMap(right *DataFrame, rightKeys []string) map[string][]int {
 	// Create worker pool
 	wp := parallel.NewWorkerPool(0) // Use default CPU count
@@ -1377,7 +1382,7 @@ func (df *DataFrame) buildParallelHashMap(right *DataFrame, rightKeys []string) 
 	return finalMap
 }
 
-// buildJoinKey creates a composite key from multiple columns at given row index
+// buildJoinKey creates a composite key from multiple columns at given row index.
 func buildJoinKey(df *DataFrame, keys []string, rowIndex int) string {
 	if len(keys) == 1 {
 		series, exists := df.Column(keys[0])
@@ -1399,7 +1404,7 @@ func buildJoinKey(df *DataFrame, keys []string, rowIndex int) string {
 	return strings.Join(keyParts, "|")
 }
 
-// getStringValue extracts string representation of value at given index
+// getStringValue extracts string representation of value at given index.
 func getStringValue(series ISeries, index int) string {
 	if series == nil || index >= series.Len() {
 		return ""
@@ -1412,21 +1417,21 @@ func getStringValue(series ISeries, index int) string {
 	case *array.String:
 		return typedArr.Value(index)
 	case *array.Int64:
-		return fmt.Sprintf("%d", typedArr.Value(index))
+		return strconv.FormatInt(typedArr.Value(index), 10)
 	case *array.Int32:
-		return fmt.Sprintf("%d", typedArr.Value(index))
+		return strconv.Itoa(int(typedArr.Value(index)))
 	case *array.Float64:
 		return fmt.Sprintf("%f", typedArr.Value(index))
 	case *array.Float32:
 		return fmt.Sprintf("%f", typedArr.Value(index))
 	case *array.Boolean:
-		return fmt.Sprintf("%t", typedArr.Value(index))
+		return strconv.FormatBool(typedArr.Value(index))
 	default:
 		return ""
 	}
 }
 
-// performInnerJoin returns matching indices for inner join
+// performInnerJoin returns matching indices for inner join.
 func (df *DataFrame) performInnerJoin(rightHashMap map[string][]int, leftKeys []string) ([]int, []int) {
 	var leftIndices, rightIndices []int
 
@@ -1443,7 +1448,7 @@ func (df *DataFrame) performInnerJoin(rightHashMap map[string][]int, leftKeys []
 	return leftIndices, rightIndices
 }
 
-// performLeftJoin returns indices for left join (all left rows, matched right rows)
+// performLeftJoin returns indices for left join (all left rows, matched right rows).
 func (df *DataFrame) performLeftJoin(rightHashMap map[string][]int, leftKeys []string) ([]int, []int) {
 	var leftIndices, rightIndices []int
 
@@ -1463,7 +1468,7 @@ func (df *DataFrame) performLeftJoin(rightHashMap map[string][]int, leftKeys []s
 	return leftIndices, rightIndices
 }
 
-// performRightJoin returns indices for right join (matched left rows, all right rows)
+// performRightJoin returns indices for right join (matched left rows, all right rows).
 func (df *DataFrame) performRightJoin(
 	right *DataFrame, rightHashMap map[string][]int, leftKeys []string,
 ) ([]int, []int) {
@@ -1493,7 +1498,7 @@ func (df *DataFrame) performRightJoin(
 	return leftIndices, rightIndices
 }
 
-// performFullOuterJoin returns indices for full outer join (all rows from both sides)
+// performFullOuterJoin returns indices for full outer join (all rows from both sides).
 func (df *DataFrame) performFullOuterJoin(
 	right *DataFrame, rightHashMap map[string][]int, leftKeys []string,
 ) ([]int, []int) {
@@ -1526,7 +1531,7 @@ func (df *DataFrame) performFullOuterJoin(
 	return leftIndices, rightIndices
 }
 
-// buildJoinResult constructs the final DataFrame from join indices
+// buildJoinResult constructs the final DataFrame from join indices.
 func (df *DataFrame) buildJoinResult(
 	right *DataFrame, leftIndices, rightIndices []int, mem memory.Allocator,
 ) (*DataFrame, error) {
@@ -1559,7 +1564,7 @@ func (df *DataFrame) buildJoinResult(
 	return New(resultSeries...), nil
 }
 
-// buildJoinColumn creates a new series for join result based on indices
+// buildJoinColumn creates a new series for join result based on indices.
 func (df *DataFrame) buildJoinColumn(
 	sourceSeries ISeries, indices []int, resultLength int, mem memory.Allocator,
 ) ISeries {
@@ -1590,7 +1595,7 @@ func (df *DataFrame) buildJoinColumn(
 	}
 }
 
-// buildStringJoinColumn creates string series for join result
+// buildStringJoinColumn creates string series for join result.
 func (df *DataFrame) buildStringJoinColumn(
 	name string, arr *array.String, indices []int, resultLength int, mem memory.Allocator,
 ) ISeries {
@@ -1605,7 +1610,7 @@ func (df *DataFrame) buildStringJoinColumn(
 	return series.New(name, values, mem)
 }
 
-// buildInt64JoinColumn creates int64 series for join result
+// buildInt64JoinColumn creates int64 series for join result.
 func (df *DataFrame) buildInt64JoinColumn(
 	name string, arr *array.Int64, indices []int, resultLength int, mem memory.Allocator,
 ) ISeries {
@@ -1620,7 +1625,7 @@ func (df *DataFrame) buildInt64JoinColumn(
 	return series.New(name, values, mem)
 }
 
-// buildInt32JoinColumn creates int32 series for join result
+// buildInt32JoinColumn creates int32 series for join result.
 func (df *DataFrame) buildInt32JoinColumn(
 	name string, arr *array.Int32, indices []int, resultLength int, mem memory.Allocator,
 ) ISeries {
@@ -1635,7 +1640,7 @@ func (df *DataFrame) buildInt32JoinColumn(
 	return series.New(name, values, mem)
 }
 
-// buildFloat64JoinColumn creates float64 series for join result
+// buildFloat64JoinColumn creates float64 series for join result.
 func (df *DataFrame) buildFloat64JoinColumn(
 	name string, arr *array.Float64, indices []int, resultLength int, mem memory.Allocator,
 ) ISeries {
@@ -1650,7 +1655,7 @@ func (df *DataFrame) buildFloat64JoinColumn(
 	return series.New(name, values, mem)
 }
 
-// buildFloat32JoinColumn creates float32 series for join result
+// buildFloat32JoinColumn creates float32 series for join result.
 func (df *DataFrame) buildFloat32JoinColumn(
 	name string, arr *array.Float32, indices []int, resultLength int, mem memory.Allocator,
 ) ISeries {
@@ -1665,7 +1670,7 @@ func (df *DataFrame) buildFloat32JoinColumn(
 	return series.New(name, values, mem)
 }
 
-// buildBooleanJoinColumn creates boolean series for join result
+// buildBooleanJoinColumn creates boolean series for join result.
 func (df *DataFrame) buildBooleanJoinColumn(
 	name string, arr *array.Boolean, indices []int, resultLength int, mem memory.Allocator,
 ) ISeries {
@@ -1680,7 +1685,7 @@ func (df *DataFrame) buildBooleanJoinColumn(
 	return series.New(name, values, mem)
 }
 
-// buildDefaultJoinColumn creates default string series for join result
+// buildDefaultJoinColumn creates default string series for join result.
 func (df *DataFrame) buildDefaultJoinColumn(
 	name string, indices []int, resultLength int, mem memory.Allocator,
 ) ISeries {
@@ -1691,7 +1696,7 @@ func (df *DataFrame) buildDefaultJoinColumn(
 	return series.New(name, values, mem)
 }
 
-// sortSequential performs sequential sorting using standard library sort
+// sortSequential performs sequential sorting using standard library sort.
 func (df *DataFrame) sortSequential(columns []string, ascending []bool) []int {
 	rowCount := df.Len()
 	indices := make([]int, rowCount)
@@ -1707,13 +1712,13 @@ func (df *DataFrame) sortSequential(columns []string, ascending []bool) []int {
 	return indices
 }
 
-// chunkResult represents a sorted chunk with its starting index
+// chunkResult represents a sorted chunk with its starting index.
 type chunkResult struct {
 	startIdx int
 	indices  []int
 }
 
-// sortParallel performs parallel merge sort using worker pool
+// sortParallel performs parallel merge sort using worker pool.
 func (df *DataFrame) sortParallel(columns []string, ascending []bool) []int {
 	rowCount := df.Len()
 
@@ -1773,7 +1778,7 @@ func (df *DataFrame) sortParallel(columns []string, ascending []bool) []int {
 	return df.mergeSortedChunks(sortedChunks, columns, ascending)
 }
 
-// compareRows compares two rows based on multiple columns and sort directions
+// compareRows compares two rows based on multiple columns and sort directions.
 func (df *DataFrame) compareRows(rowA, rowB int, columns []string, ascending []bool) bool {
 	for i, column := range columns {
 		series, exists := df.columns[column]
@@ -1795,7 +1800,7 @@ func (df *DataFrame) compareRows(rowA, rowB int, columns []string, ascending []b
 	return false // All columns equal
 }
 
-// compareSeriesValues compares two values in a series
+// compareSeriesValues compares two values in a series.
 func (df *DataFrame) compareSeriesValues(series ISeries, indexA, indexB int) int {
 	arr := series.Array()
 	if arr == nil {
@@ -1821,7 +1826,7 @@ func (df *DataFrame) compareSeriesValues(series ISeries, indexA, indexB int) int
 	return 0
 }
 
-// compareOrderedValues compares two values of any ordered type
+// compareOrderedValues compares two values of any ordered type.
 func compareOrderedValues[T interface {
 	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~float32 | ~float64 | ~string
 }](valA, valB T) int {
@@ -1833,7 +1838,7 @@ func compareOrderedValues[T interface {
 	return 0
 }
 
-// compareBoolValues compares two boolean values (false < true)
+// compareBoolValues compares two boolean values (false < true).
 func (df *DataFrame) compareBoolValues(valA, valB bool) int {
 	if !valA && valB {
 		return -1
@@ -1843,7 +1848,7 @@ func (df *DataFrame) compareBoolValues(valA, valB bool) int {
 	return 0
 }
 
-// buildSortedDataFrame creates a new DataFrame with rows in sorted order
+// buildSortedDataFrame creates a new DataFrame with rows in sorted order.
 func (df *DataFrame) buildSortedDataFrame(sortedIndices []int) *DataFrame {
 	mem := memory.NewGoAllocator()
 	var sortedSeries []ISeries
@@ -1857,7 +1862,7 @@ func (df *DataFrame) buildSortedDataFrame(sortedIndices []int) *DataFrame {
 	return New(sortedSeries...)
 }
 
-// buildSortedSeries creates a new series with values in sorted order
+// buildSortedSeries creates a new series with values in sorted order.
 func (df *DataFrame) buildSortedSeries(s ISeries, sortedIndices []int, mem memory.Allocator) ISeries {
 	arr := s.Array()
 	if arr == nil {
@@ -1913,7 +1918,7 @@ func (df *DataFrame) buildSortedSeries(s ISeries, sortedIndices []int, mem memor
 	return s
 }
 
-// mergeSortedChunks merges multiple sorted chunks into a single sorted array
+// mergeSortedChunks merges multiple sorted chunks into a single sorted array.
 func (df *DataFrame) mergeSortedChunks(chunks []chunkResult, columns []string, ascending []bool) []int {
 	if len(chunks) == 0 {
 		return []int{}
@@ -1965,13 +1970,13 @@ func (df *DataFrame) mergeSortedChunks(chunks []chunkResult, columns []string, a
 	return result
 }
 
-// SafeCollectParallel performs memory-safe parallel collection using the new infrastructure
+// SafeCollectParallel performs memory-safe parallel collection using the new infrastructure.
 func (df *DataFrame) SafeCollectParallel() (*DataFrame, error) {
 	// Use the existing lazy frame collection but with safe infrastructure
 	return df.Lazy().SafeCollectParallel()
 }
 
-// SafeCollectParallelWithMonitoring performs memory-safe parallel collection with memory monitoring
+// SafeCollectParallelWithMonitoring performs memory-safe parallel collection with memory monitoring.
 func (df *DataFrame) SafeCollectParallelWithMonitoring() (*DataFrame, error) {
 	// Use the existing lazy frame collection but with safe infrastructure and monitoring
 	return df.Lazy().SafeCollectParallelWithMonitoring()
@@ -1979,7 +1984,7 @@ func (df *DataFrame) SafeCollectParallelWithMonitoring() (*DataFrame, error) {
 
 // Advanced Analytics Functions
 
-// Correlation calculates the Pearson correlation coefficient between two numeric columns
+// Correlation calculates the Pearson correlation coefficient between two numeric columns.
 func (df *DataFrame) Correlation(col1, col2 string) (float64, error) {
 	// Validate columns exist
 	series1, exists1 := df.Column(col1)
@@ -2008,18 +2013,18 @@ func (df *DataFrame) Correlation(col1, col2 string) (float64, error) {
 	}
 
 	if len(values1) == 0 {
-		return 0, fmt.Errorf("no data to calculate correlation")
+		return 0, errors.New("no data to calculate correlation")
 	}
 
 	// Calculate correlation coefficient
 	return df.calculateCorrelation(values1, values2), nil
 }
 
-// extractNumericValues extracts numeric values from a series
+// extractNumericValues extracts numeric values from a series.
 func (df *DataFrame) extractNumericValues(s ISeries) ([]float64, error) {
 	arr := s.Array()
 	if arr == nil {
-		return nil, fmt.Errorf("series has no data")
+		return nil, errors.New("series has no data")
 	}
 	defer arr.Release()
 
@@ -2049,7 +2054,7 @@ func (df *DataFrame) extractNumericValues(s ISeries) ([]float64, error) {
 	}
 }
 
-// Helper functions for extractNumericValues
+// Helper functions for extractNumericValues.
 func (df *DataFrame) extractFloat64Values(arr *array.Float64) []float64 {
 	var values []float64
 	for i := 0; i < arr.Len(); i++ {
@@ -2150,7 +2155,7 @@ func (df *DataFrame) extractUint8Values(arr *array.Uint8) []float64 {
 	return values
 }
 
-// calculateCorrelation computes the Pearson correlation coefficient
+// calculateCorrelation computes the Pearson correlation coefficient.
 func (df *DataFrame) calculateCorrelation(x, y []float64) float64 {
 	if len(x) != len(y) || len(x) == 0 {
 		return 0.0
@@ -2160,7 +2165,7 @@ func (df *DataFrame) calculateCorrelation(x, y []float64) float64 {
 
 	// Calculate means
 	var sumX, sumY float64
-	for i := 0; i < len(x); i++ {
+	for i := range len(x) {
 		sumX += x[i]
 		sumY += y[i]
 	}
@@ -2169,7 +2174,7 @@ func (df *DataFrame) calculateCorrelation(x, y []float64) float64 {
 
 	// Calculate correlation coefficient
 	var numerator, denomX, denomY float64
-	for i := 0; i < len(x); i++ {
+	for i := range len(x) {
 		dx := x[i] - meanX
 		dy := y[i] - meanY
 		numerator += dx * dy
@@ -2184,7 +2189,7 @@ func (df *DataFrame) calculateCorrelation(x, y []float64) float64 {
 	return numerator / math.Sqrt(denomX*denomY)
 }
 
-// RollingWindow applies a rolling window operation to a column
+// RollingWindow applies a rolling window operation to a column.
 func (df *DataFrame) RollingWindow(column string, windowSize int, operation string) (*DataFrame, error) {
 	// Validate column exists
 	columnSeries, exists := df.Column(column)
@@ -2226,11 +2231,11 @@ func (df *DataFrame) RollingWindow(column string, windowSize int, operation stri
 	return New(resultSeries...), nil
 }
 
-// applyRollingWindow applies a rolling window operation to values
+// applyRollingWindow applies a rolling window operation to values.
 func (df *DataFrame) applyRollingWindow(values []float64, windowSize int, operation string) ([]float64, error) {
 	results := make([]float64, len(values))
 
-	for i := 0; i < len(values); i++ {
+	for i := range len(values) {
 		if i < windowSize-1 {
 			// Not enough data for window, set to NaN
 			results[i] = math.NaN()
@@ -2260,7 +2265,7 @@ func (df *DataFrame) applyRollingWindow(values []float64, windowSize int, operat
 	return results, nil
 }
 
-// calculateMean calculates the mean of a slice of values
+// calculateMean calculates the mean of a slice of values.
 func (df *DataFrame) calculateMean(values []float64) float64 {
 	if len(values) == 0 {
 		return math.NaN()
@@ -2273,7 +2278,7 @@ func (df *DataFrame) calculateMean(values []float64) float64 {
 	return sum / float64(len(values))
 }
 
-// calculateSum calculates the sum of a slice of values
+// calculateSum calculates the sum of a slice of values.
 func (df *DataFrame) calculateSum(values []float64) float64 {
 	sum := 0.0
 	for _, v := range values {
@@ -2282,7 +2287,7 @@ func (df *DataFrame) calculateSum(values []float64) float64 {
 	return sum
 }
 
-// calculateMin calculates the minimum of a slice of values
+// calculateMin calculates the minimum of a slice of values.
 func (df *DataFrame) calculateMin(values []float64) float64 {
 	if len(values) == 0 {
 		return math.NaN()
@@ -2297,7 +2302,7 @@ func (df *DataFrame) calculateMin(values []float64) float64 {
 	return minimum
 }
 
-// calculateMax calculates the maximum of a slice of values
+// calculateMax calculates the maximum of a slice of values.
 func (df *DataFrame) calculateMax(values []float64) float64 {
 	if len(values) == 0 {
 		return math.NaN()
@@ -2312,7 +2317,7 @@ func (df *DataFrame) calculateMax(values []float64) float64 {
 	return maximum
 }
 
-// calculateStd calculates the standard deviation of a slice of values
+// calculateStd calculates the standard deviation of a slice of values.
 func (df *DataFrame) calculateStd(values []float64) float64 {
 	if len(values) == 0 {
 		return math.NaN()
@@ -2327,12 +2332,12 @@ func (df *DataFrame) calculateStd(values []float64) float64 {
 	return math.Sqrt(variance)
 }
 
-// WindowFunction applies a window function to the DataFrame
+// WindowFunction applies a window function to the DataFrame.
 func (df *DataFrame) WindowFunction(function string, columns ...string) (*DataFrame, error) {
 	return df.WindowFunctionWithPartition(function, strings.Join(columns, ","), "")
 }
 
-// WindowFunctionWithPartition applies a window function with optional partitioning
+// WindowFunctionWithPartition applies a window function with optional partitioning.
 func (df *DataFrame) WindowFunctionWithPartition(function, orderBy, partitionBy string) (*DataFrame, error) {
 	mem := memory.NewGoAllocator()
 	var resultSeries []ISeries
@@ -2353,17 +2358,17 @@ func (df *DataFrame) WindowFunctionWithPartition(function, orderBy, partitionBy 
 		functionResult = df.applyRowNumber(partitionBy, mem)
 	case "rank":
 		if orderBy == "" {
-			return nil, fmt.Errorf("rank function requires order by column")
+			return nil, errors.New("rank function requires order by column")
 		}
 		functionResult, err = df.applyRank(orderBy, partitionBy, mem)
 	case "lag":
 		if orderBy == "" {
-			return nil, fmt.Errorf("lag function requires order by column")
+			return nil, errors.New("lag function requires order by column")
 		}
 		functionResult, err = df.applyLag(orderBy, 1, mem)
 	case "lead":
 		if orderBy == "" {
-			return nil, fmt.Errorf("lead function requires order by column")
+			return nil, errors.New("lead function requires order by column")
 		}
 		functionResult, err = df.applyLead(orderBy, 1, mem)
 	default:
@@ -2379,14 +2384,14 @@ func (df *DataFrame) WindowFunctionWithPartition(function, orderBy, partitionBy 
 	return New(resultSeries...), nil
 }
 
-// applyRowNumber applies row_number window function
+// applyRowNumber applies row_number window function.
 func (df *DataFrame) applyRowNumber(partitionBy string, mem memory.Allocator) ISeries {
 	rowCount := df.Len()
 	results := make([]int64, rowCount)
 
 	if partitionBy == "" {
 		// Simple row numbering
-		for i := 0; i < rowCount; i++ {
+		for i := range rowCount {
 			results[i] = int64(i + 1)
 		}
 	} else {
@@ -2402,7 +2407,7 @@ func (df *DataFrame) applyRowNumber(partitionBy string, mem memory.Allocator) IS
 	return series.New("row_number", results, mem)
 }
 
-// applyRank applies rank window function
+// applyRank applies rank window function.
 func (df *DataFrame) applyRank(orderBy, partitionBy string, mem memory.Allocator) (ISeries, error) {
 	orderSeries, exists := df.Column(orderBy)
 	if !exists {
@@ -2441,7 +2446,7 @@ func (df *DataFrame) applyRank(orderBy, partitionBy string, mem memory.Allocator
 	return series.New("rank", results, mem), nil
 }
 
-// applyLag applies lag window function
+// applyLag applies lag window function.
 func (df *DataFrame) applyLag(column string, offset int, mem memory.Allocator) (ISeries, error) {
 	columnSeries, exists := df.Column(column)
 	if !exists {
@@ -2456,7 +2461,7 @@ func (df *DataFrame) applyLag(column string, offset int, mem memory.Allocator) (
 	return df.createLagLeadSeries("lag", values, offset, true, mem)
 }
 
-// applyLead applies lead window function
+// applyLead applies lead window function.
 func (df *DataFrame) applyLead(column string, offset int, mem memory.Allocator) (ISeries, error) {
 	columnSeries, exists := df.Column(column)
 	if !exists {
@@ -2471,7 +2476,7 @@ func (df *DataFrame) applyLead(column string, offset int, mem memory.Allocator) 
 	return df.createLagLeadSeries("lead", values, offset, false, mem)
 }
 
-// createLagLeadSeries creates a series with proper null handling for lag/lead functions
+// createLagLeadSeries creates a series with proper null handling for lag/lead functions.
 func (df *DataFrame) createLagLeadSeries(
 	name string, values []float64, offset int, isLag bool, mem memory.Allocator,
 ) (ISeries, error) {
@@ -2479,7 +2484,7 @@ func (df *DataFrame) createLagLeadSeries(
 	builder := array.NewFloat64Builder(mem)
 	defer builder.Release()
 
-	for i := 0; i < len(values); i++ {
+	for i := range len(values) {
 		if (isLag && i < offset) || (!isLag && i+offset >= len(values)) {
 			builder.AppendNull()
 		} else {
@@ -2500,7 +2505,7 @@ func (df *DataFrame) createLagLeadSeries(
 	}, nil
 }
 
-// lagLeadSeries is a simple wrapper for lag/lead series that implements ISeries
+// lagLeadSeries is a simple wrapper for lag/lead series that implements ISeries.
 type lagLeadSeries struct {
 	name  string
 	array arrow.Array
@@ -2544,21 +2549,21 @@ func (s *lagLeadSeries) GetAsString(index int) string {
 	case *array.String:
 		return arr.Value(index)
 	case *array.Int64:
-		return fmt.Sprintf("%d", arr.Value(index))
+		return strconv.FormatInt(arr.Value(index), 10)
 	case *array.Int32:
-		return fmt.Sprintf("%d", arr.Value(index))
+		return strconv.Itoa(int(arr.Value(index)))
 	case *array.Float64:
 		return fmt.Sprintf("%g", arr.Value(index))
 	case *array.Float32:
 		return fmt.Sprintf("%g", arr.Value(index))
 	case *array.Boolean:
-		return fmt.Sprintf("%t", arr.Value(index))
+		return strconv.FormatBool(arr.Value(index))
 	default:
 		return s.array.String()
 	}
 }
 
-// buildPartitionGroups builds groups for partitioned window functions
+// buildPartitionGroups builds groups for partitioned window functions.
 func (df *DataFrame) buildPartitionGroups(partitionBy string) map[string][]int {
 	if partitionBy == "" {
 		return map[string][]int{}
@@ -2575,7 +2580,7 @@ func (df *DataFrame) buildPartitionGroups(partitionBy string) map[string][]int {
 	arr := partitionSeries.Array()
 	defer arr.Release()
 
-	for i := 0; i < rowCount; i++ {
+	for i := range rowCount {
 		key := df.getPartitionKey(arr, i)
 		groups[key] = append(groups[key], i)
 	}
@@ -2583,7 +2588,7 @@ func (df *DataFrame) buildPartitionGroups(partitionBy string) map[string][]int {
 	return groups
 }
 
-// getPartitionKey gets the partition key for a row
+// getPartitionKey gets the partition key for a row.
 func (df *DataFrame) getPartitionKey(arr arrow.Array, rowIdx int) string {
 	if arr.IsNull(rowIdx) {
 		return "null"
@@ -2593,17 +2598,17 @@ func (df *DataFrame) getPartitionKey(arr arrow.Array, rowIdx int) string {
 	case *array.String:
 		return typedArr.Value(rowIdx)
 	case *array.Int64:
-		return fmt.Sprintf("%d", typedArr.Value(rowIdx))
+		return strconv.FormatInt(typedArr.Value(rowIdx), 10)
 	case *array.Float64:
 		return fmt.Sprintf("%f", typedArr.Value(rowIdx))
 	case *array.Boolean:
-		return fmt.Sprintf("%t", typedArr.Value(rowIdx))
+		return strconv.FormatBool(typedArr.Value(rowIdx))
 	default:
 		return "unknown"
 	}
 }
 
-// calculateRanks calculates ranks for a slice of values
+// calculateRanks calculates ranks for a slice of values.
 func (df *DataFrame) calculateRanks(values []float64) []int {
 	n := len(values)
 	if n == 0 {

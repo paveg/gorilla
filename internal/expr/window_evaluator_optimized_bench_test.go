@@ -10,7 +10,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 )
 
-// BenchmarkSortPartitionOptimizedVsOriginal compares optimized vs original implementation
+// BenchmarkSortPartitionOptimizedVsOriginal compares optimized vs original implementation.
 func BenchmarkSortPartitionOptimizedVsOriginal(b *testing.B) {
 	partitionSizes := []int{100, 1000, 10000, 50000}
 
@@ -27,7 +27,7 @@ func BenchmarkSortPartitionOptimizedVsOriginal(b *testing.B) {
 			}()
 
 			partition := make([]int, size)
-			for i := 0; i < size; i++ {
+			for i := range size {
 				partition[i] = i
 			}
 
@@ -36,7 +36,7 @@ func BenchmarkSortPartitionOptimizedVsOriginal(b *testing.B) {
 			}
 
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				_ = evaluator.sortPartition(partition, orderBy, columns)
 			}
 		})
@@ -53,7 +53,7 @@ func BenchmarkSortPartitionOptimizedVsOriginal(b *testing.B) {
 			}()
 
 			partition := make([]int, size)
-			for i := 0; i < size; i++ {
+			for i := range size {
 				partition[i] = i
 			}
 
@@ -62,14 +62,14 @@ func BenchmarkSortPartitionOptimizedVsOriginal(b *testing.B) {
 			}
 
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				_ = evaluator.sortPartitionOptimized(partition, orderBy, columns)
 			}
 		})
 	}
 }
 
-// BenchmarkSortPartitionOptimizedMultiColumn tests multi-column sorting performance
+// BenchmarkSortPartitionOptimizedMultiColumn tests multi-column sorting performance.
 func BenchmarkSortPartitionOptimizedMultiColumn(b *testing.B) {
 	size := 10000
 
@@ -85,7 +85,7 @@ func BenchmarkSortPartitionOptimizedMultiColumn(b *testing.B) {
 		}()
 
 		partition := make([]int, size)
-		for i := 0; i < size; i++ {
+		for i := range size {
 			partition[i] = i
 		}
 
@@ -96,7 +96,7 @@ func BenchmarkSortPartitionOptimizedMultiColumn(b *testing.B) {
 		}
 
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			_ = evaluator.sortPartition(partition, orderBy, columns)
 		}
 	})
@@ -113,7 +113,7 @@ func BenchmarkSortPartitionOptimizedMultiColumn(b *testing.B) {
 		}()
 
 		partition := make([]int, size)
-		for i := 0; i < size; i++ {
+		for i := range size {
 			partition[i] = i
 		}
 
@@ -124,13 +124,13 @@ func BenchmarkSortPartitionOptimizedMultiColumn(b *testing.B) {
 		}
 
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			_ = evaluator.sortPartitionOptimized(partition, orderBy, columns)
 		}
 	})
 }
 
-// BenchmarkCompareRowsOptimized benchmarks the optimized type-specific comparators
+// BenchmarkCompareRowsOptimized benchmarks the optimized type-specific comparators.
 func BenchmarkCompareRowsOptimized(b *testing.B) {
 	mem := memory.NewGoAllocator()
 	evaluator := NewEvaluator(mem)
@@ -149,15 +149,15 @@ func BenchmarkCompareRowsOptimized(b *testing.B) {
 
 	b.Run("original_compare", func(b *testing.B) {
 		indices := make([][2]int, b.N)
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			indices[i] = [2]int{
-				rand.Intn(size), //nolint:gosec // Weak random OK for benchmarks
-				rand.Intn(size), //nolint:gosec // Weak random OK for benchmarks
+				rand.Intn(size),
+				rand.Intn(size),
 			}
 		}
 
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			_, _ = evaluator.compareRows(indices[i][0], indices[i][1], orderBy, columns)
 		}
 	})
@@ -165,21 +165,21 @@ func BenchmarkCompareRowsOptimized(b *testing.B) {
 	b.Run("optimized_compare", func(b *testing.B) {
 		comp := createComparator(columns["value"], true)
 		indices := make([][2]int, b.N)
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			indices[i] = [2]int{
-				rand.Intn(size), //nolint:gosec // Weak random OK for benchmarks
-				rand.Intn(size), //nolint:gosec // Weak random OK for benchmarks
+				rand.Intn(size),
+				rand.Intn(size),
 			}
 		}
 
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			_ = comp.Compare(columns["value"], indices[i][0], indices[i][1])
 		}
 	})
 }
 
-// createBenchmarkDataOptimized creates test data for benchmarking
+// createBenchmarkDataOptimized creates test data for benchmarking.
 func createBenchmarkDataOptimized(b *testing.B, mem memory.Allocator, size int) map[string]arrow.Array {
 	b.Helper()
 
@@ -187,8 +187,8 @@ func createBenchmarkDataOptimized(b *testing.B, mem memory.Allocator, size int) 
 	defer valueBuilder.Release()
 
 	values := make([]int64, size)
-	for i := 0; i < size; i++ {
-		values[i] = rand.Int63n(1000000) //nolint:gosec // Weak random OK for benchmarks
+	for i := range size {
+		values[i] = rand.Int63n(1000000)
 	}
 	valueBuilder.AppendValues(values, nil)
 
@@ -197,27 +197,27 @@ func createBenchmarkDataOptimized(b *testing.B, mem memory.Allocator, size int) 
 	}
 }
 
-// createMultiColumnBenchmarkDataOptimized creates test data with multiple columns
+// createMultiColumnBenchmarkDataOptimized creates test data with multiple columns.
 func createMultiColumnBenchmarkDataOptimized(b *testing.B, mem memory.Allocator, size int) map[string]arrow.Array {
 	b.Helper()
 
 	categoryBuilder := array.NewStringBuilder(mem)
 	defer categoryBuilder.Release()
 	categories := []string{"A", "B", "C", "D", "E"}
-	for i := 0; i < size; i++ {
-		categoryBuilder.Append(categories[rand.Intn(len(categories))]) //nolint:gosec // Weak random OK for benchmarks
+	for range size {
+		categoryBuilder.Append(categories[rand.Intn(len(categories))])
 	}
 
 	valueBuilder := array.NewInt64Builder(mem)
 	defer valueBuilder.Release()
-	for i := 0; i < size; i++ {
-		valueBuilder.Append(rand.Int63n(1000)) //nolint:gosec // Weak random OK for benchmarks
+	for range size {
+		valueBuilder.Append(rand.Int63n(1000))
 	}
 
 	scoreBuilder := array.NewFloat64Builder(mem)
 	defer scoreBuilder.Release()
-	for i := 0; i < size; i++ {
-		scoreBuilder.Append(rand.Float64() * 100) //nolint:gosec // Weak random OK for benchmarks
+	for range size {
+		scoreBuilder.Append(rand.Float64() * 100)
 	}
 
 	return map[string]arrow.Array{

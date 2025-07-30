@@ -701,7 +701,7 @@ func TestGroupByOperationMemoryManagement(t *testing.T) {
 		// Create larger dataset to test memory management
 		groups := make([]string, 1000)
 		values := make([]int64, 1000)
-		for i := 0; i < 1000; i++ {
+		for i := range 1000 {
 			groups[i] = string(rune('A' + (i % 5))) // 5 groups
 			values[i] = int64(i)
 		}
@@ -740,7 +740,7 @@ func TestGroupByOperationMemoryManagement(t *testing.T) {
 		defer df.Release()
 
 		// Perform multiple operations with proper cleanup
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			threshold := int64(250 + i*10)
 			havingPredicate := expr.Sum(expr.Col("value")).Gt(expr.Lit(threshold))
 			operation := NewGroupByOperationWithHaving(
@@ -945,7 +945,7 @@ func TestGroupByOperationPerformance(t *testing.T) {
 		size := 10000
 		categories := make([]string, size)
 		values := make([]int64, size)
-		for i := 0; i < size; i++ {
+		for i := range size {
 			categories[i] = string(rune('A' + (i % 100))) // 100 different groups
 			values[i] = int64(i)
 		}
@@ -977,7 +977,7 @@ func TestGroupByOperationPerformance(t *testing.T) {
 	})
 }
 
-// Benchmark tests for GroupByOperation with HAVING
+// Benchmark tests for GroupByOperation with HAVING.
 func BenchmarkGroupByOperationWithHaving(b *testing.B) {
 	mem := memory.NewGoAllocator()
 
@@ -985,7 +985,7 @@ func BenchmarkGroupByOperationWithHaving(b *testing.B) {
 	size := 1000
 	categories := make([]string, size)
 	values := make([]int64, size)
-	for i := 0; i < size; i++ {
+	for i := range size {
 		categories[i] = string(rune('A' + (i % 10))) // 10 groups
 		values[i] = int64(i)
 	}
@@ -1004,7 +1004,7 @@ func BenchmarkGroupByOperationWithHaving(b *testing.B) {
 	)
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		result, err := operation.Apply(df)
 		if err != nil {
 			b.Fatal(err)
@@ -1020,7 +1020,7 @@ func BenchmarkGroupByOperationWithoutHaving(b *testing.B) {
 	size := 1000
 	categories := make([]string, size)
 	values := make([]int64, size)
-	for i := 0; i < size; i++ {
+	for i := range size {
 		categories[i] = string(rune('A' + (i % 10))) // 10 groups
 		values[i] = int64(i)
 	}
@@ -1037,7 +1037,7 @@ func BenchmarkGroupByOperationWithoutHaving(b *testing.B) {
 	)
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		result, err := operation.Apply(df)
 		if err != nil {
 			b.Fatal(err)

@@ -284,13 +284,13 @@ func TestOptimizedHashMap(t *testing.T) {
 		hashMap := NewOptimizedHashMap(4) // Small initial capacity
 
 		// Add enough entries to trigger resize
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			key := fmt.Sprintf("key%d", i)
 			hashMap.Put(key, i)
 		}
 
 		// Verify all entries are still accessible
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			key := fmt.Sprintf("key%d", i)
 			val, ok := hashMap.Get(key)
 			assert.True(t, ok)
@@ -324,14 +324,14 @@ func TestOptimizedHashJoin(t *testing.T) {
 		size := 6000
 		leftIDs := make([]int64, size)
 		leftValues := make([]string, size)
-		for i := 0; i < size; i++ {
+		for i := range size {
 			leftIDs[i] = int64(i)
 			leftValues[i] = fmt.Sprintf("left_%d", i)
 		}
 
 		rightIDs := make([]int64, size/2)
 		rightScores := make([]float64, size/2)
-		for i := 0; i < size/2; i++ {
+		for i := range size / 2 {
 			rightIDs[i] = int64(i * 2) // Every other ID
 			rightScores[i] = float64(i) * 1.5
 		}
@@ -406,7 +406,7 @@ func TestOptimizedJoin_Integration(t *testing.T) {
 	})
 }
 
-// Benchmark functions
+// Benchmark functions.
 func BenchmarkJoinStrategies(b *testing.B) {
 	mem := memory.NewGoAllocator()
 
@@ -434,7 +434,7 @@ func BenchmarkJoinStrategies(b *testing.B) {
 		}
 
 		b.Run(fmt.Sprintf("StandardHashJoin_%d", size), func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				result, err := left.Join(right, options)
 				if err != nil {
 					b.Fatal(err)
@@ -444,7 +444,7 @@ func BenchmarkJoinStrategies(b *testing.B) {
 		})
 
 		b.Run(fmt.Sprintf("OptimizedHashJoin_%d", size), func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				result, err := left.optimizedHashJoin(right, []string{"id"}, []string{"id"}, InnerJoin)
 				if err != nil {
 					b.Fatal(err)
@@ -454,7 +454,7 @@ func BenchmarkJoinStrategies(b *testing.B) {
 		})
 
 		b.Run(fmt.Sprintf("MergeJoin_%d", size), func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				result, err := left.mergeJoin(right, []string{"id"}, []string{"id"}, InnerJoin)
 				if err != nil {
 					b.Fatal(err)
@@ -465,7 +465,7 @@ func BenchmarkJoinStrategies(b *testing.B) {
 
 		if size <= 1000 {
 			b.Run(fmt.Sprintf("BroadcastJoin_%d", size), func(b *testing.B) {
-				for i := 0; i < b.N; i++ {
+				for range b.N {
 					result, err := left.broadcastJoin(right, []string{"id"}, []string{"id"}, InnerJoin)
 					if err != nil {
 						b.Fatal(err)
@@ -485,9 +485,9 @@ func BenchmarkOptimizedHashMap(b *testing.B) {
 
 	for _, size := range sizes {
 		b.Run(fmt.Sprintf("OptimizedHashMap_Put_%d", size), func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				hashMap := NewOptimizedHashMap(size)
-				for j := 0; j < size; j++ {
+				for j := range size {
 					key := fmt.Sprintf("key%d", j)
 					hashMap.Put(key, j)
 				}
@@ -495,9 +495,9 @@ func BenchmarkOptimizedHashMap(b *testing.B) {
 		})
 
 		b.Run(fmt.Sprintf("StandardMap_Put_%d", size), func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				m := make(map[string][]int)
-				for j := 0; j < size; j++ {
+				for j := range size {
 					key := fmt.Sprintf("key%d", j)
 					m[key] = append(m[key], j)
 				}

@@ -2,6 +2,7 @@
 package version
 
 import (
+	"errors"
 	"fmt"
 	"runtime"
 	"runtime/debug"
@@ -9,14 +10,14 @@ import (
 	"time"
 )
 
-// Constants for magic numbers and repeated strings
+// Constants for magic numbers and repeated strings.
 const (
 	unknownValue     = "unknown"
 	commitHashLength = 7
 	semVerPartsCount = 3
 )
 
-// Build-time variables set by ldflags
+// Build-time variables set by ldflags.
 var (
 	Version   = "dev"
 	BuildDate = unknownValue
@@ -25,7 +26,7 @@ var (
 	GoVersion = runtime.Version()
 )
 
-// BuildInfo contains detailed build information
+// BuildInfo contains detailed build information.
 type BuildInfo struct {
 	Version   string    `json:"version"`
 	BuildDate string    `json:"build_date"`
@@ -39,20 +40,20 @@ type BuildInfo struct {
 	Settings  []Setting `json:"settings"`
 }
 
-// Module represents a Go module with version information
+// Module represents a Go module with version information.
 type Module struct {
 	Path    string `json:"path"`
 	Version string `json:"version"`
 	Sum     string `json:"sum"`
 }
 
-// Setting represents a build setting
+// Setting represents a build setting.
 type Setting struct {
 	Key   string `json:"key"`
 	Value string `json:"value"`
 }
 
-// Info returns detailed build information
+// Info returns detailed build information.
 func Info() BuildInfo {
 	buildTime, _ := time.Parse(time.RFC3339, BuildDate)
 	if buildTime.IsZero() {
@@ -96,7 +97,7 @@ func Info() BuildInfo {
 	return info
 }
 
-// String returns a formatted version string
+// String returns a formatted version string.
 func (b BuildInfo) String() string {
 	var sb strings.Builder
 	sb.WriteString("Gorilla DataFrame Library\n")
@@ -132,24 +133,24 @@ func (b BuildInfo) String() string {
 	return sb.String()
 }
 
-// UserAgent returns a user agent string for HTTP requests
+// UserAgent returns a user agent string for HTTP requests.
 func UserAgent() string {
 	return fmt.Sprintf("gorilla-dataframe/%s", Version)
 }
 
-// IsRelease returns true if this is a release version (not dev)
+// IsRelease returns true if this is a release version (not dev).
 func IsRelease() bool {
 	return Version != "dev" && !strings.Contains(Version, "-")
 }
 
-// IsPreRelease returns true if this is a pre-release version
+// IsPreRelease returns true if this is a pre-release version.
 func IsPreRelease() bool {
 	return strings.Contains(Version, "-alpha") ||
 		strings.Contains(Version, "-beta") ||
 		strings.Contains(Version, "-rc")
 }
 
-// SemVer represents semantic version components
+// SemVer represents semantic version components.
 type SemVer struct {
 	Major      int
 	Minor      int
@@ -172,7 +173,7 @@ type SemVer struct {
 //   - "1.0.0+build.1" -> SemVer{Major: 1, Minor: 0, Patch: 0, Build: "build.1"}
 func ParseSemVer(version string) (*SemVer, error) {
 	if version == "" {
-		return nil, fmt.Errorf("version string cannot be empty")
+		return nil, errors.New("version string cannot be empty")
 	}
 
 	version = strings.TrimPrefix(version, "v")
@@ -219,7 +220,7 @@ func ParseSemVer(version string) (*SemVer, error) {
 	}, nil
 }
 
-// String returns the semantic version as a string
+// String returns the semantic version as a string.
 func (s *SemVer) String() string {
 	version := fmt.Sprintf("%d.%d.%d", s.Major, s.Minor, s.Patch)
 	if s.PreRelease != "" {
@@ -232,7 +233,7 @@ func (s *SemVer) String() string {
 }
 
 // Compare compares two semantic versions
-// Returns: -1 if s < other, 0 if s == other, 1 if s > other
+// Returns: -1 if s < other, 0 if s == other, 1 if s > other.
 func (s *SemVer) Compare(other *SemVer) int {
 	// Compare major.minor.patch
 	if s.Major != other.Major {

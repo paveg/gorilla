@@ -1,7 +1,6 @@
 package series
 
 import (
-	"errors"
 	"testing"
 	"time"
 
@@ -94,7 +93,7 @@ func TestNewSafe_UnsupportedTypes(t *testing.T) {
 				assert.Nil(t, series)
 
 				var dfErr *dferrors.DataFrameError
-				require.True(t, errors.As(err, &dfErr))
+				require.ErrorAs(t, err, &dfErr)
 				assert.Equal(t, "series creation", dfErr.Op)
 				assert.Contains(t, dfErr.Message, "complex128")
 			case []struct{ X int }:
@@ -103,7 +102,7 @@ func TestNewSafe_UnsupportedTypes(t *testing.T) {
 				assert.Nil(t, series)
 
 				var dfErr *dferrors.DataFrameError
-				require.True(t, errors.As(err, &dfErr))
+				require.ErrorAs(t, err, &dfErr)
 				assert.Equal(t, "series creation", dfErr.Op)
 				assert.Contains(t, dfErr.Message, "struct")
 			case []map[string]int:
@@ -157,7 +156,7 @@ func TestValuesSafe_SupportedTypes(t *testing.T) {
 
 		values, err := series.ValuesSafe()
 		require.NoError(t, err)
-		require.Equal(t, len(original), len(values))
+		require.Len(t, values, len(original))
 
 		// Time values should be approximately equal (within nanosecond precision)
 		for i, expected := range original {
@@ -241,7 +240,7 @@ func TestNew_vs_NewSafe_Panics(t *testing.T) {
 		assert.Nil(t, series)
 
 		var dfErr *dferrors.DataFrameError
-		require.True(t, errors.As(err, &dfErr))
+		require.ErrorAs(t, err, &dfErr)
 		assert.Equal(t, "series creation", dfErr.Op)
 		assert.Contains(t, dfErr.Message, "unsupported type")
 	})
@@ -255,7 +254,7 @@ func TestValuesSafe_Performance(t *testing.T) {
 	// Create large dataset
 	size := 10000
 	data := make([]int64, size)
-	for i := 0; i < size; i++ {
+	for i := range size {
 		data[i] = int64(i)
 	}
 
@@ -264,7 +263,7 @@ func TestValuesSafe_Performance(t *testing.T) {
 
 	values, err := series.ValuesSafe()
 	require.NoError(t, err)
-	assert.Equal(t, size, len(values))
+	assert.Len(t, values, size)
 	assert.Equal(t, int64(0), values[0])
 	assert.Equal(t, int64(size-1), values[size-1])
 }

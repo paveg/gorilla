@@ -10,7 +10,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 )
 
-// benchmarkSortPartition benchmarks the sortPartition function with different data sizes
+// benchmarkSortPartition benchmarks the sortPartition function with different data sizes.
 func BenchmarkSortPartition(b *testing.B) {
 	partitionSizes := []int{100, 1000, 10000, 50000}
 
@@ -29,7 +29,7 @@ func BenchmarkSortPartition(b *testing.B) {
 
 			// Create partition indices
 			partition := make([]int, size)
-			for i := 0; i < size; i++ {
+			for i := range size {
 				partition[i] = i
 			}
 
@@ -39,14 +39,14 @@ func BenchmarkSortPartition(b *testing.B) {
 			}
 
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				_ = evaluator.sortPartition(partition, orderBy, columns)
 			}
 		})
 	}
 }
 
-// benchmarkCompareRows benchmarks the compareRows function
+// benchmarkCompareRows benchmarks the compareRows function.
 func BenchmarkCompareRows(b *testing.B) {
 	mem := memory.NewGoAllocator()
 	evaluator := NewEvaluator(mem)
@@ -64,20 +64,20 @@ func BenchmarkCompareRows(b *testing.B) {
 
 	// Generate random indices to compare
 	indices := make([][2]int, b.N)
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		indices[i] = [2]int{
-			rand.Intn(10000), //nolint:gosec // Weak random OK for benchmarks
-			rand.Intn(10000), //nolint:gosec // Weak random OK for benchmarks
+			rand.Intn(10000),
+			rand.Intn(10000),
 		}
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		_, _ = evaluator.compareRows(indices[i][0], indices[i][1], orderBy, columns)
 	}
 }
 
-// BenchmarkSortPartitionMultiColumn benchmarks sorting with multiple columns
+// BenchmarkSortPartitionMultiColumn benchmarks sorting with multiple columns.
 func BenchmarkSortPartitionMultiColumn(b *testing.B) {
 	mem := memory.NewGoAllocator()
 	evaluator := NewEvaluator(mem)
@@ -91,7 +91,7 @@ func BenchmarkSortPartitionMultiColumn(b *testing.B) {
 	}()
 
 	partition := make([]int, size)
-	for i := 0; i < size; i++ {
+	for i := range size {
 		partition[i] = i
 	}
 
@@ -102,12 +102,12 @@ func BenchmarkSortPartitionMultiColumn(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_ = evaluator.sortPartition(partition, orderBy, columns)
 	}
 }
 
-// createBenchmarkData creates test data for benchmarking
+// createBenchmarkData creates test data for benchmarking.
 func createBenchmarkData(b *testing.B, mem memory.Allocator, size int) map[string]arrow.Array {
 	b.Helper()
 
@@ -116,8 +116,8 @@ func createBenchmarkData(b *testing.B, mem memory.Allocator, size int) map[strin
 	defer valueBuilder.Release()
 
 	values := make([]int64, size)
-	for i := 0; i < size; i++ {
-		values[i] = rand.Int63n(1000000) //nolint:gosec // Weak random OK for benchmarks
+	for i := range size {
+		values[i] = rand.Int63n(1000000)
 	}
 	valueBuilder.AppendValues(values, nil)
 
@@ -126,7 +126,7 @@ func createBenchmarkData(b *testing.B, mem memory.Allocator, size int) map[strin
 	}
 }
 
-// createMultiColumnBenchmarkData creates test data with multiple columns
+// createMultiColumnBenchmarkData creates test data with multiple columns.
 func createMultiColumnBenchmarkData(b *testing.B, mem memory.Allocator, size int) map[string]arrow.Array {
 	b.Helper()
 
@@ -134,22 +134,22 @@ func createMultiColumnBenchmarkData(b *testing.B, mem memory.Allocator, size int
 	categoryBuilder := array.NewStringBuilder(mem)
 	defer categoryBuilder.Release()
 	categories := []string{"A", "B", "C", "D", "E"}
-	for i := 0; i < size; i++ {
-		categoryBuilder.Append(categories[rand.Intn(len(categories))]) //nolint:gosec // Weak random OK for benchmarks
+	for range size {
+		categoryBuilder.Append(categories[rand.Intn(len(categories))])
 	}
 
 	// Create value column (int64)
 	valueBuilder := array.NewInt64Builder(mem)
 	defer valueBuilder.Release()
-	for i := 0; i < size; i++ {
-		valueBuilder.Append(rand.Int63n(1000)) //nolint:gosec // Weak random OK for benchmarks
+	for range size {
+		valueBuilder.Append(rand.Int63n(1000))
 	}
 
 	// Create score column (float64)
 	scoreBuilder := array.NewFloat64Builder(mem)
 	defer scoreBuilder.Release()
-	for i := 0; i < size; i++ {
-		scoreBuilder.Append(rand.Float64() * 100) //nolint:gosec // Weak random OK for benchmarks
+	for range size {
+		scoreBuilder.Append(rand.Float64() * 100)
 	}
 
 	return map[string]arrow.Array{

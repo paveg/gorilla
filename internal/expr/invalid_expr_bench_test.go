@@ -13,26 +13,26 @@ func BenchmarkInvalidExprCreation(b *testing.B) {
 		message := "test error message"
 
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			_ = Invalid(message)
 		}
 	})
 
 	b.Run("create invalid vs regular expression", func(b *testing.B) {
 		b.Run("invalid", func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				_ = Invalid("error message")
 			}
 		})
 
 		b.Run("column", func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				_ = Col("test")
 			}
 		})
 
 		b.Run("literal", func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				_ = Lit(42)
 			}
 		})
@@ -48,7 +48,7 @@ func BenchmarkInvalidExprEvaluation(b *testing.B) {
 		invalidExpr := Invalid("benchmark error")
 
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			_, _ = eval.Evaluate(invalidExpr, columns)
 		}
 	})
@@ -57,7 +57,7 @@ func BenchmarkInvalidExprEvaluation(b *testing.B) {
 		invalidExpr := Invalid("benchmark boolean error")
 
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			_, _ = eval.EvaluateBoolean(invalidExpr, columns)
 		}
 	})
@@ -77,7 +77,7 @@ func BenchmarkErrorPathVsSuccessPath(b *testing.B) {
 		colExpr := Col("age")
 
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			result, _ := eval.Evaluate(colExpr, columns)
 			if result != nil {
 				result.Release()
@@ -89,7 +89,7 @@ func BenchmarkErrorPathVsSuccessPath(b *testing.B) {
 		invalidExpr := Invalid("benchmark error path")
 
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			_, _ = eval.Evaluate(invalidExpr, columns)
 		}
 	})

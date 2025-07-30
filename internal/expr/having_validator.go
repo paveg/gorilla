@@ -1,6 +1,7 @@
 package expr
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -44,7 +45,7 @@ func NewHavingValidatorWithAlias(
 // column references are valid (either GROUP BY columns or aggregated columns).
 func (hv *HavingValidator) ValidateExpression(expr Expr) error {
 	if expr == nil {
-		return fmt.Errorf("expression cannot be nil")
+		return errors.New("expression cannot be nil")
 	}
 
 	switch e := expr.(type) {

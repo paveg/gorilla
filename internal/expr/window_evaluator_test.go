@@ -50,7 +50,13 @@ func TestEvaluateWindowFunction(t *testing.T) {
 			windowExpr: Rank().Over(
 				NewWindow().PartitionBy("department").OrderBy("salary", false),
 			),
-			expectedValues: []interface{}{int64(2), int64(1), int64(2), int64(1), int64(1)}, // Same as ROW_NUMBER for this data
+			expectedValues: []interface{}{
+				int64(2),
+				int64(1),
+				int64(2),
+				int64(1),
+				int64(1),
+			}, // Same as ROW_NUMBER for this data
 		},
 		{
 			name: "DENSE_RANK with partition",
@@ -207,7 +213,14 @@ func TestWindowFunctions_DuplicateValues(t *testing.T) {
 			windowExpr: DenseRank().Over(
 				NewWindow().PartitionBy("department").OrderBy("salary", true),
 			),
-			expectedValues: []interface{}{int64(1), int64(2), int64(2), int64(1), int64(1), int64(2)}, // DENSE_RANK has no gaps
+			expectedValues: []interface{}{
+				int64(1),
+				int64(2),
+				int64(2),
+				int64(1),
+				int64(1),
+				int64(2),
+			}, // DENSE_RANK has no gaps
 		},
 	}
 
@@ -236,7 +249,7 @@ func TestEvaluateWindowFrame_TODO(t *testing.T) {
 	// Tests would go here
 }
 
-// Test edge cases for improved coverage
+// Test edge cases for improved coverage.
 func TestEvaluateWindowFunction_EdgeCases(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
@@ -386,7 +399,7 @@ func TestEvaluateWindowAggregation_EdgeCases(t *testing.T) {
 		assert.Equal(t, 3, result.Len())
 
 		int64Array := result.(*array.Int64)
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			assert.Equal(t, int64(3), int64Array.Value(i))
 		}
 	})
@@ -418,7 +431,7 @@ func TestWindowFunction_SortingPerformance(t *testing.T) {
 		}
 
 		sorted := evaluator.sortPartition(partition, orderBy, columns)
-		assert.Equal(t, 1000, len(sorted))
+		assert.Len(t, sorted, 1000)
 
 		// Verify first few elements are sorted correctly
 		assert.Equal(t, 999, sorted[0]) // Index of smallest value (1)

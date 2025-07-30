@@ -44,7 +44,7 @@ func TestSQLTranslatorBasic(t *testing.T) {
 	defer result.Release()
 
 	assert.Equal(t, 4, result.Len())
-	assert.Equal(t, 2, len(result.Columns()))
+	assert.Len(t, result.Columns(), 2)
 	assert.True(t, result.HasColumn("name"))
 	assert.True(t, result.HasColumn("age"))
 }
@@ -72,7 +72,7 @@ func TestSQLTranslatorWildcard(t *testing.T) {
 	defer result.Release()
 
 	assert.Equal(t, 4, result.Len())
-	assert.Equal(t, 5, len(result.Columns())) // All original columns
+	assert.Len(t, result.Columns(), 5) // All original columns
 }
 
 func TestSQLTranslatorWhere(t *testing.T) {
@@ -98,7 +98,7 @@ func TestSQLTranslatorWhere(t *testing.T) {
 	defer result.Release()
 
 	assert.Equal(t, 1, result.Len()) // Only Charlie (age 35)
-	assert.Equal(t, 1, len(result.Columns()))
+	assert.Len(t, result.Columns(), 1)
 }
 
 func TestSQLTranslatorGroupBy(t *testing.T) {
@@ -124,7 +124,7 @@ func TestSQLTranslatorGroupBy(t *testing.T) {
 	defer result.Release()
 
 	assert.Equal(t, 3, result.Len()) // Engineering, Sales, Marketing
-	assert.Equal(t, 2, len(result.Columns()))
+	assert.Len(t, result.Columns(), 2)
 	assert.True(t, result.HasColumn("department"))
 }
 
@@ -177,7 +177,7 @@ func TestSQLTranslatorComputedColumns(t *testing.T) {
 	defer result.Release()
 
 	assert.Equal(t, 4, result.Len())
-	assert.Equal(t, 2, len(result.Columns()))
+	assert.Len(t, result.Columns(), 2)
 	assert.True(t, result.HasColumn("name"))
 	assert.True(t, result.HasColumn("double_age"))
 }
@@ -358,7 +358,7 @@ func TestSQLTranslatorTableManagement(t *testing.T) {
 	// Test table clearing
 	translator.ClearTables()
 	tables = translator.GetRegisteredTables()
-	assert.Len(t, tables, 0)
+	assert.Empty(t, tables)
 }
 
 func TestSQLTranslatorErrors(t *testing.T) {
@@ -424,8 +424,8 @@ func TestComplexSQLTranslation(t *testing.T) {
 	defer result.Release()
 
 	// Should have results grouped by department for active employees
-	assert.Greater(t, result.Len(), 0)
-	assert.Equal(t, 3, len(result.Columns())) // department, avg_salary, count
+	assert.Positive(t, result.Len())
+	assert.Len(t, result.Columns(), 3) // department, avg_salary, count
 	assert.True(t, result.HasColumn("department"))
 	assert.True(t, result.HasColumn("avg_salary"))
 	assert.True(t, result.HasColumn("count"))

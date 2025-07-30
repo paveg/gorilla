@@ -10,7 +10,7 @@ import (
 	"github.com/paveg/gorilla/internal/series"
 )
 
-// Example demonstrating arithmetic expressions in HAVING predicates
+// Example demonstrating arithmetic expressions in HAVING predicates.
 func main() {
 	mem := memory.NewGoAllocator()
 

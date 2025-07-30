@@ -126,7 +126,7 @@ func TestConfig_LoadFromJSON(t *testing.T) {
 
 func TestConfig_LoadFromFile(t *testing.T) {
 	// Create temporary test file
-	tmpFile, err := os.CreateTemp("", "config_test_*.json")
+	tmpFile, err := os.CreateTemp(t.TempDir(), "config_test_*.json")
 	require.NoError(t, err)
 	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
@@ -242,14 +242,14 @@ func TestConfig_PerformanceDefaults(t *testing.T) {
 	config := NewConfig()
 
 	// Test that performance-related defaults are sensible
-	assert.Greater(t, config.ParallelThreshold, 0)
+	assert.Positive(t, config.ParallelThreshold)
 	assert.GreaterOrEqual(t, config.WorkerPoolSize, 0)
 	assert.GreaterOrEqual(t, config.ChunkSize, 0)
-	assert.Greater(t, config.MaxParallelism, 0)
+	assert.Positive(t, config.MaxParallelism)
 	assert.GreaterOrEqual(t, config.MemoryThreshold, int64(0))
 	assert.GreaterOrEqual(t, config.GCPressureThreshold, 0.0)
 	assert.LessOrEqual(t, config.GCPressureThreshold, 1.0)
-	assert.Greater(t, config.AllocatorPoolSize, 0)
+	assert.Positive(t, config.AllocatorPoolSize)
 }
 
 func TestConfig_BooleanDefaults(t *testing.T) {
@@ -268,7 +268,7 @@ func TestConfig_BooleanDefaults(t *testing.T) {
 
 func TestConfig_UnsupportedFileFormat(t *testing.T) {
 	// Create temporary file with unsupported extension
-	tmpFile, err := os.CreateTemp("", "config_test_*.xyz")
+	tmpFile, err := os.CreateTemp(t.TempDir(), "config_test_*.xyz")
 	require.NoError(t, err)
 	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
@@ -326,8 +326,8 @@ func TestConfig_EnvironmentVariableParsing(t *testing.T) {
 func TestConfig_SystemInfo(t *testing.T) {
 	info := GetSystemInfo()
 
-	assert.Greater(t, info.CPUCount, 0)
-	assert.Greater(t, info.MemorySize, int64(0))
+	assert.Positive(t, info.CPUCount)
+	assert.Positive(t, info.MemorySize)
 	assert.NotEmpty(t, info.Architecture)
 	assert.NotEmpty(t, info.OSType)
 }
@@ -347,13 +347,13 @@ func TestConfig_ValidationRecommendations(t *testing.T) {
 	validatedConfig, warnings, err := validator.Validate(config)
 	require.NoError(t, err)
 
-	assert.NotEmpty(t, warnings)                         // Should have warnings about auto-detection
-	assert.Greater(t, validatedConfig.WorkerPoolSize, 0) // Should be auto-set
+	assert.NotEmpty(t, warnings)                       // Should have warnings about auto-detection
+	assert.Positive(t, validatedConfig.WorkerPoolSize) // Should be auto-set
 }
 
 func TestConfig_LoadFromYAML(t *testing.T) {
 	// Create temporary YAML file
-	tmpFile, err := os.CreateTemp("", "config_test_*.yaml")
+	tmpFile, err := os.CreateTemp(t.TempDir(), "config_test_*.yaml")
 	require.NoError(t, err)
 	defer func() { _ = os.Remove(tmpFile.Name()) }()
 

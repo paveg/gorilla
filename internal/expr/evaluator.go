@@ -1,7 +1,9 @@
 package expr
 
 import (
+	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -10,7 +12,7 @@ import (
 	dferrors "github.com/paveg/gorilla/internal/errors"
 )
 
-// Type name constants
+// Type name constants.
 const (
 	typeInt32   = "int32"
 	typeInt64   = "int64"
@@ -18,17 +20,17 @@ const (
 	typeFloat64 = "float64"
 	typeDouble  = "double"
 
-	// Time constants
+	// Time constants.
 	nanosPerSecond = 1e9
 
-	// Date/time arithmetic constants
+	// Date/time arithmetic constants.
 	dateAddArgsCount  = 2
 	dateSubArgsCount  = 2
 	dateDiffArgsCount = 3
 	hoursPerDay       = 24
 	monthsPerYear     = 12
 
-	// Date/time unit constants
+	// Date/time unit constants.
 	unitDays    = "days"
 	unitHours   = "hours"
 	unitMinutes = "minutes"
@@ -37,7 +39,7 @@ const (
 	unitYears   = "years"
 )
 
-// Type hierarchy levels
+// Type hierarchy levels.
 const (
 	levelInt32   = 1
 	levelInt64   = 2
@@ -46,12 +48,12 @@ const (
 	levelDouble  = 4
 )
 
-// Evaluator evaluates expressions against Arrow arrays
+// Evaluator evaluates expressions against Arrow arrays.
 type Evaluator struct {
 	mem memory.Allocator
 }
 
-// NewEvaluator creates a new expression evaluator
+// NewEvaluator creates a new expression evaluator.
 func NewEvaluator(mem memory.Allocator) *Evaluator {
 	if mem == nil {
 		mem = memory.NewGoAllocator()
@@ -59,8 +61,12 @@ func NewEvaluator(mem memory.Allocator) *Evaluator {
 	return &Evaluator{mem: mem}
 }
 
-// EvaluateWithContext evaluates an expression with a specific evaluation context
-func (e *Evaluator) EvaluateWithContext(expr Expr, columns map[string]arrow.Array, ctx EvaluationContext) (arrow.Array, error) {
+// EvaluateWithContext evaluates an expression with a specific evaluation context.
+func (e *Evaluator) EvaluateWithContext(
+	expr Expr,
+	columns map[string]arrow.Array,
+	ctx EvaluationContext,
+) (arrow.Array, error) {
 	// Validate context support
 	if err := e.validateContextSupport(expr, ctx); err != nil {
 		return nil, err
@@ -89,8 +95,12 @@ func (e *Evaluator) EvaluateWithContext(expr Expr, columns map[string]arrow.Arra
 	}
 }
 
-// EvaluateBooleanWithContext evaluates an expression that should return a boolean array with context
-func (e *Evaluator) EvaluateBooleanWithContext(expr Expr, columns map[string]arrow.Array, ctx EvaluationContext) (arrow.Array, error) {
+// EvaluateBooleanWithContext evaluates an expression that should return a boolean array with context.
+func (e *Evaluator) EvaluateBooleanWithContext(
+	expr Expr,
+	columns map[string]arrow.Array,
+	ctx EvaluationContext,
+) (arrow.Array, error) {
 	// Validate context support
 	if err := e.validateContextSupport(expr, ctx); err != nil {
 		return nil, err
@@ -110,7 +120,7 @@ func (e *Evaluator) EvaluateBooleanWithContext(expr Expr, columns map[string]arr
 	}
 }
 
-// validateContextSupport validates that an expression supports the given context
+// validateContextSupport validates that an expression supports the given context.
 func (e *Evaluator) validateContextSupport(expr Expr, ctx EvaluationContext) error {
 	if contextualExpr, ok := expr.(ContextualExpr); ok {
 		if !contextualExpr.SupportsContext(ctx) {
@@ -120,7 +130,7 @@ func (e *Evaluator) validateContextSupport(expr Expr, ctx EvaluationContext) err
 	return nil
 }
 
-// EvaluateBoolean evaluates an expression that should return a boolean array
+// EvaluateBoolean evaluates an expression that should return a boolean array.
 func (e *Evaluator) EvaluateBoolean(expr Expr, columns map[string]arrow.Array) (arrow.Array, error) {
 	switch ex := expr.(type) {
 	case *ColumnExpr:
@@ -160,22 +170,34 @@ func (e *Evaluator) Evaluate(expr Expr, columns map[string]arrow.Array) (arrow.A
 
 // Context-aware evaluation methods for each expression type
 
-// evaluateColumnWithContext evaluates a column expression with context
-func (e *Evaluator) evaluateColumnWithContext(expr *ColumnExpr, columns map[string]arrow.Array, ctx EvaluationContext) (arrow.Array, error) {
+// evaluateColumnWithContext evaluates a column expression with context.
+func (e *Evaluator) evaluateColumnWithContext(
+	expr *ColumnExpr,
+	columns map[string]arrow.Array,
+	ctx EvaluationContext,
+) (arrow.Array, error) {
 	// Column evaluation is the same in both contexts, but the column names/data may differ
 	_ = ctx // Context is validated before this method is called
 	return e.evaluateColumn(expr, columns)
 }
 
-// evaluateLiteralWithContext evaluates a literal expression with context
-func (e *Evaluator) evaluateLiteralWithContext(expr *LiteralExpr, columns map[string]arrow.Array, ctx EvaluationContext) (arrow.Array, error) {
+// evaluateLiteralWithContext evaluates a literal expression with context.
+func (e *Evaluator) evaluateLiteralWithContext(
+	expr *LiteralExpr,
+	columns map[string]arrow.Array,
+	ctx EvaluationContext,
+) (arrow.Array, error) {
 	// Literal evaluation is context-independent
 	_ = ctx // Context is validated before this method is called
 	return e.evaluateLiteral(expr, columns)
 }
 
-// evaluateBinaryWithContext evaluates a binary expression with context
-func (e *Evaluator) evaluateBinaryWithContext(expr *BinaryExpr, columns map[string]arrow.Array, ctx EvaluationContext) (arrow.Array, error) {
+// evaluateBinaryWithContext evaluates a binary expression with context.
+func (e *Evaluator) evaluateBinaryWithContext(
+	expr *BinaryExpr,
+	columns map[string]arrow.Array,
+	ctx EvaluationContext,
+) (arrow.Array, error) {
 	// Validate context support for operands
 	if err := e.validateContextSupport(expr.left, ctx); err != nil {
 		return nil, fmt.Errorf("validating left operand context: %w", err)
@@ -210,8 +232,12 @@ func (e *Evaluator) evaluateBinaryWithContext(expr *BinaryExpr, columns map[stri
 	}
 }
 
-// evaluateBinaryBooleanWithContext evaluates a binary expression that returns boolean with context
-func (e *Evaluator) evaluateBinaryBooleanWithContext(expr *BinaryExpr, columns map[string]arrow.Array, ctx EvaluationContext) (arrow.Array, error) {
+// evaluateBinaryBooleanWithContext evaluates a binary expression that returns boolean with context.
+func (e *Evaluator) evaluateBinaryBooleanWithContext(
+	expr *BinaryExpr,
+	columns map[string]arrow.Array,
+	ctx EvaluationContext,
+) (arrow.Array, error) {
 	// Validate context support for operands
 	if err := e.validateContextSupport(expr.left, ctx); err != nil {
 		return nil, fmt.Errorf("validating left operand context: %w", err)
@@ -244,22 +270,34 @@ func (e *Evaluator) evaluateBinaryBooleanWithContext(expr *BinaryExpr, columns m
 	}
 }
 
-// evaluateColumnBooleanWithContext evaluates a column expression that should return boolean with context
-func (e *Evaluator) evaluateColumnBooleanWithContext(expr *ColumnExpr, columns map[string]arrow.Array, ctx EvaluationContext) (arrow.Array, error) {
+// evaluateColumnBooleanWithContext evaluates a column expression that should return boolean with context.
+func (e *Evaluator) evaluateColumnBooleanWithContext(
+	expr *ColumnExpr,
+	columns map[string]arrow.Array,
+	ctx EvaluationContext,
+) (arrow.Array, error) {
 	// Column boolean evaluation is the same in both contexts
 	_ = ctx // Context is validated before this method is called
 	return e.evaluateColumnBoolean(expr, columns)
 }
 
-// evaluateLiteralBooleanWithContext evaluates a literal expression that should return boolean with context
-func (e *Evaluator) evaluateLiteralBooleanWithContext(expr *LiteralExpr, columns map[string]arrow.Array, ctx EvaluationContext) (arrow.Array, error) {
+// evaluateLiteralBooleanWithContext evaluates a literal expression that should return boolean with context.
+func (e *Evaluator) evaluateLiteralBooleanWithContext(
+	expr *LiteralExpr,
+	columns map[string]arrow.Array,
+	ctx EvaluationContext,
+) (arrow.Array, error) {
 	// Literal boolean evaluation is context-independent
 	_ = ctx // Context is validated before this method is called
 	return e.evaluateLiteralBoolean(expr, columns)
 }
 
-// evaluateFunctionWithContext evaluates a function expression with context
-func (e *Evaluator) evaluateFunctionWithContext(expr *FunctionExpr, columns map[string]arrow.Array, ctx EvaluationContext) (arrow.Array, error) {
+// evaluateFunctionWithContext evaluates a function expression with context.
+func (e *Evaluator) evaluateFunctionWithContext(
+	expr *FunctionExpr,
+	columns map[string]arrow.Array,
+	ctx EvaluationContext,
+) (arrow.Array, error) {
 	// Validate context support for function arguments
 	for i, arg := range expr.args {
 		if err := e.validateContextSupport(arg, ctx); err != nil {
@@ -272,8 +310,12 @@ func (e *Evaluator) evaluateFunctionWithContext(expr *FunctionExpr, columns map[
 	return e.evaluateFunction(expr, columns)
 }
 
-// evaluateAggregationWithContext evaluates an aggregation expression with context
-func (e *Evaluator) evaluateAggregationWithContext(expr *AggregationExpr, columns map[string]arrow.Array, ctx EvaluationContext) (arrow.Array, error) {
+// evaluateAggregationWithContext evaluates an aggregation expression with context.
+func (e *Evaluator) evaluateAggregationWithContext(
+	expr *AggregationExpr,
+	columns map[string]arrow.Array,
+	ctx EvaluationContext,
+) (arrow.Array, error) {
 	// Aggregation expressions can only be evaluated in GroupContext
 	if ctx != GroupContext {
 		return nil, fmt.Errorf("aggregation expressions can only be evaluated in GroupContext, got %s", ctx.String())
@@ -286,8 +328,12 @@ func (e *Evaluator) evaluateAggregationWithContext(expr *AggregationExpr, column
 	return e.evaluateAggregationValue(expr, columns)
 }
 
-// evaluateWindowWithContext evaluates a window expression with context
-func (e *Evaluator) evaluateWindowWithContext(expr *WindowExpr, columns map[string]arrow.Array, ctx EvaluationContext) (arrow.Array, error) {
+// evaluateWindowWithContext evaluates a window expression with context.
+func (e *Evaluator) evaluateWindowWithContext(
+	expr *WindowExpr,
+	columns map[string]arrow.Array,
+	ctx EvaluationContext,
+) (arrow.Array, error) {
 	// Window expressions can only be evaluated in RowContext
 	if ctx != RowContext {
 		return nil, fmt.Errorf("window expressions can only be evaluated in RowContext, got %s", ctx.String())
@@ -303,8 +349,11 @@ func (e *Evaluator) evaluateWindowWithContext(expr *WindowExpr, columns map[stri
 }
 
 // evaluateAggregationValue is a helper method for evaluating aggregation expressions
-// when they appear in contexts where the aggregated value is already computed
-func (e *Evaluator) evaluateAggregationValue(expr *AggregationExpr, columns map[string]arrow.Array) (arrow.Array, error) {
+// when they appear in contexts where the aggregated value is already computed.
+func (e *Evaluator) evaluateAggregationValue(
+	expr *AggregationExpr,
+	columns map[string]arrow.Array,
+) (arrow.Array, error) {
 	// In GroupContext, aggregation expressions typically reference pre-computed aggregated columns
 	// The actual aggregation computation happens in the GroupBy operation
 	// Here we just need to retrieve the aggregated value from the columns
@@ -394,28 +443,28 @@ func (e *Evaluator) evaluateLiteral(expr *LiteralExpr, columns map[string]arrow.
 	// Create an array with the literal value repeated for all rows
 	length := e.getArrayLength(columns)
 	if length == 0 {
-		return nil, fmt.Errorf("cannot determine array length for literal")
+		return nil, errors.New("cannot determine array length for literal")
 	}
 
 	switch val := expr.value.(type) {
 	case string:
 		builder := array.NewStringBuilder(e.mem)
 		defer builder.Release()
-		for i := 0; i < length; i++ {
+		for range length {
 			builder.Append(val)
 		}
 		return builder.NewArray(), nil
 	case int32:
 		builder := array.NewInt32Builder(e.mem)
 		defer builder.Release()
-		for i := 0; i < length; i++ {
+		for range length {
 			builder.Append(val)
 		}
 		return builder.NewArray(), nil
 	case int64:
 		builder := array.NewInt64Builder(e.mem)
 		defer builder.Release()
-		for i := 0; i < length; i++ {
+		for range length {
 			builder.Append(val)
 		}
 		return builder.NewArray(), nil
@@ -423,28 +472,28 @@ func (e *Evaluator) evaluateLiteral(expr *LiteralExpr, columns map[string]arrow.
 		// Handle platform-dependent int type by converting to int64
 		builder := array.NewInt64Builder(e.mem)
 		defer builder.Release()
-		for i := 0; i < length; i++ {
+		for range length {
 			builder.Append(int64(val))
 		}
 		return builder.NewArray(), nil
 	case float32:
 		builder := array.NewFloat32Builder(e.mem)
 		defer builder.Release()
-		for i := 0; i < length; i++ {
+		for range length {
 			builder.Append(val)
 		}
 		return builder.NewArray(), nil
 	case float64:
 		builder := array.NewFloat64Builder(e.mem)
 		defer builder.Release()
-		for i := 0; i < length; i++ {
+		for range length {
 			builder.Append(val)
 		}
 		return builder.NewArray(), nil
 	case bool:
 		builder := array.NewBooleanBuilder(e.mem)
 		defer builder.Release()
-		for i := 0; i < length; i++ {
+		for range length {
 			builder.Append(val)
 		}
 		return builder.NewArray(), nil
@@ -453,7 +502,7 @@ func (e *Evaluator) evaluateLiteral(expr *LiteralExpr, columns map[string]arrow.
 		timestampType := &arrow.TimestampType{Unit: arrow.Nanosecond}
 		builder := array.NewTimestampBuilder(e.mem, timestampType)
 		defer builder.Release()
-		for i := 0; i < length; i++ {
+		for range length {
 			builder.Append(arrow.Timestamp(val.UnixNano()))
 		}
 		return builder.NewArray(), nil
@@ -465,7 +514,7 @@ func (e *Evaluator) evaluateLiteral(expr *LiteralExpr, columns map[string]arrow.
 func (e *Evaluator) evaluateLiteralBoolean(expr *LiteralExpr, columns map[string]arrow.Array) (arrow.Array, error) {
 	length := e.getArrayLength(columns)
 	if length == 0 {
-		return nil, fmt.Errorf("cannot determine array length for literal")
+		return nil, errors.New("cannot determine array length for literal")
 	}
 
 	val, ok := expr.value.(bool)
@@ -475,7 +524,7 @@ func (e *Evaluator) evaluateLiteralBoolean(expr *LiteralExpr, columns map[string
 
 	builder := array.NewBooleanBuilder(e.mem)
 	defer builder.Release()
-	for i := 0; i < length; i++ {
+	for range length {
 		builder.Append(val)
 	}
 	return builder.NewArray(), nil
@@ -662,7 +711,7 @@ func (e *Evaluator) evaluateComparison(left, right arrow.Array, op BinaryOp) (ar
 	return nil, fmt.Errorf("unsupported comparison between %T and %T", left, right)
 }
 
-// isNumericType checks if a type name represents a numeric type
+// isNumericType checks if a type name represents a numeric type.
 func (e *Evaluator) isNumericType(typeName string) bool {
 	switch typeName {
 	case typeInt32, typeInt64, typeFloat32, typeFloat64, typeDouble:
@@ -672,7 +721,7 @@ func (e *Evaluator) isNumericType(typeName string) bool {
 	}
 }
 
-// evaluateNumericComparison handles comparisons between numeric types with coercion
+// evaluateNumericComparison handles comparisons between numeric types with coercion.
 func (e *Evaluator) evaluateNumericComparison(left, right arrow.Array, op BinaryOp) (arrow.Array, error) {
 	// Determine the promoted type for comparison
 	leftType := left.DataType().Name()
@@ -852,7 +901,7 @@ func (e *Evaluator) evaluateLogical(left, right arrow.Array, op BinaryOp) (arrow
 	rightBool, ok2 := right.(*array.Boolean)
 
 	if !ok1 || !ok2 {
-		return nil, fmt.Errorf("logical operations require boolean operands")
+		return nil, errors.New("logical operations require boolean operands")
 	}
 
 	builder := array.NewBooleanBuilder(e.mem)
@@ -890,7 +939,7 @@ func (e *Evaluator) getArrayLength(columns map[string]arrow.Array) int {
 	return 0
 }
 
-// getPromotedType determines the promoted type for mixed arithmetic operations
+// getPromotedType determines the promoted type for mixed arithmetic operations.
 func (e *Evaluator) getPromotedType(leftType, rightType string) string {
 	// Handle Arrow type names (double = float64)
 	if leftType == typeDouble {
@@ -937,7 +986,7 @@ func (e *Evaluator) getPromotedType(leftType, rightType string) string {
 	return promotedType
 }
 
-// convertToType converts an Arrow array to the target type
+// convertToType converts an Arrow array to the target type.
 func (e *Evaluator) convertToType(arr arrow.Array, targetType string) (arrow.Array, error) {
 	sourceType := arr.DataType().Name()
 
@@ -970,7 +1019,7 @@ func (e *Evaluator) convertToType(arr arrow.Array, targetType string) (arrow.Arr
 	}
 }
 
-// Type conversion methods
+// Type conversion methods.
 func (e *Evaluator) convertInt32ToType(arr *array.Int32, targetType string) (arrow.Array, error) {
 	switch targetType {
 	case typeInt64:
@@ -1131,7 +1180,7 @@ func (e *Evaluator) convertFloat64ToType(arr *array.Float64, targetType string) 
 	}
 }
 
-// Additional arithmetic methods for int32 and float32
+// Additional arithmetic methods for int32 and float32.
 func (e *Evaluator) evaluateInt32Arithmetic(left, right *array.Int32, op BinaryOp) (arrow.Array, error) {
 	builder := array.NewInt32Builder(e.mem)
 	defer builder.Release()
@@ -1202,7 +1251,7 @@ func (e *Evaluator) evaluateFloat32Arithmetic(left, right *array.Float32, op Bin
 	return builder.NewArray(), nil
 }
 
-// Additional comparison methods for int32 and float32
+// Additional comparison methods for int32 and float32.
 func (e *Evaluator) evaluateInt32Comparison(left, right *array.Int32, op BinaryOp) (arrow.Array, error) {
 	builder := array.NewBooleanBuilder(e.mem)
 	defer builder.Release()
@@ -1277,7 +1326,7 @@ func (e *Evaluator) evaluateFloat32Comparison(left, right *array.Float32, op Bin
 	return builder.NewArray(), nil
 }
 
-// evaluateFunction evaluates a function expression
+// evaluateFunction evaluates a function expression.
 func (e *Evaluator) evaluateFunction(expr *FunctionExpr, columns map[string]arrow.Array) (arrow.Array, error) {
 	switch expr.name {
 	case "year":
@@ -1307,7 +1356,7 @@ func (e *Evaluator) evaluateFunction(expr *FunctionExpr, columns map[string]arro
 	}
 }
 
-// Date/time extraction function types
+// Date/time extraction function types.
 type dateTimeExtractor func(time.Time) int64
 
 func extractYear(t time.Time) int64 {
@@ -1334,8 +1383,12 @@ func extractSecond(t time.Time) int64 {
 	return int64(t.Second())
 }
 
-// evaluateDateTimeFunction evaluates date/time extraction functions
-func (e *Evaluator) evaluateDateTimeFunction(expr *FunctionExpr, columns map[string]arrow.Array, extractor dateTimeExtractor) (arrow.Array, error) {
+// evaluateDateTimeFunction evaluates date/time extraction functions.
+func (e *Evaluator) evaluateDateTimeFunction(
+	expr *FunctionExpr,
+	columns map[string]arrow.Array,
+	extractor dateTimeExtractor,
+) (arrow.Array, error) {
 	if len(expr.args) != 1 {
 		return nil, fmt.Errorf("date/time function %s requires exactly 1 argument, got %d", expr.name, len(expr.args))
 	}
@@ -1376,10 +1429,14 @@ func (e *Evaluator) evaluateDateTimeFunction(expr *FunctionExpr, columns map[str
 	return builder.NewArray(), nil
 }
 
-// evaluateDateAdd evaluates DATE_ADD function to add interval to date/time
+// evaluateDateAdd evaluates DATE_ADD function to add interval to date/time.
 func (e *Evaluator) evaluateDateAdd(expr *FunctionExpr, columns map[string]arrow.Array) (arrow.Array, error) {
 	if len(expr.args) != dateAddArgsCount {
-		return nil, fmt.Errorf("date_add function requires exactly %d arguments, got %d", dateAddArgsCount, len(expr.args))
+		return nil, fmt.Errorf(
+			"date_add function requires exactly %d arguments, got %d",
+			dateAddArgsCount,
+			len(expr.args),
+		)
 	}
 
 	// Evaluate the date argument
@@ -1433,10 +1490,14 @@ func (e *Evaluator) evaluateDateAdd(expr *FunctionExpr, columns map[string]arrow
 	return builder.NewArray(), nil
 }
 
-// evaluateDateSub evaluates DATE_SUB function to subtract interval from date/time
+// evaluateDateSub evaluates DATE_SUB function to subtract interval from date/time.
 func (e *Evaluator) evaluateDateSub(expr *FunctionExpr, columns map[string]arrow.Array) (arrow.Array, error) {
 	if len(expr.args) != dateSubArgsCount {
-		return nil, fmt.Errorf("date_sub function requires exactly %d arguments, got %d", dateSubArgsCount, len(expr.args))
+		return nil, fmt.Errorf(
+			"date_sub function requires exactly %d arguments, got %d",
+			dateSubArgsCount,
+			len(expr.args),
+		)
 	}
 
 	// Evaluate the date argument
@@ -1490,10 +1551,14 @@ func (e *Evaluator) evaluateDateSub(expr *FunctionExpr, columns map[string]arrow
 	return builder.NewArray(), nil
 }
 
-// evaluateDateDiff evaluates DATE_DIFF function to calculate difference between dates
+// evaluateDateDiff evaluates DATE_DIFF function to calculate difference between dates.
 func (e *Evaluator) evaluateDateDiff(expr *FunctionExpr, columns map[string]arrow.Array) (arrow.Array, error) {
 	if len(expr.args) != dateDiffArgsCount {
-		return nil, fmt.Errorf("date_diff function requires exactly %d arguments, got %d", dateDiffArgsCount, len(expr.args))
+		return nil, fmt.Errorf(
+			"date_diff function requires exactly %d arguments, got %d",
+			dateDiffArgsCount,
+			len(expr.args),
+		)
 	}
 
 	// Evaluate the start date argument
@@ -1570,7 +1635,7 @@ func (e *Evaluator) evaluateDateDiff(expr *FunctionExpr, columns map[string]arro
 	return builder.NewArray(), nil
 }
 
-// addInterval adds an interval to a time value
+// addInterval adds an interval to a time value.
 func (e *Evaluator) addInterval(t time.Time, interval *IntervalExpr) time.Time {
 	value := interval.Value()
 
@@ -1591,7 +1656,7 @@ func (e *Evaluator) addInterval(t time.Time, interval *IntervalExpr) time.Time {
 	}
 }
 
-// subtractInterval subtracts an interval from a time value
+// subtractInterval subtracts an interval from a time value.
 func (e *Evaluator) subtractInterval(t time.Time, interval *IntervalExpr) time.Time {
 	value := interval.Value()
 
@@ -1612,7 +1677,7 @@ func (e *Evaluator) subtractInterval(t time.Time, interval *IntervalExpr) time.T
 	}
 }
 
-// isValidDateDiffUnit validates if a date diff unit is supported
+// isValidDateDiffUnit validates if a date diff unit is supported.
 func (e *Evaluator) isValidDateDiffUnit(unit string) bool {
 	switch unit {
 	case unitDays, unitHours, unitMinutes, unitSeconds, unitMonths, unitYears:
@@ -1622,7 +1687,7 @@ func (e *Evaluator) isValidDateDiffUnit(unit string) bool {
 	}
 }
 
-// isValidIntervalType validates if an interval type is supported
+// isValidIntervalType validates if an interval type is supported.
 func (e *Evaluator) isValidIntervalType(intervalType IntervalType) bool {
 	switch intervalType {
 	case IntervalDays, IntervalHours, IntervalMinutes, IntervalMonths, IntervalYears:
@@ -1632,7 +1697,7 @@ func (e *Evaluator) isValidIntervalType(intervalType IntervalType) bool {
 	}
 }
 
-// calculateDateDiff calculates the difference between two dates in the specified unit
+// calculateDateDiff calculates the difference between two dates in the specified unit.
 func (e *Evaluator) calculateDateDiff(startTime, endTime time.Time, unit string) int64 {
 	switch unit {
 	case unitDays:
@@ -1672,11 +1737,11 @@ func (e *Evaluator) calculateDateDiff(startTime, endTime time.Time, unit string)
 	}
 }
 
-// EvaluateWindow evaluates a window expression
+// EvaluateWindow evaluates a window expression.
 func (e *Evaluator) EvaluateWindow(expr *WindowExpr, columns map[string]arrow.Array) (arrow.Array, error) {
 	// Get the data length from one of the columns
 	if len(columns) == 0 {
-		return nil, fmt.Errorf("no columns provided for window function evaluation")
+		return nil, errors.New("no columns provided for window function evaluation")
 	}
 
 	var dataLength int
@@ -1707,7 +1772,11 @@ func (e *Evaluator) EvaluateWindow(expr *WindowExpr, columns map[string]arrow.Ar
 }
 
 // evaluateWindowFunction evaluates window-specific functions (ROW_NUMBER, RANK, LAG, LEAD, etc.)
-func (e *Evaluator) evaluateWindowFunction(expr *WindowFunctionExpr, window *WindowSpec, columns map[string]arrow.Array) (arrow.Array, error) {
+func (e *Evaluator) evaluateWindowFunction(
+	expr *WindowFunctionExpr,
+	window *WindowSpec,
+	columns map[string]arrow.Array,
+) (arrow.Array, error) {
 	dataLength := getDataLength(columns)
 
 	// Try parallel execution for supported functions
@@ -1755,8 +1824,12 @@ func (e *Evaluator) evaluateWindowFunction(expr *WindowFunctionExpr, window *Win
 	}
 }
 
-// evaluateWindowAggregation evaluates aggregation functions with OVER clause
-func (e *Evaluator) evaluateWindowAggregation(expr *AggregationExpr, window *WindowSpec, columns map[string]arrow.Array) (arrow.Array, error) {
+// evaluateWindowAggregation evaluates aggregation functions with OVER clause.
+func (e *Evaluator) evaluateWindowAggregation(
+	expr *AggregationExpr,
+	window *WindowSpec,
+	columns map[string]arrow.Array,
+) (arrow.Array, error) {
 	dataLength := getDataLength(columns)
 
 	switch expr.aggType {
@@ -1775,8 +1848,12 @@ func (e *Evaluator) evaluateWindowAggregation(expr *AggregationExpr, window *Win
 	}
 }
 
-// evaluateRowNumber implements ROW_NUMBER() window function
-func (e *Evaluator) evaluateRowNumber(window *WindowSpec, columns map[string]arrow.Array, dataLength int) (arrow.Array, error) {
+// evaluateRowNumber implements ROW_NUMBER() window function.
+func (e *Evaluator) evaluateRowNumber(
+	window *WindowSpec,
+	columns map[string]arrow.Array,
+	dataLength int,
+) (arrow.Array, error) {
 	// Get partitions
 	partitions, err := e.getPartitions(window, columns, dataLength)
 	if err != nil {
@@ -1804,7 +1881,7 @@ func (e *Evaluator) evaluateRowNumber(window *WindowSpec, columns map[string]arr
 	}
 
 	// Build the result array
-	for i := 0; i < dataLength; i++ {
+	for i := range dataLength {
 		builder.Append(result[i])
 	}
 
@@ -1820,12 +1897,12 @@ func getDataLength(columns map[string]arrow.Array) int {
 	return 0
 }
 
-// getPartitions creates partitions based on PARTITION BY clause
+// getPartitions creates partitions based on PARTITION BY clause.
 func (e *Evaluator) getPartitions(window *WindowSpec, columns map[string]arrow.Array, dataLength int) ([][]int, error) {
 	if len(window.partitionBy) == 0 {
 		// No partitioning, single partition with all rows
 		partition := make([]int, dataLength)
-		for i := 0; i < dataLength; i++ {
+		for i := range dataLength {
 			partition[i] = i
 		}
 		return [][]int{partition}, nil
@@ -1834,7 +1911,7 @@ func (e *Evaluator) getPartitions(window *WindowSpec, columns map[string]arrow.A
 	// Group by partition columns
 	partitionMap := make(map[string][]int)
 
-	for i := 0; i < dataLength; i++ {
+	for i := range dataLength {
 		key, err := e.getPartitionKey(i, window.partitionBy, columns)
 		if err != nil {
 			return nil, fmt.Errorf("getting partition key for row %d: %w", i, err)
@@ -1851,8 +1928,12 @@ func (e *Evaluator) getPartitions(window *WindowSpec, columns map[string]arrow.A
 	return partitions, nil
 }
 
-// getPartitionKey creates a string key for partitioning
-func (e *Evaluator) getPartitionKey(rowIndex int, partitionColumns []string, columns map[string]arrow.Array) (string, error) {
+// getPartitionKey creates a string key for partitioning.
+func (e *Evaluator) getPartitionKey(
+	rowIndex int,
+	partitionColumns []string,
+	columns map[string]arrow.Array,
+) (string, error) {
 	key := ""
 	for i, colName := range partitionColumns {
 		if i > 0 {
@@ -1871,11 +1952,11 @@ func (e *Evaluator) getPartitionKey(rowIndex int, partitionColumns []string, col
 			case *array.String:
 				key += a.Value(rowIndex)
 			case *array.Int64:
-				key += fmt.Sprintf("%d", a.Value(rowIndex))
+				key += strconv.FormatInt(a.Value(rowIndex), 10)
 			case *array.Float64:
 				key += fmt.Sprintf("%g", a.Value(rowIndex))
 			case *array.Boolean:
-				key += fmt.Sprintf("%t", a.Value(rowIndex))
+				key += strconv.FormatBool(a.Value(rowIndex))
 			default:
 				key += fmt.Sprintf("%v", arr)
 			}
@@ -1884,12 +1965,16 @@ func (e *Evaluator) getPartitionKey(rowIndex int, partitionColumns []string, col
 	return key, nil
 }
 
-// evaluateCaseWithContext evaluates a CASE expression
-func (e *Evaluator) evaluateCaseWithContext(expr *CaseExpr, columns map[string]arrow.Array, ctx EvaluationContext) (arrow.Array, error) {
-	return nil, fmt.Errorf("CASE expressions not yet implemented")
+// evaluateCaseWithContext evaluates a CASE expression.
+func (e *Evaluator) evaluateCaseWithContext(
+	expr *CaseExpr,
+	columns map[string]arrow.Array,
+	ctx EvaluationContext,
+) (arrow.Array, error) {
+	return nil, errors.New("CASE expressions not yet implemented")
 }
 
-// evaluateIfFunction evaluates an IF function (condition, thenValue, elseValue)
+// evaluateIfFunction evaluates an IF function (condition, thenValue, elseValue).
 func (e *Evaluator) evaluateIfFunction(expr *FunctionExpr, columns map[string]arrow.Array) (arrow.Array, error) {
 	const ifFunctionArgCount = 3
 	if len(expr.args) != ifFunctionArgCount {
@@ -1941,8 +2026,11 @@ func (e *Evaluator) evaluateIfFunction(expr *FunctionExpr, columns map[string]ar
 	}
 }
 
-// evaluateIfFloat64Simple evaluates IF function with float64 result
-func (e *Evaluator) evaluateIfFloat64Simple(condition *array.Boolean, thenValue, elseValue arrow.Array) (arrow.Array, error) {
+// evaluateIfFloat64Simple evaluates IF function with float64 result.
+func (e *Evaluator) evaluateIfFloat64Simple(
+	condition *array.Boolean,
+	thenValue, elseValue arrow.Array,
+) (arrow.Array, error) {
 	builder := array.NewFloat64Builder(e.mem)
 	defer builder.Release()
 
@@ -1976,8 +2064,11 @@ func (e *Evaluator) evaluateIfFloat64Simple(condition *array.Boolean, thenValue,
 	return builder.NewArray(), nil
 }
 
-// evaluateIfInt64Simple evaluates IF function with int64 result
-func (e *Evaluator) evaluateIfInt64Simple(condition *array.Boolean, thenValue, elseValue arrow.Array) (arrow.Array, error) {
+// evaluateIfInt64Simple evaluates IF function with int64 result.
+func (e *Evaluator) evaluateIfInt64Simple(
+	condition *array.Boolean,
+	thenValue, elseValue arrow.Array,
+) (arrow.Array, error) {
 	builder := array.NewInt64Builder(e.mem)
 	defer builder.Release()
 
@@ -2011,8 +2102,11 @@ func (e *Evaluator) evaluateIfInt64Simple(condition *array.Boolean, thenValue, e
 	return builder.NewArray(), nil
 }
 
-// evaluateIfStringSimple evaluates IF function with string result
-func (e *Evaluator) evaluateIfStringSimple(condition *array.Boolean, thenValue, elseValue arrow.Array) (arrow.Array, error) {
+// evaluateIfStringSimple evaluates IF function with string result.
+func (e *Evaluator) evaluateIfStringSimple(
+	condition *array.Boolean,
+	thenValue, elseValue arrow.Array,
+) (arrow.Array, error) {
 	builder := array.NewStringBuilder(e.mem)
 	defer builder.Release()
 
@@ -2046,10 +2140,10 @@ func (e *Evaluator) evaluateIfStringSimple(condition *array.Boolean, thenValue, 
 	return builder.NewArray(), nil
 }
 
-// evaluateConcatFunction evaluates a CONCAT function
+// evaluateConcatFunction evaluates a CONCAT function.
 func (e *Evaluator) evaluateConcatFunction(expr *FunctionExpr, columns map[string]arrow.Array) (arrow.Array, error) {
 	if len(expr.args) == 0 {
-		return nil, fmt.Errorf("CONCAT function requires at least 1 argument")
+		return nil, errors.New("CONCAT function requires at least 1 argument")
 	}
 
 	// Evaluate all arguments
@@ -2092,7 +2186,7 @@ func (e *Evaluator) evaluateConcatFunction(expr *FunctionExpr, columns map[strin
 			case *array.String:
 				result += typedArr.Value(row)
 			case *array.Int64:
-				result += fmt.Sprintf("%d", typedArr.Value(row))
+				result += strconv.FormatInt(typedArr.Value(row), 10)
 			case *array.Float64:
 				result += fmt.Sprintf("%g", typedArr.Value(row))
 			default:

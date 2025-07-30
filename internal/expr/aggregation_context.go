@@ -21,7 +21,7 @@ type AggregationContext struct {
 	reverseMapping map[string]string
 }
 
-// NewAggregationContext creates a new AggregationContext
+// NewAggregationContext creates a new AggregationContext.
 func NewAggregationContext() *AggregationContext {
 	return &AggregationContext{
 		columnMappings: make(map[string]string),
@@ -29,7 +29,7 @@ func NewAggregationContext() *AggregationContext {
 	}
 }
 
-// AddMapping adds a mapping between an aggregation expression and its column name
+// AddMapping adds a mapping between an aggregation expression and its column name.
 func (ac *AggregationContext) AddMapping(exprStr, columnName string) {
 	// Clean up old reverse mapping if expression already exists
 	if oldColumnName, exists := ac.columnMappings[exprStr]; exists {
@@ -45,25 +45,25 @@ func (ac *AggregationContext) AddMapping(exprStr, columnName string) {
 	ac.reverseMapping[columnName] = exprStr
 }
 
-// GetColumnName returns the column name for the given expression string
+// GetColumnName returns the column name for the given expression string.
 func (ac *AggregationContext) GetColumnName(exprStr string) (string, bool) {
 	columnName, exists := ac.columnMappings[exprStr]
 	return columnName, exists
 }
 
-// GetExpression returns the expression string for the given column name
+// GetExpression returns the expression string for the given column name.
 func (ac *AggregationContext) GetExpression(columnName string) (string, bool) {
 	exprStr, exists := ac.reverseMapping[columnName]
 	return exprStr, exists
 }
 
-// HasMapping checks if a mapping exists for the given expression string
+// HasMapping checks if a mapping exists for the given expression string.
 func (ac *AggregationContext) HasMapping(exprStr string) bool {
 	_, exists := ac.columnMappings[exprStr]
 	return exists
 }
 
-// AllMappings returns all column mappings
+// AllMappings returns all column mappings.
 func (ac *AggregationContext) AllMappings() map[string]string {
 	result := make(map[string]string)
 	for k, v := range ac.columnMappings {
@@ -72,13 +72,13 @@ func (ac *AggregationContext) AllMappings() map[string]string {
 	return result
 }
 
-// Clear removes all mappings
+// Clear removes all mappings.
 func (ac *AggregationContext) Clear() {
 	ac.columnMappings = make(map[string]string)
 	ac.reverseMapping = make(map[string]string)
 }
 
-// String returns a string representation of the context
+// String returns a string representation of the context.
 func (ac *AggregationContext) String() string {
 	if len(ac.columnMappings) == 0 {
 		return "AggregationContext{empty}"
@@ -92,7 +92,7 @@ func (ac *AggregationContext) String() string {
 }
 
 // ExpressionToColumnName converts an aggregation expression to its standardized column name
-// This is used to generate consistent column names for aggregated results
+// This is used to generate consistent column names for aggregated results.
 func ExpressionToColumnName(expr Expr) string {
 	switch e := expr.(type) {
 	case *AggregationExpr:
@@ -110,7 +110,7 @@ func ExpressionToColumnName(expr Expr) string {
 	}
 }
 
-// BuildContextFromAggregations creates an AggregationContext from a list of aggregation expressions
+// BuildContextFromAggregations creates an AggregationContext from a list of aggregation expressions.
 func BuildContextFromAggregations(aggregations []*AggregationExpr) *AggregationContext {
 	ctx := NewAggregationContext()
 

@@ -13,10 +13,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// maxMemGrowth is the threshold for acceptable memory growth in tests
+// maxMemGrowth is the threshold for acceptable memory growth in tests.
 const maxMemGrowth = uint64(1024 * 1024) // 1MB threshold
 
-// TestMemoryManager tests the memory management utilities
+// TestMemoryManager tests the memory management utilities.
 func TestMemoryManager(t *testing.T) {
 	t.Run("track and release multiple resources", func(t *testing.T) {
 		mem := memory.NewGoAllocator()
@@ -68,10 +68,10 @@ func TestMemoryManager(t *testing.T) {
 
 		// Launch multiple goroutines to test concurrent access
 		wg.Add(numGoroutines)
-		for i := 0; i < numGoroutines; i++ {
+		for i := range numGoroutines {
 			go func(goroutineID int) {
 				defer wg.Done()
-				for j := 0; j < resourcesPerGoroutine; j++ {
+				for j := range resourcesPerGoroutine {
 					s := series.New("test", []int64{int64(goroutineID), int64(j)}, mem)
 					manager.Track(s)
 				}
@@ -93,7 +93,7 @@ func TestMemoryManager(t *testing.T) {
 	})
 }
 
-// TestWithDataFrame tests the automatic cleanup helper
+// TestWithDataFrame tests the automatic cleanup helper.
 func TestWithDataFrame(t *testing.T) {
 	t.Run("automatically releases dataframe", func(t *testing.T) {
 		err := WithDataFrame(func() *DataFrame {
@@ -127,7 +127,7 @@ func TestWithDataFrame(t *testing.T) {
 	})
 }
 
-// TestWithSeries tests the series automatic cleanup helper
+// TestWithSeries tests the series automatic cleanup helper.
 func TestWithSeries(t *testing.T) {
 	t.Run("automatically releases series", func(t *testing.T) {
 		err := WithSeries(func() ISeries {
@@ -143,7 +143,7 @@ func TestWithSeries(t *testing.T) {
 	})
 }
 
-// TestWithMemoryManager tests the scoped memory management helper
+// TestWithMemoryManager tests the scoped memory management helper.
 func TestWithMemoryManager(t *testing.T) {
 	t.Run("automatically releases tracked resources", func(t *testing.T) {
 		mem := memory.NewGoAllocator()
@@ -183,7 +183,7 @@ func TestWithMemoryManager(t *testing.T) {
 	})
 }
 
-// TestMemoryLeakDetection tests for potential memory leaks
+// TestMemoryLeakDetection tests for potential memory leaks.
 func TestMemoryLeakDetection(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping memory leak test in short mode")
@@ -197,7 +197,7 @@ func TestMemoryLeakDetection(t *testing.T) {
 		runtime.ReadMemStats(&memBefore)
 
 		// Perform operations that should not leak memory
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			err := WithDataFrame(func() *DataFrame {
 				mem := memory.NewGoAllocator()
 				s1 := series.New("values", []int64{1, 2, 3, 4, 5}, mem)
@@ -231,7 +231,7 @@ func TestMemoryLeakDetection(t *testing.T) {
 	})
 }
 
-// TestMemoryUsageMonitor tests the memory usage monitoring functionality
+// TestMemoryUsageMonitor tests the memory usage monitoring functionality.
 func TestMemoryUsageMonitor(t *testing.T) {
 	t.Run("records allocations and deallocations", func(t *testing.T) {
 		monitor := NewMemoryUsageMonitor(1024 * 1024) // 1MB threshold

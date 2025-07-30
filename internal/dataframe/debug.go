@@ -9,17 +9,17 @@ import (
 	"time"
 )
 
-// Package-level constants for consistent usage across debug functionality
+// Package-level constants for consistent usage across debug functionality.
 const (
-	// AvgBytesPerCell is the estimated average bytes per DataFrame cell
+	// AvgBytesPerCell is the estimated average bytes per DataFrame cell.
 	AvgBytesPerCell = 8
-	// ParallelThreshold is the minimum number of rows to trigger parallel execution
+	// ParallelThreshold is the minimum number of rows to trigger parallel execution.
 	ParallelThreshold = 1000
-	// FilterSelectivity is the default assumed selectivity for filter operations
+	// FilterSelectivity is the default assumed selectivity for filter operations.
 	FilterSelectivity = 0.5
 )
 
-// DebugConfig configures debug mode settings
+// DebugConfig configures debug mode settings.
 type DebugConfig struct {
 	Enabled           bool         `json:"enabled"`
 	LogLevel          LogLevel     `json:"log_level"`
@@ -29,7 +29,7 @@ type DebugConfig struct {
 	OutputFormat      OutputFormat `json:"output_format"`
 }
 
-// LogLevel defines the verbosity of debug logging
+// LogLevel defines the verbosity of debug logging.
 type LogLevel int
 
 const (
@@ -38,7 +38,7 @@ const (
 	LogLevelTrace
 )
 
-// OutputFormat defines the output format for debug information
+// OutputFormat defines the output format for debug information.
 type OutputFormat int
 
 const (
@@ -46,7 +46,7 @@ const (
 	OutputFormatJSON
 )
 
-// DebugExecutionPlan represents the execution plan for DataFrame operations with debug information
+// DebugExecutionPlan represents the execution plan for DataFrame operations with debug information.
 type DebugExecutionPlan struct {
 	RootNode  *PlanNode         `json:"root"`
 	Estimated PlanStats         `json:"estimated"`
@@ -54,7 +54,7 @@ type DebugExecutionPlan struct {
 	Metadata  DebugPlanMetadata `json:"metadata"`
 }
 
-// PlanNode represents a node in the execution plan tree
+// PlanNode represents a node in the execution plan tree.
 type PlanNode struct {
 	ID          string            `json:"id"`
 	Type        string            `json:"type"`        // "Filter", "Select", "GroupBy", etc.
@@ -64,20 +64,20 @@ type PlanNode struct {
 	Properties  map[string]string `json:"properties"`
 }
 
-// PlanCost contains cost information for a plan node
+// PlanCost contains cost information for a plan node.
 type PlanCost struct {
 	Estimated EstimatedCost `json:"estimated"`
 	Actual    ActualCost    `json:"actual,omitempty"`
 }
 
-// EstimatedCost contains estimated cost metrics
+// EstimatedCost contains estimated cost metrics.
 type EstimatedCost struct {
 	Rows   int64         `json:"rows"`
 	Memory int64         `json:"memory"`
 	CPU    time.Duration `json:"cpu"`
 }
 
-// ActualCost contains actual cost metrics after execution
+// ActualCost contains actual cost metrics after execution.
 type ActualCost struct {
 	Rows     int64         `json:"rows"`
 	Memory   int64         `json:"memory"`
@@ -85,7 +85,7 @@ type ActualCost struct {
 	Duration time.Duration `json:"duration"`
 }
 
-// PlanStats contains overall plan statistics
+// PlanStats contains overall plan statistics.
 type PlanStats struct {
 	TotalRows     int64         `json:"total_rows"`
 	TotalMemory   int64         `json:"total_memory"`
@@ -94,7 +94,7 @@ type PlanStats struct {
 	ParallelOps   int           `json:"parallel_ops"`
 }
 
-// DebugPlanMetadata contains metadata about the execution plan
+// DebugPlanMetadata contains metadata about the execution plan.
 type DebugPlanMetadata struct {
 	CreatedAt     time.Time `json:"created_at"`
 	OptimizedAt   time.Time `json:"optimized_at,omitempty"`
@@ -102,7 +102,7 @@ type DebugPlanMetadata struct {
 	Optimizations []string  `json:"optimizations,omitempty"`
 }
 
-// OperationTrace represents a traced operation during execution
+// OperationTrace represents a traced operation during execution.
 type OperationTrace struct {
 	ID          string            `json:"id"`
 	Operation   string            `json:"operation"`
@@ -115,7 +115,7 @@ type OperationTrace struct {
 	Properties  map[string]string `json:"properties"`
 }
 
-// DataFrameStats contains statistics about a DataFrame
+// DataFrameStats contains statistics about a DataFrame.
 type DataFrameStats struct {
 	Rows    int      `json:"rows"`
 	Columns int      `json:"columns"`
@@ -123,20 +123,20 @@ type DataFrameStats struct {
 	Schema  []string `json:"schema"`
 }
 
-// MemoryStats contains memory usage statistics
+// MemoryStats contains memory usage statistics.
 type MemoryStats struct {
 	Before int64 `json:"before"`
 	After  int64 `json:"after"`
 	Delta  int64 `json:"delta"`
 }
 
-// QueryAnalyzer analyzes and traces query execution
+// QueryAnalyzer analyzes and traces query execution.
 type QueryAnalyzer struct {
 	operations []OperationTrace
 	config     DebugConfig
 }
 
-// NewQueryAnalyzer creates a new query analyzer
+// NewQueryAnalyzer creates a new query analyzer.
 func NewQueryAnalyzer(config DebugConfig) *QueryAnalyzer {
 	return &QueryAnalyzer{
 		operations: make([]OperationTrace, 0),
@@ -144,7 +144,7 @@ func NewQueryAnalyzer(config DebugConfig) *QueryAnalyzer {
 	}
 }
 
-// TraceOperation traces an operation execution
+// TraceOperation traces an operation execution.
 func (qa *QueryAnalyzer) TraceOperation(
 	op string, input *DataFrame, fn func() (*DataFrame, error),
 ) (*DataFrame, error) {
@@ -186,7 +186,7 @@ func (qa *QueryAnalyzer) TraceOperation(
 	return result, err
 }
 
-// captureStats captures DataFrame statistics
+// captureStats captures DataFrame statistics.
 func (qa *QueryAnalyzer) captureStats(df *DataFrame) DataFrameStats {
 	if df == nil {
 		return DataFrameStats{}
@@ -205,7 +205,7 @@ func (qa *QueryAnalyzer) captureStats(df *DataFrame) DataFrameStats {
 	return stats
 }
 
-// GenerateReport generates an analysis report
+// GenerateReport generates an analysis report.
 func (qa *QueryAnalyzer) GenerateReport() AnalysisReport {
 	return AnalysisReport{
 		Operations:  qa.operations,
@@ -215,7 +215,7 @@ func (qa *QueryAnalyzer) GenerateReport() AnalysisReport {
 	}
 }
 
-// generateSummary generates a summary of operations
+// generateSummary generates a summary of operations.
 func (qa *QueryAnalyzer) generateSummary() OperationSummary {
 	var totalDuration time.Duration
 	var totalMemory int64
@@ -238,7 +238,7 @@ func (qa *QueryAnalyzer) generateSummary() OperationSummary {
 	}
 }
 
-// identifyBottlenecks identifies performance bottlenecks
+// identifyBottlenecks identifies performance bottlenecks.
 func (qa *QueryAnalyzer) identifyBottlenecks() []Bottleneck {
 	bottlenecks := make([]Bottleneck, 0)
 
@@ -263,7 +263,7 @@ func (qa *QueryAnalyzer) identifyBottlenecks() []Bottleneck {
 	return bottlenecks
 }
 
-// generateSuggestions generates optimization suggestions
+// generateSuggestions generates optimization suggestions.
 func (qa *QueryAnalyzer) generateSuggestions() []string {
 	suggestions := make([]string, 0)
 
@@ -280,7 +280,7 @@ func (qa *QueryAnalyzer) generateSuggestions() []string {
 	return suggestions
 }
 
-// AnalysisReport contains the complete analysis report
+// AnalysisReport contains the complete analysis report.
 type AnalysisReport struct {
 	Operations  []OperationTrace `json:"operations"`
 	Summary     OperationSummary `json:"summary"`
@@ -288,7 +288,7 @@ type AnalysisReport struct {
 	Suggestions []string         `json:"suggestions"`
 }
 
-// OperationSummary contains summary statistics
+// OperationSummary contains summary statistics.
 type OperationSummary struct {
 	TotalOperations int           `json:"total_operations"`
 	TotalDuration   time.Duration `json:"total_duration"`
@@ -296,7 +296,7 @@ type OperationSummary struct {
 	ParallelOps     int           `json:"parallel_ops"`
 }
 
-// Bottleneck represents a performance bottleneck
+// Bottleneck represents a performance bottleneck.
 type Bottleneck struct {
 	Operation string        `json:"operation"`
 	Duration  time.Duration `json:"duration"`
@@ -305,14 +305,14 @@ type Bottleneck struct {
 
 var traceCounter int64
 
-// generateTraceID generates a unique trace ID
+// generateTraceID generates a unique trace ID.
 func generateTraceID() string {
 	// Use atomic counter to ensure uniqueness even when called rapidly
 	counter := atomic.AddInt64(&traceCounter, 1)
 	return fmt.Sprintf("trace_%d_%d", time.Now().UnixNano(), counter)
 }
 
-// convertMemoryStats safely converts uint64 to int64 for memory statistics
+// convertMemoryStats safely converts uint64 to int64 for memory statistics.
 func convertMemoryStats(val uint64) int64 {
 	const maxInt64 = int64(^uint64(0) >> 1)
 	if val > uint64(maxInt64) {
@@ -321,7 +321,7 @@ func convertMemoryStats(val uint64) int64 {
 	return int64(val)
 }
 
-// Debug enables debug mode for the DataFrame
+// Debug enables debug mode for the DataFrame.
 func (df *DataFrame) Debug() *DataFrame {
 	return df.WithDebugConfig(DebugConfig{
 		Enabled:           true,
@@ -333,7 +333,7 @@ func (df *DataFrame) Debug() *DataFrame {
 	})
 }
 
-// WithDebugConfig sets the debug configuration for the DataFrame
+// WithDebugConfig sets the debug configuration for the DataFrame.
 func (df *DataFrame) WithDebugConfig(config DebugConfig) *DataFrame {
 	// Create a new DataFrame with debug config
 	// In a real implementation, we would add a debug field to DataFrame
@@ -341,7 +341,7 @@ func (df *DataFrame) WithDebugConfig(config DebugConfig) *DataFrame {
 	return df
 }
 
-// RenderText renders the execution plan as text
+// RenderText renders the execution plan as text.
 func (plan *DebugExecutionPlan) RenderText() string {
 	var buf strings.Builder
 	buf.WriteString("Execution Plan:\n")
@@ -357,7 +357,7 @@ func (plan *DebugExecutionPlan) RenderText() string {
 	return buf.String()
 }
 
-// renderNode renders a plan node recursively
+// renderNode renders a plan node recursively.
 func (plan *DebugExecutionPlan) renderNode(node *PlanNode, buf *strings.Builder, depth int) {
 	if node == nil {
 		return
@@ -390,7 +390,7 @@ func (plan *DebugExecutionPlan) renderNode(node *PlanNode, buf *strings.Builder,
 	}
 }
 
-// RenderJSON renders the execution plan as JSON
+// RenderJSON renders the execution plan as JSON.
 func (plan *DebugExecutionPlan) RenderJSON() ([]byte, error) {
 	return json.MarshalIndent(plan, "", "  ")
 }

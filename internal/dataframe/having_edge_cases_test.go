@@ -15,7 +15,7 @@ import (
 	"github.com/paveg/gorilla/internal/series"
 )
 
-// TestHavingEdgeCases_EmptyAndNull tests edge cases related to empty and null data
+// TestHavingEdgeCases_EmptyAndNull tests edge cases related to empty and null data.
 func TestHavingEdgeCases_EmptyAndNull(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
@@ -104,7 +104,7 @@ func TestHavingEdgeCases_EmptyAndNull(t *testing.T) {
 	})
 }
 
-// TestHavingEdgeCases_TypeHandling tests edge cases related to type handling and coercion
+// TestHavingEdgeCases_TypeHandling tests edge cases related to type handling and coercion.
 func TestHavingEdgeCases_TypeHandling(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
@@ -136,7 +136,10 @@ func TestHavingEdgeCases_TypeHandling(t *testing.T) {
 		defer df.Release()
 
 		// COUNT aggregation on boolean values
-		result, err := df.Lazy().GroupBy("category").Having(expr.Count(expr.Col("flags")).Gt(expr.Lit(int64(1)))).Collect()
+		result, err := df.Lazy().
+			GroupBy("category").
+			Having(expr.Count(expr.Col("flags")).Gt(expr.Lit(int64(1)))).
+			Collect()
 		require.NoError(t, err)
 		defer result.Release()
 
@@ -152,7 +155,10 @@ func TestHavingEdgeCases_TypeHandling(t *testing.T) {
 		df := New(categories, values)
 		defer df.Release()
 
-		result, err := df.Lazy().GroupBy("category").Having(expr.Sum(expr.Col("values")).Gt(expr.Lit(int64(35)))).Collect()
+		result, err := df.Lazy().
+			GroupBy("category").
+			Having(expr.Sum(expr.Col("values")).Gt(expr.Lit(int64(35)))).
+			Collect()
 		require.NoError(t, err)
 		defer result.Release()
 
@@ -191,7 +197,7 @@ func TestHavingEdgeCases_TypeHandling(t *testing.T) {
 	})
 }
 
-// TestHavingEdgeCases_Performance tests performance-related edge cases
+// TestHavingEdgeCases_Performance tests performance-related edge cases.
 func TestHavingEdgeCases_Performance(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
@@ -219,7 +225,7 @@ func TestHavingEdgeCases_Performance(t *testing.T) {
 		values := make([]float64, size)
 
 		// Create 100 groups with 500 rows each
-		for i := 0; i < size; i++ {
+		for i := range size {
 			categories[i] = fmt.Sprintf("Group_%d", i%100)
 			values[i] = float64(i)
 		}
@@ -230,12 +236,15 @@ func TestHavingEdgeCases_Performance(t *testing.T) {
 		df := New(catSeries, valSeries)
 		defer df.Release()
 
-		result, err := df.Lazy().GroupBy("category").Having(expr.Sum(expr.Col("values")).Gt(expr.Lit(1000000.0))).Collect()
+		result, err := df.Lazy().
+			GroupBy("category").
+			Having(expr.Sum(expr.Col("values")).Gt(expr.Lit(1000000.0))).
+			Collect()
 		require.NoError(t, err)
 		defer result.Release()
 
 		// Many groups will pass the threshold - adjust expectation
-		assert.Greater(t, result.Len(), 0)
+		assert.Positive(t, result.Len())
 		assert.LessOrEqual(t, result.Len(), size) // Can't exceed total row count
 	})
 
@@ -245,7 +254,7 @@ func TestHavingEdgeCases_Performance(t *testing.T) {
 		categories := make([]string, size)
 		values := make([]float64, size)
 
-		for i := 0; i < size; i++ {
+		for i := range size {
 			categories[i] = fmt.Sprintf("UniqueGroup_%d", i)
 			values[i] = float64(i)
 		}
@@ -288,7 +297,7 @@ func TestHavingEdgeCases_Performance(t *testing.T) {
 	})
 }
 
-// TestHavingEdgeCases_ComplexScenarios tests complex edge case scenarios
+// TestHavingEdgeCases_ComplexScenarios tests complex edge case scenarios.
 func TestHavingEdgeCases_ComplexScenarios(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
@@ -389,7 +398,7 @@ func TestHavingEdgeCases_ComplexScenarios(t *testing.T) {
 	})
 }
 
-// TestHavingEdgeCases_ConcurrencyAndMemory tests memory and concurrency edge cases
+// TestHavingEdgeCases_ConcurrencyAndMemory tests memory and concurrency edge cases.
 func TestHavingEdgeCases_ConcurrencyAndMemory(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
@@ -401,7 +410,7 @@ func TestHavingEdgeCases_ConcurrencyAndMemory(t *testing.T) {
 		categories := make([]string, dataSize)
 		values := make([]float64, dataSize)
 
-		for i := 0; i < dataSize; i++ {
+		for i := range dataSize {
 			categories[i] = fmt.Sprintf("Group_%d", i%50)
 			values[i] = float64(i)
 		}
@@ -416,13 +425,16 @@ func TestHavingEdgeCases_ConcurrencyAndMemory(t *testing.T) {
 		results := make([]*DataFrame, numGoroutines)
 		errors := make([]error, numGoroutines)
 
-		for i := 0; i < numGoroutines; i++ {
+		for i := range numGoroutines {
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()
 
 				// Each goroutine performs the same HAVING operation
-				result, err := df.Lazy().GroupBy("category").Having(expr.Sum(expr.Col("values")).Gt(expr.Lit(5000.0))).Collect()
+				result, err := df.Lazy().
+					GroupBy("category").
+					Having(expr.Sum(expr.Col("values")).Gt(expr.Lit(5000.0))).
+					Collect()
 				results[idx] = result
 				errors[idx] = err
 			}(i)
@@ -432,7 +444,7 @@ func TestHavingEdgeCases_ConcurrencyAndMemory(t *testing.T) {
 
 		// Cleanup all results at once after all goroutines finish
 		defer func() {
-			for i := 0; i < numGoroutines; i++ {
+			for i := range numGoroutines {
 				if results[i] != nil {
 					results[i].Release()
 				}
@@ -440,7 +452,7 @@ func TestHavingEdgeCases_ConcurrencyAndMemory(t *testing.T) {
 		}()
 
 		// Verify all operations succeeded and produced consistent results
-		for i := 0; i < numGoroutines; i++ {
+		for i := range numGoroutines {
 			require.NoError(t, errors[i], "Concurrent operation %d should succeed", i)
 			require.NotNil(t, results[i], "Result %d should not be nil", i)
 
@@ -458,7 +470,7 @@ func TestHavingEdgeCases_ConcurrencyAndMemory(t *testing.T) {
 		values := make([]float64, largeSize)
 
 		// Create large dataset with many unique groups
-		for i := 0; i < largeSize; i++ {
+		for i := range largeSize {
 			categories[i] = fmt.Sprintf("Group_%d", i%1000) // 1000 groups
 			values[i] = float64(i)
 		}
@@ -470,7 +482,10 @@ func TestHavingEdgeCases_ConcurrencyAndMemory(t *testing.T) {
 		defer df.Release()
 
 		// Perform HAVING operation on large dataset
-		result, err := df.Lazy().GroupBy("category").Having(expr.Sum(expr.Col("values")).Gt(expr.Lit(1000000.0))).Collect()
+		result, err := df.Lazy().
+			GroupBy("category").
+			Having(expr.Sum(expr.Col("values")).Gt(expr.Lit(1000000.0))).
+			Collect()
 		require.NoError(t, err)
 		defer result.Release()
 
@@ -488,8 +503,11 @@ func TestHavingEdgeCases_ConcurrencyAndMemory(t *testing.T) {
 		defer df.Release()
 
 		// Multiple HAVING operations to test cleanup
-		for i := 0; i < 100; i++ {
-			result, err := df.Lazy().GroupBy("category").Having(expr.Sum(expr.Col("values")).Gt(expr.Lit(5.0))).Collect()
+		for range 100 {
+			result, err := df.Lazy().
+				GroupBy("category").
+				Having(expr.Sum(expr.Col("values")).Gt(expr.Lit(5.0))).
+				Collect()
 			require.NoError(t, err)
 
 			// Immediately release to test cleanup
@@ -513,14 +531,17 @@ func TestHavingEdgeCases_ConcurrencyAndMemory(t *testing.T) {
 		var successCount int64
 		var mu sync.Mutex
 
-		for i := 0; i < numOps; i++ {
+		for i := range numOps {
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()
 
 				// Some operations might have valid conditions, others might not
 				threshold := float64(idx * 10)
-				result, err := df.Lazy().GroupBy("category").Having(expr.Sum(expr.Col("values")).Gt(expr.Lit(threshold))).Collect()
+				result, err := df.Lazy().
+					GroupBy("category").
+					Having(expr.Sum(expr.Col("values")).Gt(expr.Lit(threshold))).
+					Collect()
 
 				if err == nil && result != nil {
 					result.Release()

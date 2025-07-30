@@ -1,6 +1,7 @@
 package sql
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -9,13 +10,13 @@ import (
 	"github.com/paveg/gorilla/internal/expr"
 )
 
-// SQLTranslator translates SQL AST to DataFrame operations
+// SQLTranslator translates SQL AST to DataFrame operations.
 type SQLTranslator struct {
 	tables    map[string]*dataframe.DataFrame
 	evaluator *expr.Evaluator
 }
 
-// NewSQLTranslator creates a new SQL translator
+// NewSQLTranslator creates a new SQL translator.
 func NewSQLTranslator(mem memory.Allocator) *SQLTranslator {
 	return &SQLTranslator{
 		tables:    make(map[string]*dataframe.DataFrame),
@@ -23,12 +24,12 @@ func NewSQLTranslator(mem memory.Allocator) *SQLTranslator {
 	}
 }
 
-// RegisterTable registers a DataFrame with a table name for SQL queries
+// RegisterTable registers a DataFrame with a table name for SQL queries.
 func (t *SQLTranslator) RegisterTable(name string, df *dataframe.DataFrame) {
 	t.tables[name] = df
 }
 
-// TranslateStatement translates a SQL statement to a LazyFrame
+// TranslateStatement translates a SQL statement to a LazyFrame.
 func (t *SQLTranslator) TranslateStatement(stmt SQLStatement) (*dataframe.LazyFrame, error) {
 	switch s := stmt.(type) {
 	case *SelectStatement:
@@ -38,7 +39,7 @@ func (t *SQLTranslator) TranslateStatement(stmt SQLStatement) (*dataframe.LazyFr
 	}
 }
 
-// translateSelect translates a SELECT statement to LazyFrame operations
+// translateSelect translates a SELECT statement to LazyFrame operations.
 func (t *SQLTranslator) translateSelect(stmt *SelectStatement) (*dataframe.LazyFrame, error) {
 	// Start with FROM clause to get base DataFrame
 	var lazy *dataframe.LazyFrame
@@ -49,7 +50,7 @@ func (t *SQLTranslator) translateSelect(stmt *SelectStatement) (*dataframe.LazyF
 		}
 		lazy = df.Lazy()
 	} else {
-		return nil, fmt.Errorf("FROM clause is required")
+		return nil, errors.New("FROM clause is required")
 	}
 
 	// Apply WHERE clause
@@ -145,7 +146,11 @@ func (t *SQLTranslator) translateSelect(stmt *SelectStatement) (*dataframe.LazyF
 				}
 
 				// Resolve aliases in HAVING expression
-				resolvedHavingCondition, err := t.resolveAliasesInExpression(stmt.HavingClause.Condition, aliasResolver, aggContext)
+				resolvedHavingCondition, err := t.resolveAliasesInExpression(
+					stmt.HavingClause.Condition,
+					aliasResolver,
+					aggContext,
+				)
 				if err != nil {
 					return nil, fmt.Errorf("error resolving aliases in HAVING clause: %w", err)
 				}
@@ -157,11 +162,11 @@ func (t *SQLTranslator) translateSelect(stmt *SelectStatement) (*dataframe.LazyF
 				lazy = lazy.GroupBy(groupCols...).Agg(aggPtrs...)
 			}
 		} else {
-			return nil, fmt.Errorf("GROUP BY requires aggregation functions in SELECT")
+			return nil, errors.New("GROUP BY requires aggregation functions in SELECT")
 		}
 	} else if stmt.HavingClause != nil {
 		// Validation handled in validateSelectStatement; no further action needed here.
-		return nil, fmt.Errorf("HAVING clause requires GROUP BY clause")
+		return nil, errors.New("HAVING clause requires GROUP BY clause")
 	}
 
 	// Apply computed columns from SELECT (non-aggregation expressions)
@@ -195,7 +200,7 @@ func (t *SQLTranslator) translateSelect(stmt *SelectStatement) (*dataframe.LazyF
 	return lazy, nil
 }
 
-// extractColumnNames extracts column names from expressions
+// extractColumnNames extracts column names from expressions.
 func (t *SQLTranslator) extractColumnNames(expressions []expr.Expr) ([]string, error) {
 	var columns []string
 
@@ -210,7 +215,7 @@ func (t *SQLTranslator) extractColumnNames(expressions []expr.Expr) ([]string, e
 	return columns, nil
 }
 
-// extractAggregations extracts aggregation expressions from SELECT list
+// extractAggregations extracts aggregation expressions from SELECT list.
 func (t *SQLTranslator) extractAggregations(selectList []SelectItem) []expr.Expr {
 	var aggExprs []expr.Expr
 
@@ -234,7 +239,7 @@ func (t *SQLTranslator) extractAggregations(selectList []SelectItem) []expr.Expr
 	return aggExprs
 }
 
-// extractComputedColumns extracts computed column expressions (non-aggregations)
+// extractComputedColumns extracts computed column expressions (non-aggregations).
 func (t *SQLTranslator) extractComputedColumns(selectList []SelectItem) map[string]expr.Expr {
 	computedCols := make(map[string]expr.Expr)
 
@@ -265,7 +270,7 @@ func (t *SQLTranslator) extractComputedColumns(selectList []SelectItem) map[stri
 	return computedCols
 }
 
-// extractSelectColumns extracts final column selection list
+// extractSelectColumns extracts final column selection list.
 func (t *SQLTranslator) extractSelectColumns(selectList []SelectItem) []string {
 	var columns []string
 
@@ -290,7 +295,7 @@ func (t *SQLTranslator) extractSelectColumns(selectList []SelectItem) []string {
 	return columns
 }
 
-// isWildcardSelect checks if SELECT list contains wildcard
+// isWildcardSelect checks if SELECT list contains wildcard.
 func (t *SQLTranslator) isWildcardSelect(selectList []SelectItem) bool {
 	for _, item := range selectList {
 		if item.IsWildcard {
@@ -300,7 +305,7 @@ func (t *SQLTranslator) isWildcardSelect(selectList []SelectItem) bool {
 	return false
 }
 
-// isAggregationExpression checks if expression is an aggregation
+// isAggregationExpression checks if expression is an aggregation.
 func (t *SQLTranslator) isAggregationExpression(expression expr.Expr) bool {
 	switch e := expression.(type) {
 	case *expr.AggregationExpr:
@@ -316,7 +321,7 @@ func (t *SQLTranslator) isAggregationExpression(expression expr.Expr) bool {
 	return false
 }
 
-// translateOrderBy translates ORDER BY clause
+// translateOrderBy translates ORDER BY clause.
 func (t *SQLTranslator) translateOrderBy(orderBy *OrderByClause) ([]string, []bool, error) {
 	var columns []string
 	var ascending []bool
@@ -334,7 +339,7 @@ func (t *SQLTranslator) translateOrderBy(orderBy *OrderByClause) ([]string, []bo
 	return columns, ascending, nil
 }
 
-// TranslateFunctionCall translates SQL function calls to Gorilla expressions
+// TranslateFunctionCall translates SQL function calls to Gorilla expressions.
 func (t *SQLTranslator) TranslateFunctionCall(fn *SQLFunction) (expr.Expr, error) {
 	funcName := strings.ToUpper(fn.Name)
 
@@ -347,7 +352,7 @@ func (t *SQLTranslator) TranslateFunctionCall(fn *SQLFunction) (expr.Expr, error
 		return expr.Count(fn.Args[0]), nil
 	case "SUM":
 		if len(fn.Args) != 1 {
-			return nil, fmt.Errorf("SUM function requires exactly one argument")
+			return nil, errors.New("SUM function requires exactly one argument")
 		}
 		return expr.Sum(fn.Args[0]), nil
 	case "AVG", "MEAN":
@@ -357,58 +362,58 @@ func (t *SQLTranslator) TranslateFunctionCall(fn *SQLFunction) (expr.Expr, error
 		return expr.Mean(fn.Args[0]), nil
 	case "MIN":
 		if len(fn.Args) != 1 {
-			return nil, fmt.Errorf("MIN function requires exactly one argument")
+			return nil, errors.New("MIN function requires exactly one argument")
 		}
 		return expr.Min(fn.Args[0]), nil
 	case "MAX":
 		if len(fn.Args) != 1 {
-			return nil, fmt.Errorf("MAX function requires exactly one argument")
+			return nil, errors.New("MAX function requires exactly one argument")
 		}
 		return expr.Max(fn.Args[0]), nil
 
 	// String functions
 	case "UPPER":
 		if len(fn.Args) != 1 {
-			return nil, fmt.Errorf("UPPER function requires exactly one argument")
+			return nil, errors.New("UPPER function requires exactly one argument")
 		}
 		if colExpr, ok := fn.Args[0].(*expr.ColumnExpr); ok {
 			return colExpr.Upper(), nil
 		}
-		return nil, fmt.Errorf("UPPER function requires a column expression")
+		return nil, errors.New("UPPER function requires a column expression")
 	case "LOWER":
 		if len(fn.Args) != 1 {
-			return nil, fmt.Errorf("LOWER function requires exactly one argument")
+			return nil, errors.New("LOWER function requires exactly one argument")
 		}
 		if colExpr, ok := fn.Args[0].(*expr.ColumnExpr); ok {
 			return colExpr.Lower(), nil
 		}
-		return nil, fmt.Errorf("LOWER function requires a column expression")
+		return nil, errors.New("LOWER function requires a column expression")
 	case "LENGTH":
 		if len(fn.Args) != 1 {
-			return nil, fmt.Errorf("LENGTH function requires exactly one argument")
+			return nil, errors.New("LENGTH function requires exactly one argument")
 		}
 		if colExpr, ok := fn.Args[0].(*expr.ColumnExpr); ok {
 			return colExpr.Length(), nil
 		}
-		return nil, fmt.Errorf("LENGTH function requires a column expression")
+		return nil, errors.New("LENGTH function requires a column expression")
 
 	// Math functions
 	case "ABS":
 		if len(fn.Args) != 1 {
-			return nil, fmt.Errorf("ABS function requires exactly one argument")
+			return nil, errors.New("ABS function requires exactly one argument")
 		}
 		if colExpr, ok := fn.Args[0].(*expr.ColumnExpr); ok {
 			return colExpr.Abs(), nil
 		}
-		return nil, fmt.Errorf("ABS function requires a column expression")
+		return nil, errors.New("ABS function requires a column expression")
 	case "ROUND":
 		if len(fn.Args) != 1 {
-			return nil, fmt.Errorf("ROUND function requires exactly one argument")
+			return nil, errors.New("ROUND function requires exactly one argument")
 		}
 		if colExpr, ok := fn.Args[0].(*expr.ColumnExpr); ok {
 			return colExpr.Round(), nil
 		}
-		return nil, fmt.Errorf("ROUND function requires a column expression")
+		return nil, errors.New("ROUND function requires a column expression")
 
 	// Date functions (basic implementations) - TODO: Implement date functions
 	// case "NOW":
@@ -445,7 +450,7 @@ func (t *SQLTranslator) TranslateFunctionCall(fn *SQLFunction) (expr.Expr, error
 	}
 }
 
-// ValidateSQLSyntax performs basic validation of SQL statement
+// ValidateSQLSyntax performs basic validation of SQL statement.
 func (t *SQLTranslator) ValidateSQLSyntax(stmt SQLStatement) error {
 	switch s := stmt.(type) {
 	case *SelectStatement:
@@ -455,11 +460,11 @@ func (t *SQLTranslator) ValidateSQLSyntax(stmt SQLStatement) error {
 	}
 }
 
-// validateSelectStatement validates SELECT statement syntax
+// validateSelectStatement validates SELECT statement syntax.
 func (t *SQLTranslator) validateSelectStatement(stmt *SelectStatement) error {
 	// Check that SELECT list is not empty
 	if len(stmt.SelectList) == 0 {
-		return fmt.Errorf("SELECT list cannot be empty")
+		return errors.New("SELECT list cannot be empty")
 	}
 
 	// Validate GROUP BY usage
@@ -474,13 +479,16 @@ func (t *SQLTranslator) validateSelectStatement(stmt *SelectStatement) error {
 
 		for _, item := range stmt.SelectList {
 			if item.IsWildcard {
-				return fmt.Errorf("wildcard (*) not allowed with GROUP BY")
+				return errors.New("wildcard (*) not allowed with GROUP BY")
 			}
 
 			if !t.isAggregationExpression(item.Expression) {
 				if col, ok := item.Expression.(*expr.ColumnExpr); ok {
 					if !groupColumns[col.Name()] {
-						return fmt.Errorf("column '%s' must appear in GROUP BY clause or be used in aggregate function", col.Name())
+						return fmt.Errorf(
+							"column '%s' must appear in GROUP BY clause or be used in aggregate function",
+							col.Name(),
+						)
 					}
 				}
 			}
@@ -489,7 +497,7 @@ func (t *SQLTranslator) validateSelectStatement(stmt *SelectStatement) error {
 
 	// Validate HAVING clause
 	if stmt.HavingClause != nil && stmt.GroupByClause == nil {
-		return fmt.Errorf("HAVING clause requires GROUP BY clause")
+		return errors.New("HAVING clause requires GROUP BY clause")
 	}
 
 	// Additional HAVING validation will be done during translation when we have
@@ -500,7 +508,7 @@ func (t *SQLTranslator) validateSelectStatement(stmt *SelectStatement) error {
 		// Basic validation - ensure expressions are valid
 		for _, item := range stmt.OrderByClause.OrderItems {
 			if item.Expression == nil {
-				return fmt.Errorf("ORDER BY expression cannot be nil")
+				return errors.New("ORDER BY expression cannot be nil")
 			}
 		}
 	}
@@ -509,7 +517,11 @@ func (t *SQLTranslator) validateSelectStatement(stmt *SelectStatement) error {
 	if stmt.LimitClause != nil {
 		// Allow Count = OffsetOnlyLimit for OFFSET-only queries, and Count >= 0 for regular LIMIT
 		if stmt.LimitClause.Count < OffsetOnlyLimit {
-			return fmt.Errorf("invalid LIMIT count %d, must be non-negative or %d", stmt.LimitClause.Count, OffsetOnlyLimit)
+			return fmt.Errorf(
+				"invalid LIMIT count %d, must be non-negative or %d",
+				stmt.LimitClause.Count,
+				OffsetOnlyLimit,
+			)
 		}
 		if stmt.LimitClause.Offset < 0 {
 			return fmt.Errorf("OFFSET must be non-negative, got %d", stmt.LimitClause.Offset)
@@ -519,7 +531,7 @@ func (t *SQLTranslator) validateSelectStatement(stmt *SelectStatement) error {
 	return nil
 }
 
-// GetRegisteredTables returns the list of registered table names
+// GetRegisteredTables returns the list of registered table names.
 func (t *SQLTranslator) GetRegisteredTables() []string {
 	var tables []string
 	for name := range t.tables {
@@ -528,12 +540,12 @@ func (t *SQLTranslator) GetRegisteredTables() []string {
 	return tables
 }
 
-// ClearTables removes all registered tables
+// ClearTables removes all registered tables.
 func (t *SQLTranslator) ClearTables() {
 	t.tables = make(map[string]*dataframe.DataFrame)
 }
 
-// resolveAliasesInExpression recursively resolves aliases in an expression tree
+// resolveAliasesInExpression recursively resolves aliases in an expression tree.
 func (t *SQLTranslator) resolveAliasesInExpression(
 	expression expr.Expr,
 	aliasResolver *expr.AliasResolver,

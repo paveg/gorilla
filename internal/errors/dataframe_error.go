@@ -4,12 +4,13 @@
 package errors
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
 )
 
-// Constants for similarity matching
+// Constants for similarity matching.
 const (
 	similarityThreshold      = 0.6  // Minimum similarity score for suggestions
 	maxSuggestions           = 3    // Maximum number of suggestions to return
@@ -18,7 +19,7 @@ const (
 	formatMismatchSimilarity = 0.9  // Similarity score for format mismatches (underscore vs camelCase)
 )
 
-// ErrorLevel defines the verbosity level for error formatting
+// ErrorLevel defines the verbosity level for error formatting.
 type ErrorLevel int
 
 const (
@@ -27,14 +28,14 @@ const (
 	ErrorLevelDebug
 )
 
-// DataFrameInfo contains information about a DataFrame for error context
+// DataFrameInfo contains information about a DataFrame for error context.
 type DataFrameInfo struct {
 	Rows    int               // Number of rows
 	Columns []string          // Column names
 	Types   map[string]string // Column name to type mapping
 }
 
-// OperationContext provides context for wrapping errors in multi-step operations
+// OperationContext provides context for wrapping errors in multi-step operations.
 type OperationContext struct {
 	Operation  string        // High-level operation name
 	Step       int           // Current step number
@@ -42,7 +43,7 @@ type OperationContext struct {
 	DataInfo   DataFrameInfo // Information about the DataFrame being processed
 }
 
-// DataFrameError represents standardized errors across all DataFrame operations
+// DataFrameError represents standardized errors across all DataFrame operations.
 type DataFrameError struct {
 	Op       string            // Operation name (e.g., "Sort", "Filter", "Join")
 	Column   string            // Column name if applicable
@@ -53,12 +54,12 @@ type DataFrameError struct {
 	DataInfo *DataFrameInfo    // DataFrame information for better context
 }
 
-// Error implements the error interface
+// Error implements the error interface.
 func (e *DataFrameError) Error() string {
 	return e.Format(ErrorLevelDetailed)
 }
 
-// Format returns a formatted error message at the specified verbosity level
+// Format returns a formatted error message at the specified verbosity level.
 func (e *DataFrameError) Format(level ErrorLevel) string {
 	var buf strings.Builder
 
@@ -99,12 +100,12 @@ func (e *DataFrameError) Format(level ErrorLevel) string {
 	return buf.String()
 }
 
-// Unwrap returns the underlying cause for error wrapping support
+// Unwrap returns the underlying cause for error wrapping support.
 func (e *DataFrameError) Unwrap() error {
 	return e.Cause
 }
 
-// Is implements error equality checking for errors.Is()
+// Is implements error equality checking for errors.Is().
 func (e *DataFrameError) Is(target error) bool {
 	if df, ok := target.(*DataFrameError); ok {
 		return e.Op == df.Op && e.Column == df.Column && e.Message == df.Message
@@ -114,7 +115,7 @@ func (e *DataFrameError) Is(target error) bool {
 
 // Common error constructors for consistent error creation
 
-// NewColumnNotFoundError creates an error for operations on non-existent columns
+// NewColumnNotFoundError creates an error for operations on non-existent columns.
 func NewColumnNotFoundError(op, column string) *DataFrameError {
 	return &DataFrameError{
 		Op:      op,
@@ -123,7 +124,7 @@ func NewColumnNotFoundError(op, column string) *DataFrameError {
 	}
 }
 
-// NewInvalidInputError creates an error for invalid operation inputs
+// NewInvalidInputError creates an error for invalid operation inputs.
 func NewInvalidInputError(op, message string) *DataFrameError {
 	return &DataFrameError{
 		Op:      op,
@@ -131,7 +132,7 @@ func NewInvalidInputError(op, message string) *DataFrameError {
 	}
 }
 
-// NewUnsupportedTypeError creates an error for unsupported data types
+// NewUnsupportedTypeError creates an error for unsupported data types.
 func NewUnsupportedTypeError(op, typeName string) *DataFrameError {
 	return &DataFrameError{
 		Op:      op,
@@ -139,7 +140,7 @@ func NewUnsupportedTypeError(op, typeName string) *DataFrameError {
 	}
 }
 
-// NewValidationError creates an error for input validation failures
+// NewValidationError creates an error for input validation failures.
 func NewValidationError(op, column, message string) *DataFrameError {
 	return &DataFrameError{
 		Op:      op,
@@ -148,7 +149,7 @@ func NewValidationError(op, column, message string) *DataFrameError {
 	}
 }
 
-// NewInternalError creates an error for internal operation failures
+// NewInternalError creates an error for internal operation failures.
 func NewInternalError(op string, cause error) *DataFrameError {
 	return &DataFrameError{
 		Op:      op,
@@ -159,7 +160,7 @@ func NewInternalError(op string, cause error) *DataFrameError {
 
 // Enhanced error methods for fluent API
 
-// WithContext adds additional context information to the error
+// WithContext adds additional context information to the error.
 func (e *DataFrameError) WithContext(context map[string]string) *DataFrameError {
 	enhanced := *e // Copy the error
 	if enhanced.Context == nil {
@@ -171,30 +172,31 @@ func (e *DataFrameError) WithContext(context map[string]string) *DataFrameError 
 	return &enhanced
 }
 
-// WithHint adds a helpful hint to the error
+// WithHint adds a helpful hint to the error.
 func (e *DataFrameError) WithHint(hint string) *DataFrameError {
 	enhanced := *e // Copy the error
 	enhanced.Hint = hint
 	return &enhanced
 }
 
-// WithDataFrameInfo adds DataFrame information for better context
+// WithDataFrameInfo adds DataFrame information for better context.
 func (e *DataFrameError) WithDataFrameInfo(info DataFrameInfo) *DataFrameError {
 	enhanced := *e // Copy the error
 	enhanced.DataInfo = &info
 	return &enhanced
 }
 
-// WithCause adds an underlying cause to the error
+// WithCause adds an underlying cause to the error.
 func (e *DataFrameError) WithCause(cause error) *DataFrameError {
 	enhanced := *e // Copy the error
 	enhanced.Cause = cause
 	return &enhanced
 }
 
-// WrapError wraps an error with operation context information
+// WrapError wraps an error with operation context information.
 func (ctx *OperationContext) WrapError(err error) *DataFrameError {
-	if dfErr, ok := err.(*DataFrameError); ok {
+	dfErr := &DataFrameError{}
+	if errors.As(err, &dfErr) {
 		// Wrap existing DataFrameError with context
 		return &DataFrameError{
 			Op:       fmt.Sprintf("%s (step %d/%d)", ctx.Operation, ctx.Step, ctx.TotalSteps),
@@ -218,14 +220,18 @@ func (ctx *OperationContext) WrapError(err error) *DataFrameError {
 
 // Specialized error constructors
 
-// NewColumnNotFoundErrorWithSuggestions creates a column not found error with similar column suggestions
+// NewColumnNotFoundErrorWithSuggestions creates a column not found error with similar column suggestions.
 func NewColumnNotFoundErrorWithSuggestions(op, column string, availableColumns []string) *DataFrameError {
 	message := fmt.Sprintf("Column '%s' does not exist", column)
 
 	suggestions := findSimilarColumns(column, availableColumns)
 	var hint string
 	if len(suggestions) > 0 {
-		hint = fmt.Sprintf("Did you mean '%s'? Available columns: [%s]", suggestions[0], strings.Join(availableColumns, ", "))
+		hint = fmt.Sprintf(
+			"Did you mean '%s'? Available columns: [%s]",
+			suggestions[0],
+			strings.Join(availableColumns, ", "),
+		)
 	} else {
 		hint = fmt.Sprintf("Available columns: [%s]", strings.Join(availableColumns, ", "))
 	}
@@ -238,7 +244,7 @@ func NewColumnNotFoundErrorWithSuggestions(op, column string, availableColumns [
 	}
 }
 
-// NewTypeMismatchError creates an error for type mismatches
+// NewTypeMismatchError creates an error for type mismatches.
 func NewTypeMismatchError(op, column, expectedType, actualType string) *DataFrameError {
 	message := fmt.Sprintf("Type mismatch in column '%s': expected %s, got %s", column, expectedType, actualType)
 	hint := fmt.Sprintf("Please convert the column type from %s to %s before performing %s operation",
@@ -252,7 +258,7 @@ func NewTypeMismatchError(op, column, expectedType, actualType string) *DataFram
 	}
 }
 
-// NewIndexOutOfBoundsError creates an error for out-of-bounds index access
+// NewIndexOutOfBoundsError creates an error for out-of-bounds index access.
 func NewIndexOutOfBoundsError(op string, index, maxIndex int) *DataFrameError {
 	message := fmt.Sprintf("Index %d is out of bounds for DataFrame with %d rows", index, maxIndex)
 	hint := fmt.Sprintf("Please use valid index in valid range: [0, %d)", maxIndex)
@@ -264,7 +270,7 @@ func NewIndexOutOfBoundsError(op string, index, maxIndex int) *DataFrameError {
 	}
 }
 
-// NewUnsupportedOperationError creates an error for unsupported operations with suggestions
+// NewUnsupportedOperationError creates an error for unsupported operations with suggestions.
 func NewUnsupportedOperationError(op, reason string, supportedOptions []string) *DataFrameError {
 	message := fmt.Sprintf("Unsupported operation in %s: %s", op, reason)
 	var hint string
@@ -279,7 +285,7 @@ func NewUnsupportedOperationError(op, reason string, supportedOptions []string) 
 	}
 }
 
-// NewConfigurationError creates an error for invalid configuration values
+// NewConfigurationError creates an error for invalid configuration values.
 func NewConfigurationError(param string, value interface{}, validOptions []string) *DataFrameError {
 	message := fmt.Sprintf("Invalid configuration for parameter '%s', value: %v", param, value)
 	var hint string
@@ -294,13 +300,13 @@ func NewConfigurationError(param string, value interface{}, validOptions []strin
 	}
 }
 
-// NewInvalidExpressionError creates an error for invalid expressions in operations
+// NewInvalidExpressionError creates an error for invalid expressions in operations.
 func NewInvalidExpressionError(op, reason string) *DataFrameError {
 	return NewInvalidExpressionErrorWithHint(op, reason,
 		"Check the expression syntax and ensure all referenced columns exist")
 }
 
-// NewInvalidExpressionErrorWithHint creates an error for invalid expressions with a custom hint
+// NewInvalidExpressionErrorWithHint creates an error for invalid expressions with a custom hint.
 func NewInvalidExpressionErrorWithHint(op, reason, hint string) *DataFrameError {
 	return &DataFrameError{
 		Op:      op,
@@ -309,7 +315,7 @@ func NewInvalidExpressionErrorWithHint(op, reason, hint string) *DataFrameError 
 	}
 }
 
-// findSimilarColumns finds column names similar to the search term using string similarity
+// findSimilarColumns finds column names similar to the search term using string similarity.
 func findSimilarColumns(searchColumn string, availableColumns []string) []string {
 	type columnScore struct {
 		name  string
@@ -347,7 +353,7 @@ func findSimilarColumns(searchColumn string, availableColumns []string) []string
 }
 
 // calculateSimilarity calculates string similarity using a simple algorithm
-// Returns a score between 0.0 (no similarity) and 1.0 (identical)
+// Returns a score between 0.0 (no similarity) and 1.0 (identical).
 func calculateSimilarity(s1, s2 string) float64 {
 	if s1 == s2 {
 		return 1.0
@@ -379,7 +385,7 @@ func calculateSimilarity(s1, s2 string) float64 {
 	return 1.0 - float64(distance)/float64(maxLen)
 }
 
-// levenshteinDistance calculates the Levenshtein distance between two strings
+// levenshteinDistance calculates the Levenshtein distance between two strings.
 func levenshteinDistance(s1, s2 string) int {
 	if s1 == "" {
 		return len(s2)
@@ -415,7 +421,7 @@ func levenshteinDistance(s1, s2 string) int {
 	return matrix[len(s1)][len(s2)]
 }
 
-// minThree returns the minimum of three integers
+// minThree returns the minimum of three integers.
 func minThree(a, b, c int) int {
 	if a < b && a < c {
 		return a
@@ -426,21 +432,21 @@ func minThree(a, b, c int) int {
 	return c
 }
 
-// Predefined error variables for common cases
+// Predefined error variables for common cases.
 var (
-	// ErrEmptyDataFrame indicates operations on empty DataFrames
+	// ErrEmptyDataFrame indicates operations on empty DataFrames.
 	ErrEmptyDataFrame = &DataFrameError{
 		Op:      "validation",
 		Message: "operation not supported on empty DataFrame",
 	}
 
-	// ErrMismatchedLength indicates length mismatches in operations
+	// ErrMismatchedLength indicates length mismatches in operations.
 	ErrMismatchedLength = &DataFrameError{
 		Op:      "validation",
 		Message: "arrays must have the same length",
 	}
 
-	// ErrInvalidIndex indicates out-of-bounds index access
+	// ErrInvalidIndex indicates out-of-bounds index access.
 	ErrInvalidIndex = &DataFrameError{
 		Op:      "indexing",
 		Message: "index out of bounds",

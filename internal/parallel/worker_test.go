@@ -194,7 +194,7 @@ func TestLargeDataset(t *testing.T) {
 	// Test with larger dataset to ensure it works under load
 	size := 1000
 	input := make([]int, size)
-	for i := 0; i < size; i++ {
+	for i := range size {
 		input[i] = i
 	}
 

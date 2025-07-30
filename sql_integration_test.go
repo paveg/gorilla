@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestSQLExecutorIntegration tests that SQL functionality is available through the public API
+// TestSQLExecutorIntegration tests that SQL functionality is available through the public API.
 func TestSQLExecutorIntegration(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
@@ -43,7 +43,7 @@ func TestSQLExecutorIntegration(t *testing.T) {
 	assert.Equal(t, "Charlie", nameCol.GetAsString(0), "Result should contain Charlie")
 }
 
-// TestSQLExecutorValidation tests query validation functionality
+// TestSQLExecutorValidation tests query validation functionality.
 func TestSQLExecutorValidation(t *testing.T) {
 	mem := memory.NewGoAllocator()
 	executor := NewSQLExecutor(mem)
@@ -64,7 +64,7 @@ func TestSQLExecutorValidation(t *testing.T) {
 	assert.Error(t, err, "Invalid SQL query should fail validation")
 }
 
-// TestSQLExecutorExplain tests query explanation functionality
+// TestSQLExecutorExplain tests query explanation functionality.
 func TestSQLExecutorExplain(t *testing.T) {
 	mem := memory.NewGoAllocator()
 	executor := NewSQLExecutor(mem)
@@ -82,7 +82,7 @@ func TestSQLExecutorExplain(t *testing.T) {
 	assert.NotEmpty(t, plan, "EXPLAIN should return a non-empty plan")
 }
 
-// TestSQLExecutorTableManagement tests table registration and management
+// TestSQLExecutorTableManagement tests table registration and management.
 func TestSQLExecutorTableManagement(t *testing.T) {
 	mem := memory.NewGoAllocator()
 	executor := NewSQLExecutor(mem)
@@ -108,7 +108,7 @@ func TestSQLExecutorTableManagement(t *testing.T) {
 	assert.Empty(t, tables, "All tables should be cleared")
 }
 
-// TestSQLLimitClause tests SQL LIMIT functionality
+// TestSQLLimitClause tests SQL LIMIT functionality.
 func TestSQLLimitClause(t *testing.T) {
 	mem := memory.NewGoAllocator()
 	executor := NewSQLExecutor(mem)
@@ -140,7 +140,7 @@ func TestSQLLimitClause(t *testing.T) {
 	assert.Equal(t, "Charlie", nameCol.GetAsString(2))
 }
 
-// TestSQLOffsetClause tests SQL OFFSET functionality
+// TestSQLOffsetClause tests SQL OFFSET functionality.
 func TestSQLOffsetClause(t *testing.T) {
 	mem := memory.NewGoAllocator()
 	executor := NewSQLExecutor(mem)
@@ -172,7 +172,7 @@ func TestSQLOffsetClause(t *testing.T) {
 	assert.Equal(t, "Eve", nameCol.GetAsString(2))
 }
 
-// TestSQLLimitOffset tests SQL LIMIT and OFFSET together
+// TestSQLLimitOffset tests SQL LIMIT and OFFSET together.
 func TestSQLLimitOffset(t *testing.T) {
 	mem := memory.NewGoAllocator()
 	executor := NewSQLExecutor(mem)
@@ -203,7 +203,7 @@ func TestSQLLimitOffset(t *testing.T) {
 	assert.Equal(t, "Charlie", nameCol.GetAsString(1))
 }
 
-// TestSQLLimitOffsetEdgeCases tests edge cases for LIMIT and OFFSET
+// TestSQLLimitOffsetEdgeCases tests edge cases for LIMIT and OFFSET.
 func TestSQLLimitOffsetEdgeCases(t *testing.T) {
 	// Split into sub-tests to isolate any resource management issues
 

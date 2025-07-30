@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// MockChunkReader implements ChunkReader for testing
+// MockChunkReader implements ChunkReader for testing.
 type MockChunkReader struct {
 	chunks [][]int64
 	index  int
@@ -50,7 +50,7 @@ func (mcr *MockChunkReader) Close() error {
 	return nil
 }
 
-// MockChunkWriter implements ChunkWriter for testing
+// MockChunkWriter implements ChunkWriter for testing.
 type MockChunkWriter struct {
 	chunks []*DataFrame
 	closed bool
@@ -87,7 +87,7 @@ func (mcw *MockChunkWriter) GetChunks() []*DataFrame {
 	return mcw.chunks
 }
 
-// MockStreamingOperation implements StreamingOperation for testing
+// MockStreamingOperation implements StreamingOperation for testing.
 type MockStreamingOperation struct {
 	applied  int
 	released bool
@@ -115,7 +115,7 @@ func (mso *MockStreamingOperation) IsReleased() bool {
 	return mso.released
 }
 
-// TestStreamingProcessor tests the streaming processor functionality
+// TestStreamingProcessor tests the streaming processor functionality.
 func TestStreamingProcessor(t *testing.T) {
 	t.Run("processes chunks successfully", func(t *testing.T) {
 		mem := memory.NewGoAllocator()
@@ -146,7 +146,7 @@ func TestStreamingProcessor(t *testing.T) {
 		// Verify results
 		assert.Equal(t, 3, operation.TimesApplied())
 		assert.True(t, operation.IsReleased())
-		assert.Equal(t, 3, len(writer.GetChunks()))
+		assert.Len(t, writer.GetChunks(), 3)
 	})
 
 	t.Run("handles empty chunks gracefully", func(t *testing.T) {
@@ -172,7 +172,7 @@ func TestStreamingProcessor(t *testing.T) {
 		// Verify no operations were applied
 		assert.Equal(t, 0, operation.TimesApplied())
 		assert.True(t, operation.IsReleased())
-		assert.Equal(t, 0, len(writer.GetChunks()))
+		assert.Empty(t, writer.GetChunks())
 	})
 
 	t.Run("handles reader errors", func(t *testing.T) {
@@ -221,7 +221,7 @@ func TestStreamingProcessor(t *testing.T) {
 	})
 }
 
-// TestMemoryAwareChunkReader tests the memory-aware chunk reader
+// TestMemoryAwareChunkReader tests the memory-aware chunk reader.
 func TestMemoryAwareChunkReader(t *testing.T) {
 	t.Run("records memory usage for chunks", func(t *testing.T) {
 		monitor := NewMemoryUsageMonitor(1024 * 1024)
@@ -236,7 +236,7 @@ func TestMemoryAwareChunkReader(t *testing.T) {
 		defer chunk.Release()
 
 		// Verify memory usage was recorded
-		assert.True(t, monitor.CurrentUsage() > 0)
+		assert.Positive(t, monitor.CurrentUsage())
 		assert.Equal(t, int64(1), monitor.GetStats().ActiveAllocations)
 	})
 
@@ -272,7 +272,7 @@ func TestMemoryAwareChunkReader(t *testing.T) {
 	})
 }
 
-// TestSpillableBatch tests the spillable batch functionality
+// TestSpillableBatch tests the spillable batch functionality.
 func TestSpillableBatch(t *testing.T) {
 	t.Run("creates and releases batch", func(t *testing.T) {
 		mem := memory.NewGoAllocator()
@@ -324,7 +324,7 @@ func TestSpillableBatch(t *testing.T) {
 	})
 }
 
-// TestBatchManager tests the batch manager functionality
+// TestBatchManager tests the batch manager functionality.
 func TestBatchManager(t *testing.T) {
 	t.Run("manages multiple batches", func(t *testing.T) {
 		monitor := NewMemoryUsageMonitor(1024 * 1024)
@@ -344,11 +344,11 @@ func TestBatchManager(t *testing.T) {
 		manager.AddBatch(df2)
 
 		// Verify batches were added
-		assert.Equal(t, 2, len(manager.batches))
+		assert.Len(t, manager.batches, 2)
 
 		// Release all batches
 		manager.ReleaseAll()
-		assert.Equal(t, 0, len(manager.batches))
+		assert.Empty(t, manager.batches)
 	})
 
 	t.Run("spills LRU batch", func(t *testing.T) {

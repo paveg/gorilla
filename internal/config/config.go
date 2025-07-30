@@ -14,36 +14,36 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config represents the global configuration for Gorilla DataFrame operations
+// Config represents the global configuration for Gorilla DataFrame operations.
 type Config struct {
 	// Parallel Processing Configuration
 	// Minimum rows to trigger parallel processing
 	ParallelThreshold int `json:"parallel_threshold" yaml:"parallel_threshold"`
 	// Number of worker goroutines (0 = auto-detect)
-	WorkerPoolSize int `json:"worker_pool_size" yaml:"worker_pool_size"`
+	WorkerPoolSize int `json:"worker_pool_size"   yaml:"worker_pool_size"`
 	// Size of data chunks for parallel processing (0 = auto-calculate)
-	ChunkSize      int `json:"chunk_size" yaml:"chunk_size"`
-	MaxParallelism int `json:"max_parallelism" yaml:"max_parallelism"` // Maximum number of parallel operations
+	ChunkSize      int `json:"chunk_size"         yaml:"chunk_size"`
+	MaxParallelism int `json:"max_parallelism"    yaml:"max_parallelism"` // Maximum number of parallel operations
 
 	// Memory Management Configuration
 	// Memory threshold in bytes (0 = unlimited)
-	MemoryThreshold int64 `json:"memory_threshold" yaml:"memory_threshold"`
+	MemoryThreshold int64 `json:"memory_threshold"      yaml:"memory_threshold"`
 	// GC pressure threshold (0.0-1.0)
 	GCPressureThreshold float64 `json:"gc_pressure_threshold" yaml:"gc_pressure_threshold"`
-	AllocatorPoolSize   int     `json:"allocator_pool_size" yaml:"allocator_pool_size"` // Size of allocator pool
+	AllocatorPoolSize   int     `json:"allocator_pool_size"   yaml:"allocator_pool_size"` // Size of allocator pool
 
 	// Query Optimization Configuration
-	FilterFusion      bool `json:"filter_fusion" yaml:"filter_fusion"`           // Enable filter fusion optimization
+	FilterFusion      bool `json:"filter_fusion"      yaml:"filter_fusion"`      // Enable filter fusion optimization
 	PredicatePushdown bool `json:"predicate_pushdown" yaml:"predicate_pushdown"` // Enable predicate pushdown optimization
-	JoinOptimization  bool `json:"join_optimization" yaml:"join_optimization"`   // Enable join optimization
+	JoinOptimization  bool `json:"join_optimization"  yaml:"join_optimization"`  // Enable join optimization
 
 	// Debugging Configuration
-	EnableProfiling   bool `json:"enable_profiling" yaml:"enable_profiling"`     // Enable performance profiling
-	VerboseLogging    bool `json:"verbose_logging" yaml:"verbose_logging"`       // Enable verbose logging
+	EnableProfiling   bool `json:"enable_profiling"   yaml:"enable_profiling"`   // Enable performance profiling
+	VerboseLogging    bool `json:"verbose_logging"    yaml:"verbose_logging"`    // Enable verbose logging
 	MetricsCollection bool `json:"metrics_collection" yaml:"metrics_collection"` // Enable metrics collection
 }
 
-// OperationConfig represents per-operation configuration overrides
+// OperationConfig represents per-operation configuration overrides.
 type OperationConfig struct {
 	ForceParallel   bool  // Force parallel execution regardless of threshold
 	DisableParallel bool  // Disable parallel execution
@@ -51,7 +51,7 @@ type OperationConfig struct {
 	MaxMemoryUsage  int64 // Maximum memory usage for this operation
 }
 
-// SystemInfo contains system information for configuration validation
+// SystemInfo contains system information for configuration validation.
 type SystemInfo struct {
 	CPUCount     int
 	MemorySize   int64
@@ -59,26 +59,26 @@ type SystemInfo struct {
 	OSType       string
 }
 
-// ConfigValidator validates and provides recommendations for configuration
+// ConfigValidator validates and provides recommendations for configuration.
 type ConfigValidator struct {
 	systemInfo SystemInfo
 }
 
-// PerformanceTuner provides dynamic performance tuning based on runtime conditions
+// PerformanceTuner provides dynamic performance tuning based on runtime conditions.
 type PerformanceTuner struct {
 	config           *Config
 	adaptiveSettings map[string]interface{}
 	mu               sync.RWMutex
 }
 
-// Default configuration values
+// Default configuration values.
 const (
 	DefaultParallelThreshold   = 1000
 	DefaultMaxParallelism      = 16
 	DefaultGCPressureThreshold = 0.8
 	DefaultAllocatorPoolSize   = 10
 
-	// Performance tuning constants
+	// Performance tuning constants.
 	SmallDatasetThreshold         = 100
 	LargeDatasetThreshold         = 1000000
 	LargeDatasetParallelThreshold = 500
@@ -89,13 +89,13 @@ const (
 	WorkerPoolReductionFactor     = 2
 )
 
-// Global configuration instance
+// Global configuration instance.
 var (
 	globalConfig = NewConfig() // Initialize with defaults
 	configMutex  sync.RWMutex
 )
 
-// NewConfig creates a new configuration with default values
+// NewConfig creates a new configuration with default values.
 func NewConfig() Config {
 	return Config{
 		// Parallel Processing defaults
@@ -121,7 +121,7 @@ func NewConfig() Config {
 	}
 }
 
-// Validate validates the configuration and returns an error if invalid
+// Validate validates the configuration and returns an error if invalid.
 func (c *Config) Validate() error {
 	if c.ParallelThreshold <= 0 {
 		return fmt.Errorf("ParallelThreshold must be positive, got %d", c.ParallelThreshold)
@@ -154,7 +154,7 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// WithDefaults returns a new configuration with default values filled in for zero values
+// WithDefaults returns a new configuration with default values filled in for zero values.
 func (c Config) WithDefaults() Config {
 	defaults := NewConfig()
 
@@ -188,21 +188,21 @@ func (c Config) WithDefaults() Config {
 	return c
 }
 
-// SetGlobalConfig sets the global configuration
+// SetGlobalConfig sets the global configuration.
 func SetGlobalConfig(config Config) {
 	configMutex.Lock()
 	defer configMutex.Unlock()
 	globalConfig = config
 }
 
-// GetGlobalConfig returns the current global configuration
+// GetGlobalConfig returns the current global configuration.
 func GetGlobalConfig() Config {
 	configMutex.RLock()
 	defer configMutex.RUnlock()
 	return globalConfig
 }
 
-// LoadFromJSON loads configuration from JSON data
+// LoadFromJSON loads configuration from JSON data.
 func LoadFromJSON(data []byte) (Config, error) {
 	var config Config
 	if err := json.Unmarshal(data, &config); err != nil {
@@ -211,7 +211,7 @@ func LoadFromJSON(data []byte) (Config, error) {
 	return config.WithDefaults(), nil
 }
 
-// LoadFromFile loads configuration from a file (supports JSON, YAML)
+// LoadFromFile loads configuration from a file (supports JSON, YAML).
 func LoadFromFile(filename string) (Config, error) {
 	// #nosec G304 - Configuration file path is expected to be user-provided
 	data, err := os.ReadFile(filename)
@@ -238,7 +238,7 @@ func LoadFromFile(filename string) (Config, error) {
 	return config.WithDefaults(), nil
 }
 
-// LoadFromEnv loads configuration from environment variables
+// LoadFromEnv loads configuration from environment variables.
 func LoadFromEnv() Config {
 	config := NewConfig()
 
@@ -250,7 +250,7 @@ func LoadFromEnv() Config {
 	return config
 }
 
-// loadParallelProcessingEnv loads parallel processing environment variables
+// loadParallelProcessingEnv loads parallel processing environment variables.
 func loadParallelProcessingEnv(config *Config) {
 	if val := os.Getenv("GORILLA_PARALLEL_THRESHOLD"); val != "" {
 		if parsed, err := strconv.Atoi(val); err == nil {
@@ -277,7 +277,7 @@ func loadParallelProcessingEnv(config *Config) {
 	}
 }
 
-// loadMemoryManagementEnv loads memory management environment variables
+// loadMemoryManagementEnv loads memory management environment variables.
 func loadMemoryManagementEnv(config *Config) {
 	if val := os.Getenv("GORILLA_MEMORY_THRESHOLD"); val != "" {
 		if parsed, err := strconv.ParseInt(val, 10, 64); err == nil {
@@ -298,7 +298,7 @@ func loadMemoryManagementEnv(config *Config) {
 	}
 }
 
-// loadOptimizationEnv loads optimization environment variables
+// loadOptimizationEnv loads optimization environment variables.
 func loadOptimizationEnv(config *Config) {
 	if val := os.Getenv("GORILLA_FILTER_FUSION"); val != "" {
 		if parsed, err := strconv.ParseBool(val); err == nil {
@@ -319,7 +319,7 @@ func loadOptimizationEnv(config *Config) {
 	}
 }
 
-// loadDebuggingEnv loads debugging environment variables
+// loadDebuggingEnv loads debugging environment variables.
 func loadDebuggingEnv(config *Config) {
 	if val := os.Getenv("GORILLA_ENABLE_PROFILING"); val != "" {
 		if parsed, err := strconv.ParseBool(val); err == nil {
@@ -340,7 +340,7 @@ func loadDebuggingEnv(config *Config) {
 	}
 }
 
-// GetSystemInfo returns system information for configuration validation
+// GetSystemInfo returns system information for configuration validation.
 func GetSystemInfo() SystemInfo {
 	var memSize int64 = 8 * 1024 * 1024 * 1024 // 8GB default estimate
 
@@ -352,14 +352,14 @@ func GetSystemInfo() SystemInfo {
 	}
 }
 
-// NewConfigValidator creates a new configuration validator
+// NewConfigValidator creates a new configuration validator.
 func NewConfigValidator() *ConfigValidator {
 	return &ConfigValidator{
 		systemInfo: GetSystemInfo(),
 	}
 }
 
-// Validate validates a configuration and provides recommendations
+// Validate validates a configuration and provides recommendations.
 func (cv *ConfigValidator) Validate(config Config) (Config, []string, error) {
 	var warnings []string
 	validated := config
@@ -394,7 +394,7 @@ func (cv *ConfigValidator) Validate(config Config) (Config, []string, error) {
 	return validated, warnings, nil
 }
 
-// NewPerformanceTuner creates a new performance tuner
+// NewPerformanceTuner creates a new performance tuner.
 func NewPerformanceTuner(config *Config) *PerformanceTuner {
 	return &PerformanceTuner{
 		config:           config,
@@ -402,7 +402,7 @@ func NewPerformanceTuner(config *Config) *PerformanceTuner {
 	}
 }
 
-// OptimizeForDataset optimizes configuration for a specific dataset
+// OptimizeForDataset optimizes configuration for a specific dataset.
 func (pt *PerformanceTuner) OptimizeForDataset(rowCount, columnCount int) Config {
 	pt.mu.Lock()
 	defer pt.mu.Unlock()
@@ -441,14 +441,14 @@ func (pt *PerformanceTuner) OptimizeForDataset(rowCount, columnCount int) Config
 	return optimized
 }
 
-// isSystemLoadHigh checks if system load is high (simplified implementation)
+// isSystemLoadHigh checks if system load is high (simplified implementation).
 func (pt *PerformanceTuner) isSystemLoadHigh() bool {
 	// In a real implementation, this would check actual system metrics
 	// For now, return false as a safe default
 	return false
 }
 
-// Helper functions
+// Helper functions.
 func minInt(a, b int) int {
 	if a < b {
 		return a

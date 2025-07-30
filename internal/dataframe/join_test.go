@@ -215,14 +215,14 @@ func TestJoinParallelExecution(t *testing.T) {
 	size := 2000
 	leftIDs := make([]int64, size)
 	leftValues := make([]float64, size)
-	for i := 0; i < size; i++ {
+	for i := range size {
 		leftIDs[i] = int64(i % 1000) // Create some duplicates
 		leftValues[i] = float64(i)
 	}
 
 	rightIDs := make([]int64, size/2)
 	rightValues := make([]string, size/2)
-	for i := 0; i < size/2; i++ {
+	for i := range size / 2 {
 		rightIDs[i] = int64(i % 500)
 		rightValues[i] = "value_" + string(rune(i))
 	}
@@ -249,12 +249,12 @@ func TestJoinParallelExecution(t *testing.T) {
 	defer result.Release()
 
 	// Verify result is correct
-	assert.Greater(t, result.Len(), 0)
+	assert.Positive(t, result.Len())
 	// Both DataFrames have "id" columns, so we get both in the result
 	assert.Equal(t, []string{"id", "value", "id", "right_value"}, result.Columns())
 }
 
-// Helper function to create test data for join operations
+// Helper function to create test data for join operations.
 func createJoinTestData(t *testing.T) (*DataFrame, *DataFrame) {
 	mem := memory.NewGoAllocator()
 

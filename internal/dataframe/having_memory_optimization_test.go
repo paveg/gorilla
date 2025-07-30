@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// BenchmarkHavingMemoryOptimization compares memory overhead before and after optimizations
+// BenchmarkHavingMemoryOptimization compares memory overhead before and after optimizations.
 func BenchmarkHavingMemoryOptimization(b *testing.B) {
 	mem := memory.NewGoAllocator()
 
@@ -22,7 +22,7 @@ func BenchmarkHavingMemoryOptimization(b *testing.B) {
 	salaries := make([]float64, size)
 
 	deptNames := []string{"Engineering", "Sales", "HR", "Marketing", "Support", "Finance"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(40000 + (i * 5))
 	}
@@ -45,7 +45,7 @@ func BenchmarkHavingMemoryOptimization(b *testing.B) {
 		var totalBytes uint64
 
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			var beforeStats runtime.MemStats
 			runtime.ReadMemStats(&beforeStats)
 
@@ -115,7 +115,7 @@ func BenchmarkHavingMemoryOptimization(b *testing.B) {
 	})
 }
 
-// TestHavingMemoryOptimizationCorrectness verifies that optimizations don't affect correctness
+// TestHavingMemoryOptimizationCorrectness verifies that optimizations don't affect correctness.
 func TestHavingMemoryOptimizationCorrectness(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
@@ -125,7 +125,7 @@ func TestHavingMemoryOptimizationCorrectness(t *testing.T) {
 	salaries := make([]float64, size)
 
 	deptNames := []string{"Engineering", "Sales", "HR"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(40000 + (i * 50))
 	}
@@ -148,8 +148,8 @@ func TestHavingMemoryOptimizationCorrectness(t *testing.T) {
 	require.NotNil(t, result)
 
 	// Verify the result has the expected structure
-	assert.True(t, result.Len() >= 0, "Result should have non-negative length")
-	assert.True(t, result.Width() > 0, "Result should have columns")
+	assert.GreaterOrEqual(t, result.Len(), 0, "Result should have non-negative length")
+	assert.Positive(t, result.Width(), "Result should have columns")
 
 	// Verify department column exists
 	deptCol, exists := result.Column("department")
@@ -161,7 +161,7 @@ func TestHavingMemoryOptimizationCorrectness(t *testing.T) {
 	groupByOp.Release()
 }
 
-// BenchmarkHavingMemoryScaling tests memory scaling with different dataset sizes
+// BenchmarkHavingMemoryScaling tests memory scaling with different dataset sizes.
 func BenchmarkHavingMemoryScaling(b *testing.B) {
 	mem := memory.NewGoAllocator()
 	sizes := []int{1000, 5000, 10000, 25000}
@@ -172,7 +172,7 @@ func BenchmarkHavingMemoryScaling(b *testing.B) {
 			salaries := make([]float64, size)
 
 			deptNames := []string{"Eng", "Sales", "HR", "Marketing"}
-			for i := 0; i < size; i++ {
+			for i := range size {
 				departments[i] = deptNames[i%len(deptNames)]
 				salaries[i] = float64(35000 + (i * 3))
 			}
@@ -187,7 +187,7 @@ func BenchmarkHavingMemoryScaling(b *testing.B) {
 
 			var totalOverheadBytes uint64
 
-			for i := 0; i < b.N; i++ {
+			for i := range b.N {
 				var beforeStats runtime.MemStats
 				runtime.ReadMemStats(&beforeStats)
 
@@ -234,7 +234,7 @@ func BenchmarkHavingMemoryScaling(b *testing.B) {
 	}
 }
 
-// TestHavingCachedAllocatorReuse verifies that allocator caching works correctly
+// TestHavingCachedAllocatorReuse verifies that allocator caching works correctly.
 func TestHavingCachedAllocatorReuse(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
@@ -244,7 +244,7 @@ func TestHavingCachedAllocatorReuse(t *testing.T) {
 	salaries := make([]float64, size)
 
 	deptNames := []string{"Engineering", "Sales"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(40000 + (i * 100))
 	}
@@ -292,7 +292,7 @@ func TestHavingCachedAllocatorReuse(t *testing.T) {
 	groupByOp.Release()
 }
 
-// BenchmarkHavingMemoryPoolEfficiency tests the efficiency of the memory pool
+// BenchmarkHavingMemoryPoolEfficiency tests the efficiency of the memory pool.
 func BenchmarkHavingMemoryPoolEfficiency(b *testing.B) {
 	mem := memory.NewGoAllocator()
 
@@ -301,7 +301,7 @@ func BenchmarkHavingMemoryPoolEfficiency(b *testing.B) {
 	salaries := make([]float64, size)
 
 	deptNames := []string{"A", "B", "C", "D"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(40000 + (i * 10))
 	}
@@ -317,7 +317,7 @@ func BenchmarkHavingMemoryPoolEfficiency(b *testing.B) {
 
 		var totalPoolStats []runtime.MemStats
 
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			var beforeStats runtime.MemStats
 			runtime.ReadMemStats(&beforeStats)
 
@@ -354,7 +354,7 @@ func BenchmarkHavingMemoryPoolEfficiency(b *testing.B) {
 			secondHalf := len(totalPoolStats) - firstHalf
 
 			var firstHalfAvg, secondHalfAvg uint64
-			for i := 0; i < firstHalf; i++ {
+			for i := range firstHalf {
 				firstHalfAvg += totalPoolStats[i].TotalAlloc
 			}
 			for i := firstHalf; i < len(totalPoolStats); i++ {

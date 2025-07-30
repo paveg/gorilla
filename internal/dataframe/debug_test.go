@@ -79,14 +79,14 @@ func TestQueryAnalyzer(t *testing.T) {
 		defer result.Release()
 
 		assert.Equal(t, 3, result.Len()) // Bob, Charlie, David, Eve should pass filter
-		assert.Equal(t, 1, len(analyzer.operations))
+		assert.Len(t, analyzer.operations, 1)
 
 		op := analyzer.operations[0]
 		assert.Equal(t, "filter", op.Operation)
 		assert.Equal(t, 5, op.Input.Rows)
 		assert.Equal(t, 2, op.Input.Columns)
 		assert.Equal(t, 3, op.Output.Rows)
-		assert.True(t, op.Duration > 0)
+		assert.Positive(t, op.Duration)
 	})
 
 	t.Run("generates analysis report", func(t *testing.T) {
@@ -110,9 +110,9 @@ func TestQueryAnalyzer(t *testing.T) {
 
 		report := analyzer.GenerateReport()
 
-		assert.Equal(t, 2, len(report.Operations))
+		assert.Len(t, report.Operations, 2)
 		assert.Equal(t, 2, report.Summary.TotalOperations)
-		assert.True(t, report.Summary.TotalDuration > 0)
+		assert.Positive(t, report.Summary.TotalDuration)
 	})
 
 	t.Run("identifies bottlenecks", func(t *testing.T) {
@@ -139,7 +139,7 @@ func TestQueryAnalyzer(t *testing.T) {
 		report := analyzer.GenerateReport()
 
 		// The slow operation should be identified as a bottleneck
-		assert.True(t, len(report.Bottlenecks) > 0)
+		assert.Positive(t, len(report.Bottlenecks))
 		assert.Contains(t, report.Bottlenecks[0].Operation, "slow_operation")
 	})
 
@@ -164,7 +164,7 @@ func TestQueryAnalyzer(t *testing.T) {
 		report := analyzer.GenerateReport()
 
 		// Should suggest parallelization for large operations
-		assert.True(t, len(report.Suggestions) > 0)
+		assert.Positive(t, len(report.Suggestions))
 		assert.Contains(t, report.Suggestions[0], "Consider parallelizing")
 	})
 
@@ -183,7 +183,7 @@ func TestQueryAnalyzer(t *testing.T) {
 		defer result.Release()
 
 		// Should not have recorded any operations
-		assert.Equal(t, 0, len(analyzer.operations))
+		assert.Empty(t, analyzer.operations)
 	})
 }
 
@@ -215,7 +215,7 @@ func TestDebugExecutionPlan(t *testing.T) {
 		assert.NotNil(t, plan.RootNode)
 		assert.Equal(t, "LazyFrame", plan.RootNode.Type)
 		assert.Equal(t, int64(5), plan.Estimated.TotalRows)
-		assert.True(t, plan.Estimated.TotalMemory > 0)
+		assert.Positive(t, plan.Estimated.TotalMemory)
 		assert.True(t, plan.Metadata.CreatedAt.After(time.Time{}))
 	})
 
@@ -228,7 +228,7 @@ func TestDebugExecutionPlan(t *testing.T) {
 		plan := lazyFrame.Explain()
 
 		assert.NotNil(t, plan.RootNode)
-		assert.True(t, len(plan.RootNode.Children) > 0)
+		assert.Positive(t, len(plan.RootNode.Children))
 
 		// Walk through the plan tree to verify structure
 		current := plan.RootNode
@@ -253,9 +253,9 @@ func TestDebugExecutionPlan(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.NotNil(t, plan.RootNode)
-		assert.True(t, plan.Actual.TotalDuration > 0)
-		assert.True(t, plan.Actual.TotalRows > 0)
-		assert.True(t, plan.Actual.TotalMemory > 0)
+		assert.Positive(t, plan.Actual.TotalDuration)
+		assert.Positive(t, plan.Actual.TotalRows)
+		assert.Positive(t, plan.Actual.TotalMemory)
 		assert.True(t, plan.Metadata.ExecutedAt.After(time.Time{}))
 	})
 
@@ -271,7 +271,7 @@ func TestDebugExecutionPlan(t *testing.T) {
 
 		// Should detect parallel execution for large datasets
 		assert.Equal(t, "true", plan.RootNode.Properties["parallel"])
-		assert.True(t, plan.Estimated.ParallelOps > 0)
+		assert.Positive(t, plan.Estimated.ParallelOps)
 	})
 }
 
@@ -389,12 +389,12 @@ func TestDataFrameDebugMethods(t *testing.T) {
 	})
 }
 
-// Helper function to create a large test DataFrame
+// Helper function to create a large test DataFrame.
 func createLargeTestDataFrame(mem memory.Allocator, size int) *DataFrame {
 	names := make([]string, size)
 	ages := make([]int64, size)
 
-	for i := 0; i < size; i++ {
+	for i := range size {
 		names[i] = "Person" + string(rune(i%26+'A'))
 		ages[i] = int64(20 + i%50)
 	}
@@ -432,9 +432,9 @@ func TestPlanNodeTree(t *testing.T) {
 		root.Children = []*PlanNode{filterNode}
 
 		assert.Equal(t, "root", root.ID)
-		assert.Equal(t, 1, len(root.Children))
+		assert.Len(t, root.Children, 1)
 		assert.Equal(t, "filter_1", root.Children[0].ID)
-		assert.Equal(t, 1, len(root.Children[0].Children))
+		assert.Len(t, root.Children[0].Children, 1)
 		assert.Equal(t, "scan", root.Children[0].Children[0].ID)
 	})
 }

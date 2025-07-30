@@ -48,7 +48,7 @@ func TestHavingCrossFeatureIntegration(t *testing.T) {
 		require.NoError(t, err)
 		defer result.Release()
 
-		assert.True(t, result.Len() > 0)
+		assert.Positive(t, result.Len())
 		assert.True(t, result.HasColumn("region"))
 		assert.True(t, result.HasColumn("department"))
 		assert.True(t, result.HasColumn("avg_salary"))
@@ -72,8 +72,8 @@ func TestHavingCrossFeatureIntegration(t *testing.T) {
 			require.True(t, ok, "emp_count column should be Int64 array")
 			empCount := empCountInt64.Value(i)
 
-			assert.True(t, avgSalary > 75000, "avg_salary should be > 75000, got %f", avgSalary)
-			assert.True(t, empCount >= 2, "emp_count should be >= 2, got %d", empCount)
+			assert.Greater(t, avgSalary, 75000, "avg_salary should be > 75000, got %f", avgSalary)
+			assert.GreaterOrEqual(t, empCount, 2, "emp_count should be >= 2, got %d", empCount)
 		}
 	})
 
@@ -93,7 +93,7 @@ func TestHavingCrossFeatureIntegration(t *testing.T) {
 		defer result.Release()
 
 		// Should have at most 2 results due to LIMIT
-		assert.True(t, result.Len() <= 2)
+		assert.LessOrEqual(t, result.Len(), 2)
 
 		if result.Len() > 1 {
 			// Verify ORDER BY DESC is working
@@ -106,7 +106,14 @@ func TestHavingCrossFeatureIntegration(t *testing.T) {
 			require.True(t, ok, "total_salary column should be Float64 array")
 			salary1 := salaryFloat64.Value(0)
 			salary2 := salaryFloat64.Value(1)
-			assert.True(t, salary1 >= salary2, "First result salary %f should be >= second result salary %f", salary1, salary2)
+			assert.GreaterOrEqual(
+				t,
+				salary1,
+				salary2,
+				"First result salary %f should be >= second result salary %f",
+				salary1,
+				salary2,
+			)
 		}
 	})
 
@@ -172,9 +179,9 @@ func TestHavingCrossFeatureIntegration(t *testing.T) {
 				require.True(t, ok, "total_exp column should be Float64 array")
 				totalExp := totalExpFloat64.Value(i)
 
-				assert.True(t, avgSal > 70000, "avg_sal should be > 70000, got %f", avgSal)
-				assert.True(t, teamSize >= 3, "team_size should be >= 3, got %d", teamSize)
-				assert.True(t, totalExp > 10, "total_exp should be > 10, got %f", totalExp)
+				assert.Greater(t, avgSal, 70000, "avg_sal should be > 70000, got %f", avgSal)
+				assert.GreaterOrEqual(t, teamSize, 3, "team_size should be >= 3, got %d", teamSize)
+				assert.Greater(t, totalExp, 10, "total_exp should be > 10, got %f", totalExp)
 			}
 		}
 	})
@@ -216,7 +223,7 @@ func TestHavingBackwardCompatibility(t *testing.T) {
 		require.NoError(t, err)
 		defer result.Release()
 
-		assert.True(t, result.Len() > 0)
+		assert.Positive(t, result.Len())
 		assert.True(t, result.HasColumn("department"))
 	})
 
@@ -229,7 +236,7 @@ func TestHavingBackwardCompatibility(t *testing.T) {
 
 		// This might return 0 or 1 rows depending on implementation
 		// The important thing is it doesn't error
-		assert.True(t, result.Len() >= 0)
+		assert.GreaterOrEqual(t, result.Len(), 0)
 
 		// Only check for column if we have results
 		if result.Len() > 0 {
@@ -279,7 +286,7 @@ func TestHavingWithJoinsIntegration(t *testing.T) {
 		require.NoError(t, err)
 		defer result.Release()
 
-		assert.True(t, result.Len() > 0)
+		assert.Positive(t, result.Len())
 
 		// Verify HAVING conditions
 		for i := 0; i < result.Len(); i++ {
@@ -296,8 +303,8 @@ func TestHavingWithJoinsIntegration(t *testing.T) {
 			require.True(t, ok, "emp_count column should be Int64 array")
 			empCount := empCountInt64.Value(i)
 
-			assert.True(t, avgSal > 70000, "avg_salary should be > 70000, got %f", avgSal)
-			assert.True(t, empCount >= 2, "emp_count should be >= 2, got %d", empCount)
+			assert.Greater(t, avgSal, 70000, "avg_salary should be > 70000, got %f", avgSal)
+			assert.GreaterOrEqual(t, empCount, 2, "emp_count should be >= 2, got %d", empCount)
 		}
 	})
 }
@@ -336,7 +343,7 @@ func TestHavingComplexWorkflows(t *testing.T) {
 		require.NoError(t, err)
 		defer result.Release()
 
-		assert.True(t, result.Len() > 0)
+		assert.Positive(t, result.Len())
 
 		// Verify business logic
 		for i := 0; i < result.Len(); i++ {
@@ -353,8 +360,8 @@ func TestHavingComplexWorkflows(t *testing.T) {
 			require.True(t, ok, "total_spent column should be Float64 array")
 			totalSpent := totalSpentFloat64.Value(i)
 
-			assert.True(t, totalSpent > 500, "total_spent should be > 500, got %f", totalSpent)
-			assert.True(t, orderCount >= 2, "order_count should be >= 2, got %d", orderCount)
+			assert.Greater(t, totalSpent, 500, "total_spent should be > 500, got %f", totalSpent)
+			assert.GreaterOrEqual(t, orderCount, 2, "order_count should be >= 2, got %d", orderCount)
 		}
 	})
 
@@ -391,8 +398,8 @@ func TestHavingComplexWorkflows(t *testing.T) {
 			require.True(t, ok, "total_quantity column should be Float64 array")
 			totalQuantity := totalQuantityFloat64.Value(i)
 
-			assert.True(t, timesOrdered >= 2, "times_ordered should be >= 2, got %d", timesOrdered)
-			assert.True(t, totalQuantity >= 4, "total_quantity should be >= 4, got %f", totalQuantity)
+			assert.GreaterOrEqual(t, timesOrdered, 2, "times_ordered should be >= 2, got %d", timesOrdered)
+			assert.GreaterOrEqual(t, totalQuantity, 4, "total_quantity should be >= 4, got %f", totalQuantity)
 		}
 	})
 }
@@ -442,7 +449,7 @@ func TestHavingErrorRecoveryAndRobustness(t *testing.T) {
 		require.NoError(t, err)
 		defer validResult.Release()
 
-		assert.True(t, validResult.Len() > 0)
+		assert.Positive(t, validResult.Len())
 	})
 
 	t.Run("HAVING with empty result sets", func(t *testing.T) {
@@ -480,7 +487,7 @@ func TestHavingPerformanceRegression(t *testing.T) {
 	values := make([]float64, size)
 
 	catNames := []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		categories[i] = catNames[i%len(catNames)]
 		values[i] = float64(100 + (i % 1000))
 	}
@@ -513,7 +520,7 @@ func TestHavingPerformanceRegression(t *testing.T) {
 		defer result.Release()
 
 		// Verify we get reasonable results
-		assert.True(t, result.Len() >= 0) // Should execute without hanging
+		assert.GreaterOrEqual(t, result.Len(), 0) // Should execute without hanging
 
 		// Verify HAVING conditions are satisfied
 		for i := 0; i < result.Len(); i++ {
@@ -536,9 +543,9 @@ func TestHavingPerformanceRegression(t *testing.T) {
 			require.True(t, ok, "max_value column should be Float64 array")
 			maxValue := maxFloat64.Value(i)
 
-			assert.True(t, count > 500, "count should be > 500, got %d", count)
-			assert.True(t, avgValue > 400, "avg_value should be > 400, got %f", avgValue)
-			assert.True(t, maxValue > 800, "max_value should be > 800, got %f", maxValue)
+			assert.Greater(t, count, 500, "count should be > 500, got %d", count)
+			assert.Greater(t, avgValue, 400, "avg_value should be > 400, got %f", avgValue)
+			assert.Greater(t, maxValue, 800, "max_value should be > 800, got %f", maxValue)
 		}
 	})
 }

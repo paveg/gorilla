@@ -303,7 +303,7 @@ func TestAliasResolver_GetAllAvailableAliases(t *testing.T) {
 	}
 
 	// Should be sorted
-	assert.Equal(t, len(expectedAliases), len(aliases))
+	assert.Len(t, aliases, len(expectedAliases))
 }
 
 func TestAliasResolver_GetColumnNameFromExpression(t *testing.T) {

@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestAdvancedWorkerPool tests the enhanced worker pool with dynamic scaling
+// TestAdvancedWorkerPool tests the enhanced worker pool with dynamic scaling.
 func TestAdvancedWorkerPool(t *testing.T) {
 	t.Run("dynamic scaling based on workload", func(t *testing.T) {
 		pool := NewAdvancedWorkerPool(AdvancedWorkerPoolConfig{
@@ -142,7 +142,7 @@ func TestAdvancedWorkerPool(t *testing.T) {
 		assert.Len(t, results, 15)
 
 		metrics := pool.GetMetrics()
-		assert.Greater(t, metrics.TotalTasksProcessed, int64(0))
+		assert.Positive(t, metrics.TotalTasksProcessed)
 		// AverageTaskDuration and TotalProcessingTime are not thread-safe in current implementation
 		assert.GreaterOrEqual(t, int(metrics.MaxWorkerCount), 2)
 	})
@@ -177,7 +177,7 @@ func TestAdvancedWorkerPool(t *testing.T) {
 	})
 }
 
-// TestWorkerPoolPriorityQueue tests priority-based task scheduling
+// TestWorkerPoolPriorityQueue tests priority-based task scheduling.
 func TestWorkerPoolPriorityQueue(t *testing.T) {
 	// Test constants
 	const (
@@ -200,12 +200,12 @@ func TestWorkerPoolPriorityQueue(t *testing.T) {
 		expectedLowPriority := 50
 
 		// Add high priority tasks
-		for i := 0; i < expectedHighPriority; i++ {
+		for i := range expectedHighPriority {
 			tasks = append(tasks, PriorityTask{Priority: 10, Value: i + 1000}) // High priority
 		}
 
 		// Add low priority tasks
-		for i := 0; i < expectedLowPriority; i++ {
+		for i := range expectedLowPriority {
 			tasks = append(tasks, PriorityTask{Priority: 1, Value: i + 2000}) // Low priority
 		}
 
@@ -261,7 +261,7 @@ func TestWorkerPoolPriorityQueue(t *testing.T) {
 	})
 }
 
-// TestResourceLimits tests configurable resource constraints
+// TestResourceLimits tests configurable resource constraints.
 func TestResourceLimits(t *testing.T) {
 	t.Run("CPU usage limits", func(t *testing.T) {
 		pool := NewAdvancedWorkerPool(AdvancedWorkerPoolConfig{
@@ -281,7 +281,7 @@ func TestResourceLimits(t *testing.T) {
 
 		results := ProcessGeneric(pool, workload, func(x int) int {
 			// CPU-intensive work
-			for i := 0; i < 100000; i++ {
+			for i := range 100000 {
 				_ = i * i
 			}
 			return x * 2
@@ -293,7 +293,7 @@ func TestResourceLimits(t *testing.T) {
 	})
 }
 
-// TestBackpressureControl tests backpressure management
+// TestBackpressureControl tests backpressure management.
 func TestBackpressureControl(t *testing.T) {
 	t.Run("queue backpressure", func(t *testing.T) {
 		pool := NewAdvancedWorkerPool(AdvancedWorkerPoolConfig{

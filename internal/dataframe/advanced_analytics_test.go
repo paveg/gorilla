@@ -259,7 +259,7 @@ func TestDataFrameWindowFunctions(t *testing.T) {
 		defer arr.Release()
 
 		// Shifted values, last value should be null/NaN
-		for i := 0; i < arr.Len()-1; i++ {
+		for i := range arr.Len() - 1 {
 			expected := values[i+1]
 			assert.InDelta(t, expected, arr.(*array.Float64).Value(i), 0.0001)
 		}

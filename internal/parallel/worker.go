@@ -22,14 +22,14 @@ import (
 	"sync"
 )
 
-// WorkerPool manages a pool of goroutines for parallel processing
+// WorkerPool manages a pool of goroutines for parallel processing.
 type WorkerPool struct {
 	numWorkers int
 	ctx        context.Context
 	cancel     context.CancelFunc
 }
 
-// NewWorkerPool creates a new worker pool
+// NewWorkerPool creates a new worker pool.
 func NewWorkerPool(numWorkers int) *WorkerPool {
 	if numWorkers <= 0 {
 		numWorkers = runtime.NumCPU()
@@ -44,7 +44,7 @@ func NewWorkerPool(numWorkers int) *WorkerPool {
 	}
 }
 
-// Process executes work items in parallel using fan-out/fan-in pattern
+// Process executes work items in parallel using fan-out/fan-in pattern.
 func Process[T, R any](
 	wp *WorkerPool,
 	items []T,
@@ -62,7 +62,7 @@ func Process[T, R any](
 
 	// Start workers
 	var wg sync.WaitGroup
-	for i := 0; i < wp.numWorkers; i++ {
+	for range wp.numWorkers {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -105,7 +105,7 @@ func Process[T, R any](
 	return results
 }
 
-// ProcessIndexed executes work items in parallel while preserving order
+// ProcessIndexed executes work items in parallel while preserving order.
 func ProcessIndexed[T, R any](
 	wp *WorkerPool,
 	items []T,
@@ -123,7 +123,7 @@ func ProcessIndexed[T, R any](
 
 	// Start workers
 	var wg sync.WaitGroup
-	for i := 0; i < wp.numWorkers; i++ {
+	for range wp.numWorkers {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -169,18 +169,18 @@ func ProcessIndexed[T, R any](
 	return results
 }
 
-// Close shuts down the worker pool
+// Close shuts down the worker pool.
 func (wp *WorkerPool) Close() {
 	wp.cancel()
 }
 
-// indexedItem holds an item with its index
+// indexedItem holds an item with its index.
 type indexedItem[T any] struct {
 	index int
 	value T
 }
 
-// indexedResult holds a result with its index
+// indexedResult holds a result with its index.
 type indexedResult[R any] struct {
 	index  int
 	result R

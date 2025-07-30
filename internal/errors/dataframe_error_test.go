@@ -87,7 +87,7 @@ func TestNewInvalidInputError(t *testing.T) {
 	err := NewInvalidInputError("SortBy", "arrays must have same length")
 
 	assert.Equal(t, "SortBy", err.Op)
-	assert.Equal(t, "", err.Column)
+	assert.Empty(t, err.Column)
 	assert.Equal(t, "arrays must have same length", err.Message)
 	assert.Equal(t, "SortBy operation failed: arrays must have same length", err.Error())
 }

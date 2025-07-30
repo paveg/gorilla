@@ -181,7 +181,7 @@ func TestHavingOperation_MemoryManagement(t *testing.T) {
 		// Create a larger dataset to test memory management
 		categories := make([]string, 1000)
 		values := make([]int64, 1000)
-		for i := 0; i < 1000; i++ {
+		for i := range 1000 {
 			categories[i] = string(rune('A' + (i % 10))) // 10 groups
 			values[i] = int64(i)
 		}
@@ -200,8 +200,8 @@ func TestHavingOperation_MemoryManagement(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify result is valid before release
-		assert.True(t, result.NumRows() > 0)
-		assert.True(t, result.NumRows() < df.NumRows())
+		assert.Positive(t, result.NumRows())
+		assert.Less(t, result.NumRows(), df.NumRows())
 
 		// Ensure proper cleanup
 		result.Release()

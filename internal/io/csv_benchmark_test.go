@@ -11,7 +11,7 @@ import (
 	"github.com/paveg/gorilla/internal/series"
 )
 
-// BenchmarkCSVReader benchmarks CSV reading performance
+// BenchmarkCSVReader benchmarks CSV reading performance.
 func BenchmarkCSVReader(b *testing.B) {
 	sizes := []int{100, 1000, 10000}
 
@@ -22,7 +22,7 @@ func BenchmarkCSVReader(b *testing.B) {
 			mem := memory.NewGoAllocator()
 
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				reader := NewCSVReader(strings.NewReader(csvData), DefaultCSVOptions(), mem)
 				df, err := reader.Read()
 				if err != nil {
@@ -34,7 +34,7 @@ func BenchmarkCSVReader(b *testing.B) {
 	}
 }
 
-// BenchmarkCSVWriter benchmarks CSV writing performance
+// BenchmarkCSVWriter benchmarks CSV writing performance.
 func BenchmarkCSVWriter(b *testing.B) {
 	sizes := []int{100, 1000, 10000}
 
@@ -45,7 +45,7 @@ func BenchmarkCSVWriter(b *testing.B) {
 			defer df.Release()
 
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				var buf bytes.Buffer
 				writer := NewCSVWriter(&buf, DefaultCSVOptions())
 				err := writer.Write(df)
@@ -57,7 +57,7 @@ func BenchmarkCSVWriter(b *testing.B) {
 	}
 }
 
-// BenchmarkCSVRoundTrip benchmarks full read-write cycle
+// BenchmarkCSVRoundTrip benchmarks full read-write cycle.
 func BenchmarkCSVRoundTrip(b *testing.B) {
 	sizes := []int{100, 1000, 10000}
 
@@ -68,7 +68,7 @@ func BenchmarkCSVRoundTrip(b *testing.B) {
 			mem := memory.NewGoAllocator()
 
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				// Read CSV
 				reader := NewCSVReader(strings.NewReader(csvData), DefaultCSVOptions(), mem)
 				df, err := reader.Read()
@@ -90,12 +90,12 @@ func BenchmarkCSVRoundTrip(b *testing.B) {
 	}
 }
 
-// generateCSVData creates test CSV data with the specified number of rows
+// generateCSVData creates test CSV data with the specified number of rows.
 func generateCSVData(rows int) string {
 	var sb strings.Builder
 	sb.WriteString("id,name,age,salary,active\n")
 
-	for i := 0; i < rows; i++ {
+	for i := range rows {
 		sb.WriteString(fmt.Sprintf("%d,Person_%d,%d,%.2f,%t\n",
 			i, i, 25+(i%40), 30000.0+(float64(i)*100.0), i%2 == 0))
 	}
@@ -103,7 +103,7 @@ func generateCSVData(rows int) string {
 	return sb.String()
 }
 
-// generateDataFrame creates a test DataFrame with the specified number of rows
+// generateDataFrame creates a test DataFrame with the specified number of rows.
 func generateDataFrame(rows int) *dataframe.DataFrame {
 	mem := memory.NewGoAllocator()
 
@@ -113,7 +113,7 @@ func generateDataFrame(rows int) *dataframe.DataFrame {
 	salaries := make([]float64, rows)
 	active := make([]bool, rows)
 
-	for i := 0; i < rows; i++ {
+	for i := range rows {
 		ids[i] = int64(i)
 		names[i] = fmt.Sprintf("Person_%d", i)
 		ages[i] = int64(25 + (i % 40))
@@ -130,7 +130,7 @@ func generateDataFrame(rows int) *dataframe.DataFrame {
 	return dataframe.New(idSeries, nameSeries, ageSeries, salarySeries, activeSeries)
 }
 
-// BenchmarkCSVTypeInference benchmarks type inference performance
+// BenchmarkCSVTypeInference benchmarks type inference performance.
 func BenchmarkCSVTypeInference(b *testing.B) {
 	mem := memory.NewGoAllocator()
 
@@ -151,7 +151,7 @@ func BenchmarkCSVTypeInference(b *testing.B) {
 			reader := NewCSVReader(strings.NewReader(""), DefaultCSVOptions(), mem)
 
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				series, err := reader.createSeriesFromStrings("test", tc.data)
 				if err != nil {
 					b.Fatal(err)
@@ -162,7 +162,7 @@ func BenchmarkCSVTypeInference(b *testing.B) {
 	}
 }
 
-// BenchmarkCSVMemoryUsage benchmarks memory usage patterns
+// BenchmarkCSVMemoryUsage benchmarks memory usage patterns.
 func BenchmarkCSVMemoryUsage(b *testing.B) {
 	sizes := []int{1000, 10000}
 
@@ -171,7 +171,7 @@ func BenchmarkCSVMemoryUsage(b *testing.B) {
 			csvData := generateCSVData(size)
 
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				mem := memory.NewGoAllocator()
 				reader := NewCSVReader(strings.NewReader(csvData), DefaultCSVOptions(), mem)
 				df, err := reader.Read()

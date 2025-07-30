@@ -153,7 +153,7 @@ Charlie,35,70000.25,true`
 		activeArray := activeCol.Array()
 		defer activeArray.Release()
 		activeBoolArray := activeArray.(*array.Boolean)
-		assert.Equal(t, true, activeBoolArray.Value(0))
+		assert.True(t, activeBoolArray.Value(0))
 	})
 }
 
@@ -220,7 +220,7 @@ Charlie;35;70000
 	})
 }
 
-// Helper function to create test DataFrame
+// Helper function to create test DataFrame.
 func createTestDataFrame(mem memory.Allocator) *dataframe.DataFrame {
 	names := []string{"Alice", "Bob", "Charlie"}
 	ages := []int64{25, 30, 35}

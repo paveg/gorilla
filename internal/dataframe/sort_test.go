@@ -138,7 +138,7 @@ func BenchmarkDataFrame_Sort_Sequential(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		b.StopTimer()
 		valuesSeries := series.New("values", values, mem)
 		df := New(valuesSeries)
@@ -163,7 +163,7 @@ func BenchmarkDataFrame_Sort_Parallel(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		b.StopTimer()
 		valuesSeries := series.New("values", values, mem)
 		df := New(valuesSeries)

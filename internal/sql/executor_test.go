@@ -81,7 +81,7 @@ func TestSQLExecutorBasicQueries(t *testing.T) {
 			defer result.Release()
 
 			assert.Equal(t, tt.expectedRows, result.Len())
-			assert.Equal(t, tt.expectedCols, len(result.Columns()))
+			assert.Len(t, result.Columns(), tt.expectedCols)
 
 			if tt.expectedColNames != nil {
 				for _, colName := range tt.expectedColNames {
@@ -139,8 +139,8 @@ func TestSQLExecutorAggregation(t *testing.T) {
 			require.NoError(t, err)
 			defer result.Release()
 
-			assert.Greater(t, result.Len(), 0, "Result should have at least one row")
-			assert.Greater(t, len(result.Columns()), 0, "Result should have at least one column")
+			assert.Positive(t, result.Len(), "Result should have at least one row")
+			assert.NotEmpty(t, result.Columns(), "Result should have at least one column")
 		})
 	}
 }
@@ -186,7 +186,7 @@ func TestSQLExecutorSorting(t *testing.T) {
 			defer result.Release()
 
 			assert.Equal(t, 3, result.Len())
-			assert.Greater(t, len(result.Columns()), 0)
+			assert.NotEmpty(t, result.Columns())
 		})
 	}
 }
@@ -341,7 +341,7 @@ func TestSQLExecutorExplain(t *testing.T) {
 			require.NoError(t, err)
 
 			assert.NotEmpty(t, plan)
-			assert.True(t, plan != "", "Explain plan should not be empty")
+			assert.NotEqual(t, plan, "", "Explain plan should not be empty")
 		})
 	}
 }
@@ -372,7 +372,7 @@ func TestSQLExecutorTableManagement(t *testing.T) {
 	// Test clearing
 	executor.ClearTables()
 	tables = executor.GetRegisteredTables()
-	assert.Len(t, tables, 0)
+	assert.Empty(t, tables)
 }
 
 func TestSQLExecutorBatchExecute(t *testing.T) {
@@ -407,15 +407,15 @@ func TestSQLExecutorBatchExecute(t *testing.T) {
 
 	// Check first result
 	assert.Equal(t, 3, results[0].Len())
-	assert.Equal(t, 1, len(results[0].Columns()))
+	assert.Len(t, results[0].Columns(), 1)
 
 	// Check second result (COUNT)
 	assert.Equal(t, 1, results[1].Len())
-	assert.Equal(t, 1, len(results[1].Columns()))
+	assert.Len(t, results[1].Columns(), 1)
 
 	// Check third result (filtered)
 	assert.Equal(t, 2, results[2].Len()) // Bob and Charlie
-	assert.Equal(t, 1, len(results[2].Columns()))
+	assert.Len(t, results[2].Columns(), 1)
 }
 
 func TestSQLExecutorBatchExecuteError(t *testing.T) {
@@ -500,8 +500,8 @@ func TestSQLExecutorComplexQueries(t *testing.T) {
 			require.NoError(t, err, "Query: %s", tt.query)
 			defer result.Release()
 
-			assert.Greater(t, result.Len(), 0, "Result should have at least one row")
-			assert.Greater(t, len(result.Columns()), 0, "Result should have at least one column")
+			assert.Positive(t, result.Len(), "Result should have at least one row")
+			assert.NotEmpty(t, result.Columns(), "Result should have at least one column")
 		})
 	}
 }
@@ -546,7 +546,7 @@ func TestSQLExecutorStringFunctions(t *testing.T) {
 			defer result.Release()
 
 			assert.Equal(t, 3, result.Len())
-			assert.Greater(t, len(result.Columns()), 0)
+			assert.NotEmpty(t, result.Columns())
 		})
 	}
 }

@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestEnhancedErrorIntegration tests that enhanced errors are properly used through LazyFrame operations
+// TestEnhancedErrorIntegration tests that enhanced errors are properly used through LazyFrame operations.
 func TestEnhancedErrorIntegration(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
@@ -38,7 +38,7 @@ func TestEnhancedErrorIntegration(t *testing.T) {
 	})
 }
 
-// TestBasicErrorEnhancement tests that error enhancements work
+// TestBasicErrorEnhancement tests that error enhancements work.
 func TestBasicErrorEnhancement(t *testing.T) {
 	mem := memory.NewGoAllocator()
 

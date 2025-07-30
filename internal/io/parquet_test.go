@@ -34,7 +34,7 @@ func TestParquetReader_Read(t *testing.T) {
 
 		// Verify the data
 		assert.Equal(t, df.Len(), result.Len())
-		assert.Equal(t, len(df.Columns()), len(result.Columns()))
+		assert.Len(t, result.Columns(), len(df.Columns()))
 		assert.Equal(t, df.Columns(), result.Columns())
 	})
 
@@ -105,7 +105,7 @@ func TestParquetWriter_Write(t *testing.T) {
 
 		err := writer.Write(df)
 		assert.NoError(t, err)
-		assert.Greater(t, buf.Len(), 0, "buffer should contain data")
+		assert.Positive(t, buf.Len(), "buffer should contain data")
 	})
 
 	t.Run("empty DataFrame", func(t *testing.T) {
@@ -136,7 +136,7 @@ func TestParquetWriter_Write(t *testing.T) {
 
 				err := writer.Write(df)
 				assert.NoError(t, err)
-				assert.Greater(t, buf.Len(), 0)
+				assert.Positive(t, buf.Len())
 			})
 		}
 	})
@@ -150,7 +150,7 @@ func TestParquetWriter_Write(t *testing.T) {
 
 		err := writer.Write(df)
 		assert.NoError(t, err)
-		assert.Greater(t, buf.Len(), 0)
+		assert.Positive(t, buf.Len())
 	})
 }
 

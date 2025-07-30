@@ -269,7 +269,7 @@ func createSampleDataFrame(mem memory.Allocator, size int) *dataframe.DataFrame 
 	ids := make([]int64, size)
 	values := make([]float64, size)
 
-	for i := 0; i < size; i++ {
+	for i := range size {
 		ids[i] = int64(i)
 		values[i] = float64(i) * 1.5
 	}

@@ -4,6 +4,7 @@ package series
 import (
 	"fmt"
 	"reflect"
+	"strconv"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -16,13 +17,13 @@ const (
 	nanosPerSecond = 1e9
 )
 
-// Series represents a typed data column with Apache Arrow backend
+// Series represents a typed data column with Apache Arrow backend.
 type Series[T any] struct {
 	name  string
 	array arrow.Array
 }
 
-// New creates a new Series from a slice of values
+// New creates a new Series from a slice of values.
 func New[T any](name string, values []T, mem memory.Allocator) *Series[T] {
 	if mem == nil {
 		mem = memory.NewGoAllocator()
@@ -137,7 +138,7 @@ func New[T any](name string, values []T, mem memory.Allocator) *Series[T] {
 }
 
 // NewSafe creates a new Series from a slice of values with error handling
-// This is the preferred method for production code as it returns errors instead of panicking
+// This is the preferred method for production code as it returns errors instead of panicking.
 func NewSafe[T any](name string, values []T, mem memory.Allocator) (*Series[T], error) {
 	if mem == nil {
 		mem = memory.NewGoAllocator()
@@ -250,17 +251,17 @@ func NewSafe[T any](name string, values []T, mem memory.Allocator) (*Series[T], 
 	}, nil
 }
 
-// Name returns the column name
+// Name returns the column name.
 func (s *Series[T]) Name() string {
 	return s.name
 }
 
-// Len returns the length of the series
+// Len returns the length of the series.
 func (s *Series[T]) Len() int {
 	return s.array.Len()
 }
 
-// Values returns the data as a Go slice
+// Values returns the data as a Go slice.
 func (s *Series[T]) Values() []T {
 	result := make([]T, s.array.Len())
 
@@ -354,7 +355,7 @@ func (s *Series[T]) Values() []T {
 }
 
 // ValuesSafe returns the data as a Go slice with error handling
-// This is the preferred method for production code as it returns errors instead of panicking
+// This is the preferred method for production code as it returns errors instead of panicking.
 func (s *Series[T]) ValuesSafe() ([]T, error) {
 	result := make([]T, s.array.Len())
 
@@ -447,7 +448,7 @@ func (s *Series[T]) ValuesSafe() ([]T, error) {
 	return result, nil
 }
 
-// Value returns the value at the given index
+// Value returns the value at the given index.
 func (s *Series[T]) Value(index int) T {
 	if index < 0 || index >= s.array.Len() {
 		var zero T
@@ -516,17 +517,17 @@ func (s *Series[T]) Value(index int) T {
 	return result
 }
 
-// DataType returns the Arrow data type
+// DataType returns the Arrow data type.
 func (s *Series[T]) DataType() arrow.DataType {
 	return s.array.DataType()
 }
 
-// IsNull checks if the value at index is null
+// IsNull checks if the value at index is null.
 func (s *Series[T]) IsNull(index int) bool {
 	return s.array.IsNull(index)
 }
 
-// String returns a string representation of the series
+// String returns a string representation of the series.
 func (s *Series[T]) String() string {
 	return fmt.Sprintf("Series[%s]: %s (len=%d)",
 		reflect.TypeOf(new(T)).Elem().Name(),
@@ -534,7 +535,7 @@ func (s *Series[T]) String() string {
 		s.Len())
 }
 
-// Array returns the underlying Arrow array (retains a reference)
+// Array returns the underlying Arrow array (retains a reference).
 func (s *Series[T]) Array() arrow.Array {
 	if s.array != nil {
 		s.array.Retain()
@@ -543,14 +544,14 @@ func (s *Series[T]) Array() arrow.Array {
 	return nil
 }
 
-// Release releases the underlying Arrow memory
+// Release releases the underlying Arrow memory.
 func (s *Series[T]) Release() {
 	if s.array != nil {
 		s.array.Release()
 	}
 }
 
-// GetAsString returns the value at the given index as a string
+// GetAsString returns the value at the given index as a string.
 func (s *Series[T]) GetAsString(index int) string {
 	if index < 0 || index >= s.array.Len() || s.array.IsNull(index) {
 		return ""
@@ -560,27 +561,27 @@ func (s *Series[T]) GetAsString(index int) string {
 	case *array.String:
 		return arr.Value(index)
 	case *array.Int64:
-		return fmt.Sprintf("%d", arr.Value(index))
+		return strconv.FormatInt(arr.Value(index), 10)
 	case *array.Int32:
-		return fmt.Sprintf("%d", arr.Value(index))
+		return strconv.Itoa(int(arr.Value(index)))
 	case *array.Int16:
-		return fmt.Sprintf("%d", arr.Value(index))
+		return strconv.Itoa(int(arr.Value(index)))
 	case *array.Int8:
-		return fmt.Sprintf("%d", arr.Value(index))
+		return strconv.Itoa(int(arr.Value(index)))
 	case *array.Uint64:
-		return fmt.Sprintf("%d", arr.Value(index))
+		return strconv.FormatUint(arr.Value(index), 10)
 	case *array.Uint32:
-		return fmt.Sprintf("%d", arr.Value(index))
+		return strconv.FormatUint(uint64(arr.Value(index)), 10)
 	case *array.Uint16:
-		return fmt.Sprintf("%d", arr.Value(index))
+		return strconv.FormatUint(uint64(arr.Value(index)), 10)
 	case *array.Uint8:
-		return fmt.Sprintf("%d", arr.Value(index))
+		return strconv.FormatUint(uint64(arr.Value(index)), 10)
 	case *array.Float64:
 		return fmt.Sprintf("%g", arr.Value(index))
 	case *array.Float32:
 		return fmt.Sprintf("%g", arr.Value(index))
 	case *array.Boolean:
-		return fmt.Sprintf("%t", arr.Value(index))
+		return strconv.FormatBool(arr.Value(index))
 	default:
 		return s.array.String()
 	}

@@ -340,7 +340,7 @@ func BenchmarkHavingClause(b *testing.B) {
 	salaries := make([]float64, size)
 	deptNames := []string{"Engineering", "Sales", "HR", "Marketing", "Support"}
 
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(50000 + (i * 1000 % 50000))
 	}
@@ -363,7 +363,7 @@ func BenchmarkHavingClause(b *testing.B) {
 	require.NoError(b, err)
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		lazy, err := translator.TranslateStatement(stmt)
 		if err != nil {
 			b.Fatal(err)

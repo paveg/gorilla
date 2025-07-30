@@ -69,7 +69,7 @@ func runDemo() {
 
 	depts := []string{"Engineering", "Sales", "Marketing", "HR", "Finance"}
 
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		names[i] = fmt.Sprintf("Employee_%d", i+1)
 		ages[i] = int64(25 + (i % 40))             // Ages 25-64
 		salaries[i] = float64(40000 + (i%60)*1000) // Salaries 40k-99k
@@ -139,7 +139,7 @@ func runBenchmark() {
 	departments := make([]string, numRows)
 	depts := []string{"Engineering", "Sales", "Marketing", "HR", "Finance"}
 
-	for i := 0; i < numRows; i++ {
+	for i := range numRows {
 		names[i] = fmt.Sprintf("Employee_%d", i+1)
 		ages[i] = int64(25 + (i % 40))
 		salaries[i] = float64(40000 + (i%60)*1000)

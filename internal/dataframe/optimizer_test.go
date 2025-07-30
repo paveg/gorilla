@@ -150,8 +150,8 @@ func TestQueryOptimizer_ComplexChaining(t *testing.T) {
 	assert.True(t, exists)
 	revenues := revenueCol.(*series.Series[float64]).Values()
 	// Should have revenues > 2000: 3600 from North-C
-	assert.True(t, len(revenues) >= 1)
-	assert.True(t, revenues[0] > 2000.0)
+	assert.GreaterOrEqual(t, len(revenues), 1)
+	assert.Greater(t, revenues[0], 2000.0)
 }
 
 func TestQueryOptimizer_NoOptimizationNeeded(t *testing.T) {
@@ -249,7 +249,7 @@ func BenchmarkOptimizedQuery(b *testing.B) {
 	ages := make([]int64, size)
 	salaries := make([]float64, size)
 
-	for i := 0; i < size; i++ {
+	for i := range size {
 		ids[i] = int64(i)
 		names[i] = fmt.Sprintf("Person_%d", i)
 		ages[i] = int64(20 + (i % 50))
@@ -264,7 +264,7 @@ func BenchmarkOptimizedQuery(b *testing.B) {
 	defer df.Release()
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		lazy := df.Lazy()
 		result, err := lazy.
 			WithColumn("adjusted_salary", expr.Col("salary").Mul(expr.Lit(1.1))).
@@ -280,7 +280,7 @@ func BenchmarkOptimizedQuery(b *testing.B) {
 	}
 }
 
-// Helper function for testing column dependency analysis
+// Helper function for testing column dependency analysis.
 func extractColumnDependencies(e expr.Expr) []string {
 	var deps []string
 	switch exprType := e.(type) {

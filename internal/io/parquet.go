@@ -17,7 +17,7 @@ import (
 	"github.com/paveg/gorilla/internal/series"
 )
 
-// Read reads Parquet data and returns a DataFrame
+// Read reads Parquet data and returns a DataFrame.
 func (r *ParquetReader) Read() (*dataframe.DataFrame, error) {
 	// Read all data into memory for Parquet reading
 	data, err := io.ReadAll(r.reader)
@@ -49,7 +49,7 @@ func (r *ParquetReader) Read() (*dataframe.DataFrame, error) {
 	return r.arrowTableToDataFrame(table)
 }
 
-// Write writes the DataFrame to Parquet format
+// Write writes the DataFrame to Parquet format.
 func (w *ParquetWriter) Write(df *dataframe.DataFrame) error {
 	// Convert DataFrame to Arrow table
 	table, err := w.dataFrameToArrowTable(df)
@@ -105,7 +105,7 @@ func (w *ParquetWriter) Write(df *dataframe.DataFrame) error {
 	return nil
 }
 
-// arrowTableToDataFrame converts an Arrow table to a DataFrame
+// arrowTableToDataFrame converts an Arrow table to a DataFrame.
 func (r *ParquetReader) arrowTableToDataFrame(table arrow.Table) (*dataframe.DataFrame, error) {
 	if table.NumRows() == 0 {
 		return dataframe.New(), nil
@@ -114,7 +114,7 @@ func (r *ParquetReader) arrowTableToDataFrame(table arrow.Table) (*dataframe.Dat
 	var seriesList []dataframe.ISeries
 	schema := table.Schema()
 
-	for i := 0; i < int(table.NumCols()); i++ {
+	for i := range table.NumCols() {
 		column := table.Column(i)
 		field := schema.Field(i)
 
@@ -129,7 +129,7 @@ func (r *ParquetReader) arrowTableToDataFrame(table arrow.Table) (*dataframe.Dat
 	return dataframe.New(seriesList...), nil
 }
 
-// arrowColumnToSeries converts an Arrow column to a Series
+// arrowColumnToSeries converts an Arrow column to a Series.
 func (r *ParquetReader) arrowColumnToSeries(
 	name string, column *arrow.Column, dataType arrow.DataType,
 ) (dataframe.ISeries, error) {
@@ -143,7 +143,7 @@ func (r *ParquetReader) arrowColumnToSeries(
 	return r.convertArrowArrayToSeries(name, arr, dataType)
 }
 
-// createEmptySeriesByType creates an empty series based on Arrow data type
+// createEmptySeriesByType creates an empty series based on Arrow data type.
 func (r *ParquetReader) createEmptySeriesByType(name string, dataType arrow.DataType) (dataframe.ISeries, error) {
 	//nolint:exhaustive // Only handling supported types for now
 	switch dataType.ID() {
@@ -164,7 +164,7 @@ func (r *ParquetReader) createEmptySeriesByType(name string, dataType arrow.Data
 	}
 }
 
-// convertArrowArrayToSeries converts an Arrow array to a Series
+// convertArrowArrayToSeries converts an Arrow array to a Series.
 func (r *ParquetReader) convertArrowArrayToSeries(
 	name string, arr arrow.Array, dataType arrow.DataType,
 ) (dataframe.ISeries, error) {
@@ -235,7 +235,7 @@ func (r *ParquetReader) convertBoolArray(name string, arr *array.Boolean) (dataf
 	return series.NewSafe(name, values, r.mem)
 }
 
-// dataFrameToArrowTable converts a DataFrame to an Arrow table
+// dataFrameToArrowTable converts a DataFrame to an Arrow table.
 func (w *ParquetWriter) dataFrameToArrowTable(df *dataframe.DataFrame) (arrow.Table, error) {
 	mem := memory.NewGoAllocator()
 
@@ -275,7 +275,7 @@ func (w *ParquetWriter) dataFrameToArrowTable(df *dataframe.DataFrame) (arrow.Ta
 	return array.NewTable(schema, columns, int64(df.Len())), nil
 }
 
-// seriesToArrowArray converts a Series to an Arrow array
+// seriesToArrowArray converts a Series to an Arrow array.
 func (w *ParquetWriter) seriesToArrowArray(s dataframe.ISeries, mem memory.Allocator) (arrow.Array, error) {
 	dataTypeName := s.DataType().Name()
 

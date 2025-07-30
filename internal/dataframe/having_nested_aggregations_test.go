@@ -11,7 +11,7 @@ import (
 	"github.com/paveg/gorilla/internal/series"
 )
 
-// TestHavingNestedAggregations tests nested aggregation functions in HAVING clauses
+// TestHavingNestedAggregations tests nested aggregation functions in HAVING clauses.
 func TestHavingNestedAggregations(t *testing.T) {
 	t.Skip("Nested aggregations require aggregation system refactoring - see issue #134")
 	mem := memory.NewGoAllocator()
@@ -148,7 +148,7 @@ func TestHavingNestedAggregations(t *testing.T) {
 	})
 }
 
-// TestHavingNestedAggregationsEdgeCases tests edge cases for nested aggregations
+// TestHavingNestedAggregationsEdgeCases tests edge cases for nested aggregations.
 func TestHavingNestedAggregationsEdgeCases(t *testing.T) {
 	t.Skip("Nested aggregations require aggregation system refactoring - see issue #134")
 	mem := memory.NewGoAllocator()

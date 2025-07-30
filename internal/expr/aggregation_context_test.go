@@ -86,7 +86,7 @@ func TestAggregationContext_GetColumnName(t *testing.T) {
 
 		columnName, exists := ctx.GetColumnName("SUM(nonexistent)")
 		assert.False(t, exists)
-		assert.Equal(t, "", columnName)
+		assert.Empty(t, columnName)
 	})
 }
 
@@ -105,7 +105,7 @@ func TestAggregationContext_GetExpression(t *testing.T) {
 
 		exprStr, exists := ctx.GetExpression("nonexistent_column")
 		assert.False(t, exists)
-		assert.Equal(t, "", exprStr)
+		assert.Empty(t, exprStr)
 	})
 }
 

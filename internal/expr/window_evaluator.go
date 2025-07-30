@@ -1,6 +1,7 @@
 package expr
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 
@@ -8,7 +9,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 )
 
-// evaluateRank implements RANK() window function
+// evaluateRank implements RANK() window function.
 func (e *Evaluator) evaluateRank(
 	window *WindowSpec,
 	columns map[string]arrow.Array,
@@ -48,14 +49,14 @@ func (e *Evaluator) evaluateRank(
 	}
 
 	// Build the result array
-	for i := 0; i < dataLength; i++ {
+	for i := range dataLength {
 		builder.Append(result[i])
 	}
 
 	return builder.NewArray(), nil
 }
 
-// evaluateDenseRank implements DENSE_RANK() window function
+// evaluateDenseRank implements DENSE_RANK() window function.
 func (e *Evaluator) evaluateDenseRank(
 	window *WindowSpec,
 	columns map[string]arrow.Array,
@@ -89,14 +90,14 @@ func (e *Evaluator) evaluateDenseRank(
 		}
 	}
 
-	for i := 0; i < dataLength; i++ {
+	for i := range dataLength {
 		builder.Append(result[i])
 	}
 
 	return builder.NewArray(), nil
 }
 
-// evaluateLag implements LAG() window function
+// evaluateLag implements LAG() window function.
 func (e *Evaluator) evaluateLag(
 	expr *WindowFunctionExpr,
 	window *WindowSpec,
@@ -104,7 +105,7 @@ func (e *Evaluator) evaluateLag(
 	dataLength int,
 ) (arrow.Array, error) {
 	if len(expr.args) < 1 {
-		return nil, fmt.Errorf("LAG function requires at least 1 argument")
+		return nil, errors.New("LAG function requires at least 1 argument")
 	}
 
 	// Get the column to lag
@@ -138,7 +139,7 @@ func (e *Evaluator) evaluateLag(
 	return e.createLagResult(columnExpr, partitions, window, columns, offset)
 }
 
-// evaluateLead implements LEAD() window function
+// evaluateLead implements LEAD() window function.
 func (e *Evaluator) evaluateLead(
 	expr *WindowFunctionExpr,
 	window *WindowSpec,
@@ -146,7 +147,7 @@ func (e *Evaluator) evaluateLead(
 	dataLength int,
 ) (arrow.Array, error) {
 	if len(expr.args) < 1 {
-		return nil, fmt.Errorf("LEAD function requires at least 1 argument")
+		return nil, errors.New("LEAD function requires at least 1 argument")
 	}
 
 	// Get the column to lead
@@ -180,7 +181,7 @@ func (e *Evaluator) evaluateLead(
 	return e.createLagResult(columnExpr, partitions, window, columns, -offset)
 }
 
-// evaluateFirstValue implements FIRST_VALUE() window function
+// evaluateFirstValue implements FIRST_VALUE() window function.
 func (e *Evaluator) evaluateFirstValue(
 	expr *WindowFunctionExpr,
 	window *WindowSpec,
@@ -192,7 +193,7 @@ func (e *Evaluator) evaluateFirstValue(
 	)
 }
 
-// evaluateLastValue implements LAST_VALUE() window function
+// evaluateLastValue implements LAST_VALUE() window function.
 func (e *Evaluator) evaluateLastValue(
 	expr *WindowFunctionExpr,
 	window *WindowSpec,
@@ -204,7 +205,7 @@ func (e *Evaluator) evaluateLastValue(
 	)
 }
 
-// evaluateWindowSum implements SUM() with OVER clause
+// evaluateWindowSum implements SUM() with OVER clause.
 func (e *Evaluator) evaluateWindowSum(
 	expr *AggregationExpr,
 	window *WindowSpec,
@@ -227,7 +228,7 @@ func (e *Evaluator) evaluateWindowSum(
 	return e.createWindowAggregationResult(columnExpr, partitions, AggNameSum)
 }
 
-// evaluateWindowCount implements COUNT() with OVER clause
+// evaluateWindowCount implements COUNT() with OVER clause.
 func (e *Evaluator) evaluateWindowCount(
 	expr *AggregationExpr,
 	window *WindowSpec,
@@ -250,7 +251,7 @@ func (e *Evaluator) evaluateWindowCount(
 	return e.createWindowAggregationResult(columnExpr, partitions, AggNameCount)
 }
 
-// evaluateWindowMean implements MEAN() with OVER clause
+// evaluateWindowMean implements MEAN() with OVER clause.
 func (e *Evaluator) evaluateWindowMean(
 	expr *AggregationExpr,
 	window *WindowSpec,
@@ -273,7 +274,7 @@ func (e *Evaluator) evaluateWindowMean(
 	return e.createWindowAggregationResult(columnExpr, partitions, AggNameMean)
 }
 
-// evaluateWindowMin implements MIN() with OVER clause
+// evaluateWindowMin implements MIN() with OVER clause.
 func (e *Evaluator) evaluateWindowMin(
 	expr *AggregationExpr,
 	window *WindowSpec,
@@ -296,7 +297,7 @@ func (e *Evaluator) evaluateWindowMin(
 	return e.createWindowAggregationResult(columnExpr, partitions, AggNameMin)
 }
 
-// evaluateWindowMax implements MAX() with OVER clause
+// evaluateWindowMax implements MAX() with OVER clause.
 func (e *Evaluator) evaluateWindowMax(
 	expr *AggregationExpr,
 	window *WindowSpec,
@@ -319,7 +320,7 @@ func (e *Evaluator) evaluateWindowMax(
 	return e.createWindowAggregationResult(columnExpr, partitions, AggNameMax)
 }
 
-// sortPartition sorts a partition based on ORDER BY clause
+// sortPartition sorts a partition based on ORDER BY clause.
 func (e *Evaluator) sortPartition(
 	partition []int,
 	orderBy []OrderByExpr,
@@ -349,7 +350,7 @@ func (e *Evaluator) sortPartition(
 	return sortedIndices
 }
 
-// compareRows compares two rows based on ORDER BY clause
+// compareRows compares two rows based on ORDER BY clause.
 func (e *Evaluator) compareRows(
 	row1, row2 int,
 	orderBy []OrderByExpr,
@@ -377,7 +378,7 @@ func (e *Evaluator) compareRows(
 	return false, nil
 }
 
-// compareValues compares two values in an array
+// compareValues compares two values in an array.
 func (e *Evaluator) compareValues(arr arrow.Array, idx1, idx2 int) (int, error) {
 	// Handle null values first
 	if nullCmp := e.compareNullValues(arr, idx1, idx2); nullCmp != 0 {
@@ -399,7 +400,7 @@ func (e *Evaluator) compareValues(arr arrow.Array, idx1, idx2 int) (int, error) 
 	}
 }
 
-// compareNullValues handles null value comparison logic
+// compareNullValues handles null value comparison logic.
 func (e *Evaluator) compareNullValues(arr arrow.Array, idx1, idx2 int) int {
 	isNull1, isNull2 := arr.IsNull(idx1), arr.IsNull(idx2)
 	if isNull1 && isNull2 {
@@ -414,7 +415,7 @@ func (e *Evaluator) compareNullValues(arr arrow.Array, idx1, idx2 int) int {
 	return 0 // Neither is null, continue with type-specific comparison
 }
 
-// compareStringValues compares two string values
+// compareStringValues compares two string values.
 func (e *Evaluator) compareStringValues(v1, v2 string) int {
 	if v1 < v2 {
 		return -1
@@ -424,7 +425,7 @@ func (e *Evaluator) compareStringValues(v1, v2 string) int {
 	return 0
 }
 
-// compareInt64Values compares two int64 values
+// compareInt64Values compares two int64 values.
 func (e *Evaluator) compareInt64Values(v1, v2 int64) int {
 	if v1 < v2 {
 		return -1
@@ -434,7 +435,7 @@ func (e *Evaluator) compareInt64Values(v1, v2 int64) int {
 	return 0
 }
 
-// compareFloat64Values compares two float64 values
+// compareFloat64Values compares two float64 values.
 func (e *Evaluator) compareFloat64Values(v1, v2 float64) int {
 	if v1 < v2 {
 		return -1
@@ -444,7 +445,7 @@ func (e *Evaluator) compareFloat64Values(v1, v2 float64) int {
 	return 0
 }
 
-// compareBooleanValues compares two boolean values
+// compareBooleanValues compares two boolean values.
 func (e *Evaluator) compareBooleanValues(v1, v2 bool) int {
 	if !v1 && v2 {
 		return -1 // false < true
@@ -454,7 +455,7 @@ func (e *Evaluator) compareBooleanValues(v1, v2 bool) int {
 	return 0 // Both same
 }
 
-// rowsEqual checks if two rows have equal values for specified columns
+// rowsEqual checks if two rows have equal values for specified columns.
 func (e *Evaluator) rowsEqual(
 	row1, row2 int,
 	orderBy []OrderByExpr,
@@ -474,7 +475,7 @@ func (e *Evaluator) rowsEqual(
 	return true
 }
 
-// createLagResult creates result array for LAG/LEAD functions
+// createLagResult creates result array for LAG/LEAD functions.
 func (e *Evaluator) createLagResult(
 	columnExpr arrow.Array,
 	partitions [][]int,
@@ -510,7 +511,7 @@ func (e *Evaluator) createLagResult(
 	return e.buildTypedArrayResult(result, dataLength, e.getArrayType(columnExpr))
 }
 
-// evaluateWindowValueFunction helper for FIRST_VALUE/LAST_VALUE functions
+// evaluateWindowValueFunction helper for FIRST_VALUE/LAST_VALUE functions.
 func (e *Evaluator) evaluateWindowValueFunction(
 	expr *WindowFunctionExpr,
 	window *WindowSpec,
@@ -539,7 +540,7 @@ func (e *Evaluator) evaluateWindowValueFunction(
 	return e.createFirstLastResult(columnExpr, partitions, window, columns, isFirst)
 }
 
-// createFirstLastResult creates result array for FIRST_VALUE/LAST_VALUE functions
+// createFirstLastResult creates result array for FIRST_VALUE/LAST_VALUE functions.
 func (e *Evaluator) createFirstLastResult(
 	columnExpr arrow.Array,
 	partitions [][]int,
@@ -581,7 +582,7 @@ func (e *Evaluator) createFirstLastResult(
 	return e.buildTypedArrayResult(result, dataLength, e.getArrayType(columnExpr))
 }
 
-// createWindowAggregationResult creates result array for window aggregation functions
+// createWindowAggregationResult creates result array for window aggregation functions.
 func (e *Evaluator) createWindowAggregationResult(
 	columnExpr arrow.Array,
 	partitions [][]int,
@@ -603,7 +604,7 @@ func (e *Evaluator) createWindowAggregationResult(
 	}
 }
 
-// getArrayType returns the type string for an Arrow array
+// getArrayType returns the type string for an Arrow array.
 func (e *Evaluator) getArrayType(arr arrow.Array) string {
 	switch arr.(type) {
 	case *array.Int64:
@@ -615,7 +616,7 @@ func (e *Evaluator) getArrayType(arr arrow.Array) string {
 	}
 }
 
-// getArrayValue returns the value at the given index from an Arrow array
+// getArrayValue returns the value at the given index from an Arrow array.
 func (e *Evaluator) getArrayValue(arr arrow.Array, idx int) interface{} {
 	switch a := arr.(type) {
 	case *array.Int64:
@@ -627,7 +628,7 @@ func (e *Evaluator) getArrayValue(arr arrow.Array, idx int) interface{} {
 	}
 }
 
-// buildTypedArrayResult is a helper function to build typed array results
+// buildTypedArrayResult is a helper function to build typed array results.
 func (e *Evaluator) buildTypedArrayResult(
 	result []interface{},
 	dataLength int,
@@ -637,7 +638,7 @@ func (e *Evaluator) buildTypedArrayResult(
 	case typeInt64:
 		builder := array.NewInt64Builder(e.mem)
 		defer builder.Release()
-		for i := 0; i < dataLength; i++ {
+		for i := range dataLength {
 			if result[i] == nil {
 				builder.AppendNull()
 			} else {
@@ -648,7 +649,7 @@ func (e *Evaluator) buildTypedArrayResult(
 	case "string":
 		builder := array.NewStringBuilder(e.mem)
 		defer builder.Release()
-		for i := 0; i < dataLength; i++ {
+		for i := range dataLength {
 			if result[i] == nil {
 				builder.AppendNull()
 			} else {
@@ -659,7 +660,7 @@ func (e *Evaluator) buildTypedArrayResult(
 	case typeFloat64:
 		builder := array.NewFloat64Builder(e.mem)
 		defer builder.Release()
-		for i := 0; i < dataLength; i++ {
+		for i := range dataLength {
 			if result[i] == nil {
 				builder.AppendNull()
 			} else {
@@ -672,7 +673,7 @@ func (e *Evaluator) buildTypedArrayResult(
 	}
 }
 
-// createInt64AggregationResult creates aggregation result for Int64 arrays
+// createInt64AggregationResult creates aggregation result for Int64 arrays.
 func (e *Evaluator) createInt64AggregationResult(
 	arr *array.Int64,
 	partitions [][]int,
@@ -693,7 +694,7 @@ func (e *Evaluator) createInt64AggregationResult(
 	return e.buildTypedArrayResult(result, dataLength, typeInt64)
 }
 
-// createFloat64AggregationResult creates aggregation result for Float64 arrays
+// createFloat64AggregationResult creates aggregation result for Float64 arrays.
 func (e *Evaluator) createFloat64AggregationResult(
 	arr *array.Float64,
 	partitions [][]int,
@@ -714,7 +715,7 @@ func (e *Evaluator) createFloat64AggregationResult(
 	return e.buildTypedArrayResult(result, dataLength, typeFloat64)
 }
 
-// calculateInt64Aggregation calculates aggregation for Int64 values
+// calculateInt64Aggregation calculates aggregation for Int64 values.
 func (e *Evaluator) calculateInt64Aggregation(
 	arr *array.Int64,
 	partition []int,
@@ -758,7 +759,7 @@ func (e *Evaluator) calculateInt64Aggregation(
 	return aggValue
 }
 
-// calculateFloat64Aggregation calculates aggregation for Float64 values
+// calculateFloat64Aggregation calculates aggregation for Float64 values.
 func (e *Evaluator) calculateFloat64Aggregation(
 	arr *array.Float64,
 	partition []int,
@@ -802,7 +803,7 @@ func (e *Evaluator) calculateFloat64Aggregation(
 	return aggValue
 }
 
-// evaluatePercentRank implements PERCENT_RANK() window function
+// evaluatePercentRank implements PERCENT_RANK() window function.
 func (e *Evaluator) evaluatePercentRank(
 	_ *WindowFunctionExpr,
 	window *WindowSpec,
@@ -853,7 +854,7 @@ func (e *Evaluator) evaluatePercentRank(
 	return builder.NewArray(), nil
 }
 
-// evaluateCumeDist implements CUME_DIST() window function
+// evaluateCumeDist implements CUME_DIST() window function.
 func (e *Evaluator) evaluateCumeDist(
 	_ *WindowFunctionExpr,
 	window *WindowSpec,
@@ -881,7 +882,7 @@ func (e *Evaluator) evaluateCumeDist(
 	} else {
 		// No partitioning - calculate for entire dataset
 		fullDataset := make([]int, dataLength)
-		for i := 0; i < dataLength; i++ {
+		for i := range dataLength {
 			fullDataset[i] = i
 		}
 		cumeDist := e.calculateCumulativeDistribution(fullDataset, window, columns)
@@ -895,11 +896,11 @@ func (e *Evaluator) evaluateCumeDist(
 }
 
 const (
-	// nthValueMinArgs is the minimum number of arguments required for NTH_VALUE function
+	// nthValueMinArgs is the minimum number of arguments required for NTH_VALUE function.
 	nthValueMinArgs = 2
 )
 
-// evaluateNthValue implements NTH_VALUE() window function
+// evaluateNthValue implements NTH_VALUE() window function.
 func (e *Evaluator) evaluateNthValue(
 	expr *WindowFunctionExpr,
 	_ *WindowSpec,
@@ -907,23 +908,23 @@ func (e *Evaluator) evaluateNthValue(
 	dataLength int,
 ) (arrow.Array, error) {
 	if len(expr.args) < nthValueMinArgs {
-		return nil, fmt.Errorf("NTH_VALUE requires two arguments")
+		return nil, errors.New("NTH_VALUE requires two arguments")
 	}
 
 	// Get the N value (which position to get)
 	nLit, ok := expr.args[1].(*LiteralExpr)
 	if !ok {
-		return nil, fmt.Errorf("NTH_VALUE second argument must be a literal")
+		return nil, errors.New("NTH_VALUE second argument must be a literal")
 	}
 	n, ok := nLit.value.(int)
 	if !ok || n <= 0 {
-		return nil, fmt.Errorf("NTH_VALUE second argument must be a positive integer")
+		return nil, errors.New("NTH_VALUE second argument must be a positive integer")
 	}
 
 	// Get the column to evaluate
 	colExpr, ok := expr.args[0].(*ColumnExpr)
 	if !ok {
-		return nil, fmt.Errorf("NTH_VALUE first argument must be a column")
+		return nil, errors.New("NTH_VALUE first argument must be a column")
 	}
 
 	column, exists := columns[colExpr.name]
@@ -938,7 +939,7 @@ func (e *Evaluator) evaluateNthValue(
 		defer builder.Release()
 
 		// Simplified logic: Get the nth value for each frame
-		for i := 0; i < dataLength; i++ {
+		for range dataLength {
 			if n <= arr.Len() && !arr.IsNull(n-1) {
 				builder.Append(arr.Value(n - 1))
 			} else {
@@ -951,7 +952,7 @@ func (e *Evaluator) evaluateNthValue(
 		builder := array.NewStringBuilder(e.mem)
 		defer builder.Release()
 
-		for i := 0; i < dataLength; i++ {
+		for range dataLength {
 			if n <= arr.Len() && !arr.IsNull(n-1) {
 				builder.Append(arr.Value(n - 1))
 			} else {
@@ -965,7 +966,7 @@ func (e *Evaluator) evaluateNthValue(
 	}
 }
 
-// evaluateNtile implements NTILE() window function
+// evaluateNtile implements NTILE() window function.
 func (e *Evaluator) evaluateNtile(
 	expr *WindowFunctionExpr,
 	window *WindowSpec,
@@ -973,21 +974,21 @@ func (e *Evaluator) evaluateNtile(
 	dataLength int,
 ) (arrow.Array, error) {
 	if len(expr.args) == 0 {
-		return nil, fmt.Errorf("NTILE requires one argument")
+		return nil, errors.New("NTILE requires one argument")
 	}
 
 	// Get the number of buckets
 	bucketsLit, ok := expr.args[0].(*LiteralExpr)
 	if !ok {
-		return nil, fmt.Errorf("NTILE argument must be a literal")
+		return nil, errors.New("NTILE argument must be a literal")
 	}
 	buckets, ok := bucketsLit.value.(int)
 	if !ok {
-		return nil, fmt.Errorf("NTILE argument must be an integer")
+		return nil, errors.New("NTILE argument must be an integer")
 	}
 
 	if buckets <= 0 {
-		return nil, fmt.Errorf("NTILE buckets must be positive")
+		return nil, errors.New("NTILE buckets must be positive")
 	}
 
 	mem := e.mem
@@ -1018,30 +1019,30 @@ func (e *Evaluator) evaluateNtile(
 
 // Helper methods for window function calculations
 
-// calculateRanks calculates ranks for ordering
+// calculateRanks calculates ranks for ordering.
 func (e *Evaluator) calculateRanks(_ *WindowSpec, _ map[string]arrow.Array, dataLength int) []int {
 	// Simplified rank calculation - in reality this would need proper ordering
 	ranks := make([]int, dataLength)
-	for i := 0; i < dataLength; i++ {
+	for i := range dataLength {
 		ranks[i] = i + 1
 	}
 	return ranks
 }
 
-// calculateRanksForPartition calculates ranks within a partition
+// calculateRanksForPartition calculates ranks within a partition.
 func (e *Evaluator) calculateRanksForPartition(
 	partition []int,
 	_ *WindowSpec,
 	_ map[string]arrow.Array,
 ) []int {
 	ranks := make([]int, len(partition))
-	for i := 0; i < len(partition); i++ {
+	for i := range len(partition) {
 		ranks[i] = i + 1
 	}
 	return ranks
 }
 
-// calculateCumulativeDistribution calculates cumulative distribution
+// calculateCumulativeDistribution calculates cumulative distribution.
 func (e *Evaluator) calculateCumulativeDistribution(
 	partition []int,
 	_ *WindowSpec,
@@ -1049,13 +1050,13 @@ func (e *Evaluator) calculateCumulativeDistribution(
 ) []float64 {
 	size := len(partition)
 	cumeDist := make([]float64, size)
-	for i := 0; i < size; i++ {
+	for i := range size {
 		cumeDist[i] = float64(i+1) / float64(size)
 	}
 	return cumeDist
 }
 
-// calculateNtiles distributes rows into buckets
+// calculateNtiles distributes rows into buckets.
 func (e *Evaluator) calculateNtiles(rowCount, buckets int) []int {
 	ntiles := make([]int, rowCount)
 
@@ -1081,7 +1082,7 @@ func (e *Evaluator) calculateNtiles(rowCount, buckets int) []int {
 	return ntiles
 }
 
-// buildPartitions creates partitions based on partition columns
+// buildPartitions creates partitions based on partition columns.
 func (e *Evaluator) buildPartitions(
 	_ []string,
 	_ map[string]arrow.Array,
@@ -1090,7 +1091,7 @@ func (e *Evaluator) buildPartitions(
 	// Simplified partitioning - in reality this would need proper grouping logic
 	// For now, return a single partition with all rows
 	partition := make([]int, dataLength)
-	for i := 0; i < dataLength; i++ {
+	for i := range dataLength {
 		partition[i] = i
 	}
 	return [][]int{partition}

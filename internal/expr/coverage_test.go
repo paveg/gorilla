@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestColumnExpr_ArithmeticOperations tests arithmetic operations on ColumnExpr
+// TestColumnExpr_ArithmeticOperations tests arithmetic operations on ColumnExpr.
 func TestColumnExpr_ArithmeticOperations(t *testing.T) {
 	col := Col("value")
 
@@ -50,7 +50,7 @@ func TestColumnExpr_ArithmeticOperations(t *testing.T) {
 	}
 }
 
-// TestColumnExpr_ComparisonOperations tests comparison operations on ColumnExpr
+// TestColumnExpr_ComparisonOperations tests comparison operations on ColumnExpr.
 func TestColumnExpr_ComparisonOperations(t *testing.T) {
 	col := Col("value")
 
@@ -95,7 +95,7 @@ func TestColumnExpr_ComparisonOperations(t *testing.T) {
 	}
 }
 
-// TestColumnExpr_MathFunctions tests math functions on ColumnExpr
+// TestColumnExpr_MathFunctions tests math functions on ColumnExpr.
 func TestColumnExpr_MathFunctions(t *testing.T) {
 	col := Col("value")
 
@@ -124,7 +124,7 @@ func TestColumnExpr_MathFunctions(t *testing.T) {
 	}
 }
 
-// TestColumnExpr_StringFunctions tests string functions on ColumnExpr
+// TestColumnExpr_StringFunctions tests string functions on ColumnExpr.
 func TestColumnExpr_StringFunctions(t *testing.T) {
 	col := Col("text")
 
@@ -149,7 +149,7 @@ func TestColumnExpr_StringFunctions(t *testing.T) {
 	}
 }
 
-// TestColumnExpr_CastFunctions tests cast functions on ColumnExpr
+// TestColumnExpr_CastFunctions tests cast functions on ColumnExpr.
 func TestColumnExpr_CastFunctions(t *testing.T) {
 	col := Col("value")
 
@@ -173,7 +173,7 @@ func TestColumnExpr_CastFunctions(t *testing.T) {
 	}
 }
 
-// TestColumnExpr_DateTimeFunctions tests datetime functions on ColumnExpr
+// TestColumnExpr_DateTimeFunctions tests datetime functions on ColumnExpr.
 func TestColumnExpr_DateTimeFunctions(t *testing.T) {
 	col := Col("timestamp")
 
@@ -199,7 +199,7 @@ func TestColumnExpr_DateTimeFunctions(t *testing.T) {
 	}
 }
 
-// TestEvaluator_BooleanOperations tests boolean evaluation
+// TestEvaluator_BooleanOperations tests boolean evaluation.
 func TestEvaluator_BooleanOperations(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
@@ -223,8 +223,8 @@ func TestEvaluator_BooleanOperations(t *testing.T) {
 		assert.NotNil(t, result)
 		assert.Equal(t, 4, result.Len())
 		boolResult := result.(*array.Boolean)
-		assert.Equal(t, true, boolResult.Value(0))
-		assert.Equal(t, false, boolResult.Value(1))
+		assert.True(t, boolResult.Value(0))
+		assert.False(t, boolResult.Value(1))
 	})
 
 	t.Run("evaluate boolean literal", func(t *testing.T) {
@@ -233,7 +233,7 @@ func TestEvaluator_BooleanOperations(t *testing.T) {
 		assert.NotNil(t, result)
 		assert.Equal(t, 4, result.Len()) // Literal is broadcast to match data size
 		boolResult := result.(*array.Boolean)
-		assert.Equal(t, true, boolResult.Value(0))
+		assert.True(t, boolResult.Value(0))
 	})
 
 	t.Run("evaluate boolean comparison", func(t *testing.T) {
@@ -242,14 +242,14 @@ func TestEvaluator_BooleanOperations(t *testing.T) {
 		assert.NotNil(t, result)
 		assert.Equal(t, 4, result.Len())
 		boolResult := result.(*array.Boolean)
-		assert.Equal(t, true, boolResult.Value(0))
-		assert.Equal(t, false, boolResult.Value(1))
-		assert.Equal(t, true, boolResult.Value(2))
-		assert.Equal(t, false, boolResult.Value(3))
+		assert.True(t, boolResult.Value(0))
+		assert.False(t, boolResult.Value(1))
+		assert.True(t, boolResult.Value(2))
+		assert.False(t, boolResult.Value(3))
 	})
 }
 
-// TestEvaluator_Int32Float32Operations tests int32 and float32 operations
+// TestEvaluator_Int32Float32Operations tests int32 and float32 operations.
 func TestEvaluator_Int32Float32Operations(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
@@ -304,10 +304,10 @@ func TestEvaluator_Int32Float32Operations(t *testing.T) {
 		assert.NotNil(t, result)
 		assert.Equal(t, 4, result.Len())
 		boolResult := result.(*array.Boolean)
-		assert.Equal(t, false, boolResult.Value(0))
-		assert.Equal(t, false, boolResult.Value(1))
-		assert.Equal(t, true, boolResult.Value(2))
-		assert.Equal(t, true, boolResult.Value(3))
+		assert.False(t, boolResult.Value(0))
+		assert.False(t, boolResult.Value(1))
+		assert.True(t, boolResult.Value(2))
+		assert.True(t, boolResult.Value(3))
 	})
 
 	t.Run("float32 comparison", func(t *testing.T) {
@@ -316,9 +316,9 @@ func TestEvaluator_Int32Float32Operations(t *testing.T) {
 		assert.NotNil(t, result)
 		assert.Equal(t, 4, result.Len())
 		boolResult := result.(*array.Boolean)
-		assert.Equal(t, true, boolResult.Value(0))
-		assert.Equal(t, true, boolResult.Value(1))
-		assert.Equal(t, false, boolResult.Value(2))
-		assert.Equal(t, false, boolResult.Value(3))
+		assert.True(t, boolResult.Value(0))
+		assert.True(t, boolResult.Value(1))
+		assert.False(t, boolResult.Value(2))
+		assert.False(t, boolResult.Value(3))
 	})
 }
