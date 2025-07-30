@@ -115,8 +115,8 @@ func (r *ParquetReader) arrowTableToDataFrame(table arrow.Table) (*dataframe.Dat
 	schema := table.Schema()
 
 	for i := range table.NumCols() {
-		column := table.Column(i)
-		field := schema.Field(i)
+		column := table.Column(int(i))
+		field := schema.Field(int(i))
 
 		// Create series from Arrow column
 		series, err := r.arrowColumnToSeries(field.Name, column, field.Type)

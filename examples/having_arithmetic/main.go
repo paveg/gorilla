@@ -144,7 +144,7 @@ func printDepartmentResults(df *dataframe.DataFrame) {
 	}
 
 	fmt.Printf("   Matching departments (%d):\n", df.Len())
-	for i := 0; i < df.Len(); i++ {
+	for i := range df.Len() {
 		fmt.Printf("   - %s\n", deptCol.GetAsString(i))
 	}
 }

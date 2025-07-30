@@ -3,7 +3,7 @@ package main
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
@@ -60,7 +60,7 @@ func demonstrateDefaultConfig() {
 		Filter(expr.Col("value").Gt(expr.Lit(500.0))).
 		Collect()
 	if err != nil {
-		log.Printf("Error: %v", err)
+		slog.Error("Error", "err", err)
 		return
 	}
 	defer result.Release()
@@ -100,7 +100,7 @@ func demonstrateFileConfig() {
 		Filter(expr.Col("id").Lt(expr.Lit(int64(1000)))).
 		Collect()
 	if err != nil {
-		log.Printf("Error: %v", err)
+		slog.Error("Error", "err", err)
 		return
 	}
 	defer result.Release()
@@ -140,7 +140,7 @@ func demonstrateEnvConfig() {
 		Filter(expr.Col("value").Gt(expr.Lit(250.0))).
 		Collect()
 	if err != nil {
-		log.Printf("Error: %v", err)
+		slog.Error("Error", "err", err)
 		return
 	}
 	defer result.Release()
@@ -167,7 +167,7 @@ func demonstrateOperationConfig() {
 		Filter(expr.Col("id").Gt(expr.Lit(int64(1000)))).
 		Collect()
 	if err != nil {
-		log.Printf("Error: %v", err)
+		slog.Error("Error", "err", err)
 		return
 	}
 	defer result.Release()
@@ -185,7 +185,7 @@ func demonstrateOperationConfig() {
 		Filter(expr.Col("value").Lt(expr.Lit(1500.0))).
 		Collect()
 	if err != nil {
-		log.Printf("Error: %v", err)
+		slog.Error("Error", "err", err)
 		return
 	}
 	defer seqResult.Release()
@@ -221,7 +221,7 @@ func demonstratePerformanceTuning() {
 		Filter(expr.Col("id").Gt(expr.Lit(int64(5000)))).
 		Collect()
 	if err != nil {
-		log.Printf("Error: %v", err)
+		slog.Error("Error", "err", err)
 		return
 	}
 	defer result.Release()

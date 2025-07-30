@@ -62,14 +62,15 @@ func runDemo() {
 	// Create larger sample dataset
 	fmt.Println("Creating sample dataset...")
 
-	names := make([]string, 1000)
-	ages := make([]int64, 1000)
-	salaries := make([]float64, 1000)
-	departments := make([]string, 1000)
+	const sampleSize = 1000
+	names := make([]string, sampleSize)
+	ages := make([]int64, sampleSize)
+	salaries := make([]float64, sampleSize)
+	departments := make([]string, sampleSize)
 
 	depts := []string{"Engineering", "Sales", "Marketing", "HR", "Finance"}
 
-	for i := range 1000 {
+	for i := range sampleSize {
 		names[i] = fmt.Sprintf("Employee_%d", i+1)
 		ages[i] = int64(25 + (i % 40))             // Ages 25-64
 		salaries[i] = float64(40000 + (i%60)*1000) // Salaries 40k-99k
