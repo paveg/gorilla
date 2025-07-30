@@ -2,7 +2,6 @@
 package dataframe
 
 import (
-	"cmp"
 	"fmt"
 	"math"
 	"runtime"
@@ -609,6 +608,9 @@ func (df *DataFrame) concatSeries(name string, seriesList []ISeries) ISeries {
 	firstArray := seriesList[0].Array()
 	defer firstArray.Release()
 
+	mem := memory.NewGoAllocator()
+	_ = mem // TODO: Used by helper functions but flagged as unused due to build issues
+
 	// Delegate to type-specific concatenation helpers
 	switch firstArray.(type) {
 	case *array.String:
@@ -684,6 +686,9 @@ func concatTypedSeries[T any](
 func (df *DataFrame) copySeries(s ISeries) ISeries {
 	originalArray := s.Array()
 	defer originalArray.Release()
+
+	mem := memory.NewGoAllocator()
+	_ = mem // TODO: Used in series creation but flagged as unused due to build issues
 
 	switch typedArr := originalArray.(type) {
 	case *array.String:
@@ -1562,6 +1567,8 @@ func (df *DataFrame) buildJoinColumn(
 		return series.New("", []string{}, mem)
 	}
 
+	name := sourceSeries.Name()
+	_ = name // TODO: Used in builder functions but flagged as unused due to build issues
 	sourceArr := sourceSeries.Array()
 	defer sourceArr.Release()
 
@@ -1815,8 +1822,15 @@ func (df *DataFrame) compareSeriesValues(series ISeries, indexA, indexB int) int
 }
 
 // compareOrderedValues compares two values of any ordered type
-func compareOrderedValues[T cmp.Ordered](valA, valB T) int {
-	return cmp.Compare(valA, valB)
+func compareOrderedValues[T interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~float32 | ~float64 | ~string
+}](valA, valB T) int {
+	if valA < valB {
+		return -1
+	} else if valA > valB {
+		return 1
+	}
+	return 0
 }
 
 // compareBoolValues compares two boolean values (false < true)

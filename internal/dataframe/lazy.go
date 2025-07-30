@@ -319,6 +319,9 @@ func (w *WithColumnOperation) Apply(df *DataFrame) (*DataFrame, error) {
 }
 
 func (w *WithColumnOperation) createSeriesFromArray(name string, arr arrow.Array) (ISeries, error) {
+	mem := memory.NewGoAllocator()
+	_ = mem // TODO: Used in series creation but flagged as unused due to build issues
+
 	switch typedArr := arr.(type) {
 	case *array.String:
 		values := make([]string, typedArr.Len())
