@@ -1468,14 +1468,71 @@ func (gh *GroupByHavingOperation) String() string {
 	return fmt.Sprintf("group_by(%v).having(%s)", gh.groupByCols, gh.predicate.String())
 }
 
-// LazyFrame holds a DataFrame and a sequence of deferred operations
+// LazyFrame represents a DataFrame with deferred operations for optimized execution.
+//
+// LazyFrame implements lazy evaluation, building up a query plan of operations
+// without executing them immediately. This enables powerful optimizations including:
+//   - Query optimization (predicate pushdown, operation fusion)
+//   - Automatic parallelization for large datasets
+//   - Memory-efficient processing through streaming
+//   - Operation reordering for better performance
+//
+// Operations are only executed when Collect() is called, at which point the
+// entire query plan is optimized and executed in the most efficient manner.
+//
+// Key characteristics:
+//   - Zero-cost operation chaining until execution
+//   - Automatic parallel execution for datasets > 1000 rows
+//   - Query optimization with predicate pushdown
+//   - Memory-efficient streaming for large operations
+//   - Thread-safe parallel chunk processing
+//
+// Example usage:
+//
+//	result, err := df.Lazy().
+//	    Filter(expr.Col("age").Gt(expr.Lit(25))).
+//	    Select("name", "department").
+//	    GroupBy("department").
+//	    Agg(expr.Count(expr.Col("*")).As("employee_count")).
+//	    Collect()
+//
+// The above builds a query plan and executes it optimally, potentially
+// reordering operations and using parallel processing automatically.
 type LazyFrame struct {
 	source     *DataFrame
 	operations []LazyOperation
 	pool       *parallel.WorkerPool
 }
 
-// Lazy converts a DataFrame to a LazyFrame
+// Lazy converts a DataFrame to a LazyFrame for deferred operations.
+//
+// This method creates a LazyFrame that wraps the current DataFrame, enabling
+// lazy evaluation and query optimization. Operations added to the LazyFrame
+// are not executed immediately but are instead accumulated in a query plan.
+//
+// Returns:
+//
+//	*LazyFrame: A new LazyFrame wrapping this DataFrame with an empty operation queue.
+//
+// Example:
+//
+//	// Convert DataFrame to LazyFrame for chained operations
+//	lazy := df.Lazy()
+//
+//	// Chain operations without immediate execution
+//	result, err := lazy.
+//	    Filter(expr.Col("status").Eq(expr.Lit("active"))).
+//	    Select("id", "name").
+//	    Collect() // Operations execute here
+//
+// Performance Benefits:
+//   - Operations are optimized before execution
+//   - Automatic parallelization for large datasets
+//   - Memory-efficient streaming processing
+//   - Predicate pushdown reduces data movement
+//
+// The LazyFrame maintains a reference to the original DataFrame, so both
+// objects should be properly released when no longer needed.
 func (df *DataFrame) Lazy() *LazyFrame {
 	return &LazyFrame{
 		source:     df,
@@ -1607,7 +1664,50 @@ func (lgb *LazyGroupBy) Having(predicate expr.Expr) *LazyFrame {
 	}
 }
 
-// Collect executes all deferred operations and returns the resulting DataFrame
+// Collect executes all accumulated operations and returns the final DataFrame.
+//
+// This method triggers the execution of the entire query plan built up through
+// lazy operations. The execution is optimized with:
+//   - Query optimization (predicate pushdown, operation fusion)
+//   - Automatic parallelization for large datasets (>1000 rows)
+//   - Memory-efficient chunk processing
+//   - Operation reordering for performance
+//
+// Parameters:
+//
+//	ctx: Optional context for cancellation support. If provided, the operation
+//	     can be cancelled before completion.
+//
+// Returns:
+//
+//	*DataFrame: The result of executing all operations in the query plan.
+//	error: Any error encountered during execution.
+//
+// Example:
+//
+//	result, err := df.Lazy().
+//	    Filter(expr.Col("age").Gt(expr.Lit(25))).
+//	    GroupBy("department").
+//	    Agg(expr.Mean(expr.Col("salary")).As("avg_salary")).
+//	    Collect()
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//	defer result.Release()
+//
+// Performance:
+//   - Automatic parallel execution for datasets with >1000 rows
+//   - Uses worker pools sized to available CPU cores
+//   - Optimized memory allocation through pooling
+//   - Query plan optimization reduces unnecessary operations
+//
+// Memory Management:
+// The returned DataFrame is independent and must be released when no longer needed.
+// The LazyFrame and its source DataFrame remain valid after Collect().
+//
+// Cancellation:
+// If a context is provided, the operation will check for cancellation and return
+// early if the context is cancelled. This is useful for long-running operations.
 func (lf *LazyFrame) Collect(ctx ...context.Context) (*DataFrame, error) {
 	// Handle optional context parameter for backward compatibility
 	if len(ctx) > 0 {
