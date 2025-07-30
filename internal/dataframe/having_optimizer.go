@@ -732,7 +732,7 @@ func (c *CompiledHavingEvaluator) evaluateParallel(
 
 // evaluateSequential evaluates the HAVING predicate sequentially
 func (c *CompiledHavingEvaluator) evaluateSequential(
-	aggregatedData map[string]arrow.Array, numRows int,
+	_ map[string]arrow.Array, numRows int,
 ) (*array.Boolean, error) {
 	mem := c.memoryPool.GetAllocator()
 	builder := array.NewBooleanBuilder(mem)
@@ -741,27 +741,6 @@ func (c *CompiledHavingEvaluator) evaluateSequential(
 	// For now, use basic expr evaluation on each row
 	// This can be enhanced with the compiled plan execution
 	for i := 0; i < numRows; i++ {
-		// Create row context for evaluation
-		rowData := make(map[string]interface{})
-		for colName, arr := range aggregatedData {
-			if i < arr.Len() {
-				// Extract value based on array type
-				switch typedArr := arr.(type) {
-				case *array.Float64:
-					rowData[colName] = typedArr.Value(i)
-				case *array.Int64:
-					rowData[colName] = typedArr.Value(i)
-				case *array.String:
-					rowData[colName] = typedArr.Value(i)
-				case *array.Boolean:
-					rowData[colName] = typedArr.Value(i)
-				default:
-					// Handle other types as needed
-					rowData[colName] = nil
-				}
-			}
-		}
-
 		// Evaluate predicate for this row
 		// This is a simplified implementation that would be replaced
 		// with optimized compiled execution

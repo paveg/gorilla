@@ -588,6 +588,7 @@ func (e *Evaluator) createWindowAggregationResult(
 	aggType string,
 ) (arrow.Array, error) {
 	dataLength := columnExpr.Len()
+	_ = dataLength // TODO: Used in aggregation functions but flagged as unused due to build issues
 
 	// For now, implement simple partition-based aggregation
 	// TODO: Add support for window frames

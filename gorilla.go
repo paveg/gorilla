@@ -1076,3 +1076,76 @@ func ExampleSQLExecutor() {
 
 	fmt.Println(result)
 }
+
+// ExampleDataFrameLazyEvaluation demonstrates lazy evaluation with optimization.
+//
+// This example shows how operations are deferred and optimized when using
+// lazy evaluation, including automatic parallelization and query optimization.
+func ExampleDataFrameLazyEvaluation() {
+	mem := memory.NewGoAllocator()
+
+	// Create sample employee data
+	employees := NewSeries("employee", []string{"Alice", "Bob", "Charlie", "Diana", "Eve"}, mem)
+	departments := NewSeries("department", []string{"Engineering", "Sales", "Engineering", "Marketing", "Sales"}, mem)
+	salaries := NewSeries("salary", []int64{75000, 65000, 80000, 70000, 68000}, mem)
+	ages := NewSeries("age", []int64{28, 35, 32, 29, 31}, mem)
+
+	df := NewDataFrame(employees, departments, salaries, ages)
+	defer df.Release()
+
+	// Chain multiple operations - all deferred until Collect()
+	const ageThreshold = 30
+	result, err := df.Lazy().
+		Filter(Col("age").Gt(Lit(int64(ageThreshold)))). // Filter for employees over threshold
+		Select("employee", "department", "salary").
+		Collect()
+
+	if err != nil {
+		panic(err)
+	}
+	defer result.Release()
+
+	fmt.Printf("Employees over 30: %d\n", result.Len())
+	// Output: Employees over 30: 3
+}
+
+// ExampleDataFrameMemoryManagement demonstrates proper memory management patterns.
+//
+// This example shows the recommended patterns for memory management including
+// defer usage, cleanup in error conditions, and resource lifecycle management.
+func ExampleDataFrameMemoryManagement() {
+	mem := memory.NewGoAllocator()
+
+	// Create function that demonstrates proper cleanup
+	processData := func() error {
+		// Create series with immediate defer cleanup
+		ids := NewSeries("id", []int64{1, 2, 3, 4}, mem)
+		defer ids.Release() // Always defer cleanup immediately
+
+		names := NewSeries("name", []string{"Alice", "Bob", "Charlie", "Diana"}, mem)
+		defer names.Release()
+
+		// Create DataFrame with defer cleanup
+		df := NewDataFrame(ids, names)
+		defer df.Release() // Essential - cleans up DataFrame resources
+
+		// Perform operations that might error
+		const idThreshold = 2
+		result, err := df.Lazy().
+			Filter(Col("id").Gt(Lit(int64(idThreshold)))).
+			Collect()
+		if err != nil {
+			return err // Deferred cleanups still execute on error return
+		}
+		defer result.Release() // Clean up result DataFrame
+
+		fmt.Printf("Processed %d rows\n", result.Len())
+		return nil
+	}
+
+	if err := processData(); err != nil {
+		panic(err)
+	}
+	// All resources automatically cleaned up via deferred calls
+	// Output: Processed 2 rows
+}

@@ -1,7 +1,6 @@
 package expr
 
 import (
-	"cmp"
 	"sort"
 	"sync"
 
@@ -51,24 +50,28 @@ func compareNullsSortOptimized(arr arrow.Array, i, j int) int {
 }
 
 // compareValuesSortOptimized compares two values with ascending/descending order
-func compareValuesSortOptimized[T cmp.Ordered](v1, v2 T, ascending bool) int {
-	if v1 < v2 {
-		if ascending {
-			return -1
-		}
-		return 1
+func compareValuesSortOptimized[T interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~float32 | ~float64 | ~string
+}](v1, v2 T, ascending bool) int {
+	var result int
+	switch {
+	case v1 < v2:
+		result = -1
+	case v1 > v2:
+		result = 1
+	default:
+		result = 0
 	}
-	if v1 > v2 {
-		if ascending {
-			return 1
-		}
-		return -1
+	if ascending {
+		return result
 	}
-	return 0
+	return -result
 }
 
 // compareInterfaceValuesSortOptimized compares interface values with null handling
-func compareInterfaceValuesSortOptimized[T cmp.Ordered](v1, v2 interface{}, ascending bool) int {
+func compareInterfaceValuesSortOptimized[T interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~float32 | ~float64 | ~string
+}](v1, v2 interface{}, ascending bool) int {
 	if v1 == nil && v2 == nil {
 		return 0
 	}
