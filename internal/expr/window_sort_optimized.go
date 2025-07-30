@@ -54,11 +54,12 @@ func compareValuesSortOptimized[T interface {
 	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~float32 | ~float64 | ~string
 }](v1, v2 T, ascending bool) int {
 	var result int
-	if v1 < v2 {
+	switch {
+	case v1 < v2:
 		result = -1
-	} else if v1 > v2 {
+	case v1 > v2:
 		result = 1
-	} else {
+	default:
 		result = 0
 	}
 	if ascending {

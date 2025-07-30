@@ -732,7 +732,7 @@ func (c *CompiledHavingEvaluator) evaluateParallel(
 
 // evaluateSequential evaluates the HAVING predicate sequentially
 func (c *CompiledHavingEvaluator) evaluateSequential(
-	aggregatedData map[string]arrow.Array, numRows int,
+	_ map[string]arrow.Array, numRows int,
 ) (*array.Boolean, error) {
 	mem := c.memoryPool.GetAllocator()
 	builder := array.NewBooleanBuilder(mem)

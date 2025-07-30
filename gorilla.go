@@ -1077,7 +1077,7 @@ func ExampleSQLExecutor() {
 	fmt.Println(result)
 }
 
-// ExampleDataFrame_LazyEvaluation demonstrates lazy evaluation with optimization.
+// ExampleDataFrameLazyEvaluation demonstrates lazy evaluation with optimization.
 //
 // This example shows how operations are deferred and optimized when using
 // lazy evaluation, including automatic parallelization and query optimization.
@@ -1109,7 +1109,7 @@ func ExampleDataFrameLazyEvaluation() {
 	// Output: Employees over 30: 3
 }
 
-// ExampleDataFrame_MemoryManagement demonstrates proper memory management patterns.
+// ExampleDataFrameMemoryManagement demonstrates proper memory management patterns.
 //
 // This example shows the recommended patterns for memory management including
 // defer usage, cleanup in error conditions, and resource lifecycle management.
