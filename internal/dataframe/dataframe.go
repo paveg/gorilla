@@ -609,8 +609,6 @@ func (df *DataFrame) concatSeries(name string, seriesList []ISeries) ISeries {
 	firstArray := seriesList[0].Array()
 	defer firstArray.Release()
 
-	mem := memory.NewGoAllocator()
-
 	// Delegate to type-specific concatenation helpers
 	switch firstArray.(type) {
 	case *array.String:
@@ -686,8 +684,6 @@ func concatTypedSeries[T any](
 func (df *DataFrame) copySeries(s ISeries) ISeries {
 	originalArray := s.Array()
 	defer originalArray.Release()
-
-	mem := memory.NewGoAllocator()
 
 	switch typedArr := originalArray.(type) {
 	case *array.String:
@@ -1566,7 +1562,6 @@ func (df *DataFrame) buildJoinColumn(
 		return series.New("", []string{}, mem)
 	}
 
-	name := sourceSeries.Name()
 	sourceArr := sourceSeries.Array()
 	defer sourceArr.Release()
 
