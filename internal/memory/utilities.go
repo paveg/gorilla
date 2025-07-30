@@ -518,7 +518,7 @@ const (
 	adaptiveGCOffset           = 0.05 // Offset for adaptive GC triggering
 	defaultGCPressureThreshold = 0.8  // Default GC pressure threshold
 	defaultMemoryThresholdGB   = 1024 // Default memory threshold in MB (1GB)
-	
+
 	// Slice header constants
 	sliceHeaderFieldCount = 3    // Number of fields in slice header (ptr, len, cap)
 	bytesToMBConversion   = 1024 // Conversion factor from bytes to MB
