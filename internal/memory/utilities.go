@@ -79,7 +79,7 @@ func NewResourceManager(opts ...Option) (ResourceManager, error) {
 	rm := &resourceManager{
 		allocator:           memory.NewGoAllocator(),
 		gcPressureThreshold: defaultGCPressureThreshold,
-		memoryThreshold:     defaultMemoryThresholdGB * 1024 * 1024, // Convert MB to bytes
+		memoryThreshold:     defaultMemoryThresholdGB * bytesToMBConversion * bytesToMBConversion, // Convert MB to bytes
 		resources:           make([]Resource, 0),
 	}
 
@@ -281,7 +281,7 @@ func estimateSliceMemory(rv reflect.Value) int64 {
 
 	elemSize := rv.Type().Elem().Size()
 	// Use unsafe.Slice instead of deprecated reflect.SliceHeader
-	sliceHeader := int64(unsafe.Sizeof(uintptr(0)) * 3) // ptr, len, cap
+	sliceHeader := int64(unsafe.Sizeof(uintptr(0)) * sliceHeaderFieldCount) // ptr, len, cap
 	elementsSize := int64(rv.Cap()) * int64(elemSize)
 
 	return sliceHeader + elementsSize
@@ -518,6 +518,10 @@ const (
 	adaptiveGCOffset           = 0.05 // Offset for adaptive GC triggering
 	defaultGCPressureThreshold = 0.8  // Default GC pressure threshold
 	defaultMemoryThresholdGB   = 1024 // Default memory threshold in MB (1GB)
+	
+	// Slice header constants
+	sliceHeaderFieldCount = 3    // Number of fields in slice header (ptr, len, cap)
+	bytesToMBConversion   = 1024 // Conversion factor from bytes to MB
 )
 
 // GCTrigger provides configurable GC triggering strategies
