@@ -3,7 +3,7 @@
 //
 // This package addresses the duplication patterns identified in similarity analysis:
 // - GC triggering logic (forceGC pattern)
-// - Memory estimation calculations (estimateMemoryUsage logic)  
+// - Memory estimation calculations (estimateMemoryUsage logic)
 // - Resource lifecycle management (create/process/cleanup pattern)
 // - Memory pressure detection and cleanup callbacks
 // - Allocation/deallocation tracking
@@ -82,11 +82,11 @@ func NewResourceManager(opts ...Option) (ResourceManager, error) {
 		memoryThreshold:     1024 * 1024 * 1024, // 1GB default
 		resources:           make([]Resource, 0),
 	}
-	
+
 	for _, opt := range opts {
 		opt(rm)
 	}
-	
+
 	return rm, nil
 }
 
@@ -94,18 +94,18 @@ func NewResourceManager(opts ...Option) (ResourceManager, error) {
 func (rm *resourceManager) EstimateMemory() int64 {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
-	
+
 	if rm.released {
 		return 0
 	}
-	
+
 	var total int64
 	for _, resource := range rm.resources {
 		if resource != nil {
 			total += resource.EstimateMemory()
 		}
 	}
-	
+
 	return total
 }
 
@@ -113,14 +113,14 @@ func (rm *resourceManager) EstimateMemory() int64 {
 func (rm *resourceManager) ForceCleanup() error {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
-	
+
 	if rm.released {
 		return nil
 	}
-	
+
 	// Trigger GC first
 	ForceGC()
-	
+
 	// Then cleanup individual resources
 	for _, resource := range rm.resources {
 		if resource != nil {
@@ -129,7 +129,7 @@ func (rm *resourceManager) ForceCleanup() error {
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -137,16 +137,16 @@ func (rm *resourceManager) ForceCleanup() error {
 func (rm *resourceManager) SpillIfNeeded() error {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
-	
+
 	if rm.released {
 		return nil
 	}
-	
+
 	// Check current memory pressure
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
 	pressure := float64(memStats.HeapInuse) / float64(memStats.Sys)
-	
+
 	// If pressure exceeds threshold, spill resources
 	if pressure > rm.gcPressureThreshold {
 		for _, resource := range rm.resources {
@@ -157,7 +157,7 @@ func (rm *resourceManager) SpillIfNeeded() error {
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -165,17 +165,17 @@ func (rm *resourceManager) SpillIfNeeded() error {
 func (rm *resourceManager) Release() {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
-	
+
 	if rm.released {
 		return
 	}
-	
+
 	for _, resource := range rm.resources {
 		if resource != nil {
 			resource.Release()
 		}
 	}
-	
+
 	rm.resources = rm.resources[:0]
 	rm.released = true
 }
@@ -184,7 +184,7 @@ func (rm *resourceManager) Release() {
 func (rm *resourceManager) Track(resource Resource) {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
-	
+
 	if !rm.released && resource != nil {
 		rm.resources = append(rm.resources, resource)
 	}
@@ -196,10 +196,10 @@ func (rm *resourceManager) Track(resource Resource) {
 func ForceGC() {
 	// Force garbage collection
 	runtime.GC()
-	
+
 	// Force finalizer processing
 	runtime.GC()
-	
+
 	// Give GC time to complete
 	runtime.Gosched()
 }
@@ -208,26 +208,26 @@ func ForceGC() {
 // This consolidates the memory calculation logic found in multiple components.
 func EstimateMemoryUsage(resources ...interface{}) int64 {
 	var total int64
-	
+
 	for _, resource := range resources {
 		if resource == nil {
 			continue
 		}
-		
+
 		total += estimateSingleResource(resource)
 	}
-	
+
 	return total
 }
 
 // EstimateMemoryUsageWithAllocator estimates memory usage considering allocator overhead
 func EstimateMemoryUsageWithAllocator(allocator memory.Allocator, resources ...interface{}) int64 {
 	baseUsage := EstimateMemoryUsage(resources...)
-	
+
 	// Add allocator overhead (estimated 10% overhead)
 	const allocatorOverheadRatio = 0.1
 	overhead := int64(float64(baseUsage) * allocatorOverheadRatio)
-	
+
 	return baseUsage + overhead
 }
 
@@ -236,10 +236,10 @@ func estimateSingleResource(resource interface{}) int64 {
 	if resource == nil {
 		return 0
 	}
-	
+
 	rv := reflect.ValueOf(resource)
 	rt := reflect.TypeOf(resource)
-	
+
 	switch rv.Kind() {
 	case reflect.Slice:
 		return estimateSliceMemory(rv)
@@ -252,6 +252,22 @@ func estimateSingleResource(resource interface{}) int64 {
 		return int64(rt.Elem().Size()) + estimateSingleResource(rv.Elem().Interface())
 	case reflect.String:
 		return int64(rv.Len())
+	case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+		reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128:
+		return int64(rt.Size())
+	case reflect.Array:
+		elemSize := rt.Elem().Size()
+		return int64(rv.Len()) * int64(elemSize)
+	case reflect.Struct:
+		return int64(rt.Size())
+	case reflect.Interface:
+		if rv.IsNil() {
+			return 0
+		}
+		return int64(rt.Size()) + estimateSingleResource(rv.Elem().Interface())
+	case reflect.Invalid, reflect.Chan, reflect.Func, reflect.UnsafePointer:
+		return int64(rt.Size())
 	default:
 		return int64(rt.Size())
 	}
@@ -262,11 +278,11 @@ func estimateSliceMemory(rv reflect.Value) int64 {
 	if rv.IsNil() {
 		return 0
 	}
-	
+
 	elemSize := rv.Type().Elem().Size()
 	sliceHeader := int64(unsafe.Sizeof(reflect.SliceHeader{}))
 	elementsSize := int64(rv.Cap()) * int64(elemSize)
-	
+
 	return sliceHeader + elementsSize
 }
 
@@ -275,12 +291,12 @@ func estimateMapMemory(rv reflect.Value) int64 {
 	if rv.IsNil() {
 		return 0
 	}
-	
+
 	// Rough estimation: map overhead + (key size + value size) * length
 	keySize := rv.Type().Key().Size()
 	valueSize := rv.Type().Elem().Size()
 	mapOverhead := int64(48) // Approximate map header overhead
-	
+
 	return mapOverhead + int64(rv.Len())*(int64(keySize)+int64(valueSize))
 }
 
@@ -301,21 +317,27 @@ func NewResourceLifecycleManager(allocator memory.Allocator) *ResourceLifecycleM
 }
 
 // CreateResource creates a new resource using the provided factory function
-func (rlm *ResourceLifecycleManager) CreateResource(id string, factory func(memory.Allocator) (Resource, error)) (Resource, error) {
+func (rlm *ResourceLifecycleManager) CreateResource(
+	id string,
+	factory func(memory.Allocator) (Resource, error),
+) (Resource, error) {
 	rlm.mu.Lock()
 	defer rlm.mu.Unlock()
-	
+
 	resource, err := factory(rlm.allocator)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	rlm.resources[id] = resource
 	return resource, nil
 }
 
 // ProcessResource applies a processing function to a resource
-func (rlm *ResourceLifecycleManager) ProcessResource(resource Resource, processor func(Resource) (Resource, error)) (Resource, error) {
+func (rlm *ResourceLifecycleManager) ProcessResource(
+	resource Resource,
+	processor func(Resource) (Resource, error),
+) (Resource, error) {
 	return processor(resource)
 }
 
@@ -330,13 +352,13 @@ func (rlm *ResourceLifecycleManager) TrackedCount() int {
 func (rlm *ResourceLifecycleManager) ReleaseAll() {
 	rlm.mu.Lock()
 	defer rlm.mu.Unlock()
-	
+
 	for _, resource := range rlm.resources {
 		if resource != nil {
 			resource.Release()
 		}
 	}
-	
+
 	rlm.resources = make(map[string]Resource)
 }
 
@@ -382,14 +404,14 @@ func (mph *MemoryPressureHandler) RecordAllocation(bytes int64) {
 	mph.currentUsage += bytes
 	newUsage := mph.currentUsage
 	mph.usageMu.Unlock()
-	
+
 	// Check if we need to trigger spilling
 	if newUsage >= mph.threshold {
 		mph.triggerSpill()
 	}
 }
 
-// RecordDeallocation records memory deallocation  
+// RecordDeallocation records memory deallocation
 func (mph *MemoryPressureHandler) RecordDeallocation(bytes int64) {
 	mph.usageMu.Lock()
 	mph.currentUsage -= bytes
@@ -400,11 +422,11 @@ func (mph *MemoryPressureHandler) RecordDeallocation(bytes int64) {
 func (mph *MemoryPressureHandler) Start() {
 	mph.mu.Lock()
 	defer mph.mu.Unlock()
-	
+
 	if mph.monitoring {
 		return
 	}
-	
+
 	mph.monitoring = true
 	go mph.monitorLoop()
 }
@@ -413,11 +435,11 @@ func (mph *MemoryPressureHandler) Start() {
 func (mph *MemoryPressureHandler) Stop() {
 	mph.mu.Lock()
 	defer mph.mu.Unlock()
-	
+
 	if !mph.monitoring {
 		return
 	}
-	
+
 	mph.monitoring = false
 	close(mph.stopChan)
 }
@@ -426,7 +448,7 @@ func (mph *MemoryPressureHandler) Stop() {
 func (mph *MemoryPressureHandler) monitorLoop() {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-ticker.C:
@@ -441,9 +463,9 @@ func (mph *MemoryPressureHandler) monitorLoop() {
 func (mph *MemoryPressureHandler) checkMemoryPressure() {
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
-	
+
 	pressure := float64(memStats.HeapInuse) / float64(memStats.Sys)
-	
+
 	if pressure > mph.gcThreshold {
 		mph.triggerCleanup()
 	}
@@ -454,7 +476,7 @@ func (mph *MemoryPressureHandler) triggerSpill() {
 	mph.mu.RLock()
 	callback := mph.spillCallback
 	mph.mu.RUnlock()
-	
+
 	if callback != nil {
 		go func() {
 			_ = callback() // Error handling would be added in production
@@ -467,7 +489,7 @@ func (mph *MemoryPressureHandler) triggerCleanup() {
 	mph.mu.RLock()
 	callback := mph.cleanupCallback
 	mph.mu.RUnlock()
-	
+
 	if callback != nil {
 		go func() {
 			_ = callback() // Error handling would be added in production
@@ -514,7 +536,7 @@ func (gc *GCTrigger) ShouldTriggerGC(memoryPressure float64) bool {
 		runtime.ReadMemStats(&memStats)
 		if memStats.Mallocs > 0 {
 			gcRate := float64(memStats.NumGC) / float64(memStats.Mallocs)
-			
+
 			if gcRate > 0.1 { // High GC rate, be more conservative
 				return memoryPressure > gc.threshold+0.05
 			}
