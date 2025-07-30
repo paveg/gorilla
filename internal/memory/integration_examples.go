@@ -18,9 +18,10 @@ const (
 	exampleMemoryPressure  = 0.85
 	exampleMemoryThreshold = 1024 * 1024 * 1024 // 1GB
 	exampleAllocation      = 1024 * 1024        // 1MB
+	mockResourceMemoryKB   = 1024               // Mock resource memory usage in bytes (1KB)
 )
 
-// Example 1: Replacing forceGC() pattern across multiple components
+// ExampleStreamingProcessorRefactored demonstrates replacing forceGC() pattern across multiple components.
 // BEFORE: Each component had its own forceGC implementation
 //
 // In streaming.go:
@@ -44,7 +45,7 @@ func ExampleStreamingProcessorRefactored() {
 	}
 }
 
-// Example 2: Replacing estimateMemoryUsage pattern
+// ExampleMemoryEstimationRefactored demonstrates replacing estimateMemoryUsage pattern.
 // BEFORE: Multiple components had similar memory estimation logic
 //
 // In streaming.go:
@@ -67,7 +68,7 @@ func ExampleMemoryEstimationRefactored(data1 []int64, data2 []string) {
 	fmt.Printf("Estimated usage: %d bytes (with overhead: %d bytes)\n", usage, usageWithOverhead)
 }
 
-// Example 3: Replacing resource lifecycle patterns
+// ExampleResourceLifecycleRefactored demonstrates replacing resource lifecycle patterns.
 // BEFORE: Similar create/process/cleanup patterns in multiple places
 //
 // AFTER: Use ResourceLifecycleManager
@@ -103,7 +104,7 @@ func ExampleResourceLifecycleRefactored() {
 	// Cleanup happens automatically via defer
 }
 
-// Example 4: Replacing memory pressure handling patterns
+// ExampleMemoryPressureRefactored demonstrates replacing memory pressure handling patterns.
 // BEFORE: Similar pressure detection and callback patterns
 //
 // In streaming.go:
@@ -145,7 +146,7 @@ func ExampleMemoryPressureRefactored() {
 	handler.RecordAllocation(exampleAllocation)
 }
 
-// Example 5: Replacing ResourceManager patterns
+// ExampleResourceManagerRefactored demonstrates replacing ResourceManager patterns.
 // BEFORE: Each component managed resources differently
 //
 // AFTER: Use unified ResourceManager interface
@@ -185,7 +186,7 @@ type exampleResource struct {
 }
 
 func (er *exampleResource) EstimateMemory() int64 {
-	return 1024 // Mock 1KB
+	return mockResourceMemoryKB // Mock 1KB
 }
 
 func (er *exampleResource) ForceCleanup() error {

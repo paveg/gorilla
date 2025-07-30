@@ -78,8 +78,8 @@ func WithMemoryThreshold(threshold int64) Option {
 func NewResourceManager(opts ...Option) (ResourceManager, error) {
 	rm := &resourceManager{
 		allocator:           memory.NewGoAllocator(),
-		gcPressureThreshold: 0.8,
-		memoryThreshold:     1024 * 1024 * 1024, // 1GB default
+		gcPressureThreshold: defaultGCPressureThreshold,
+		memoryThreshold:     defaultMemoryThresholdGB * 1024 * 1024, // Convert MB to bytes
 		resources:           make([]Resource, 0),
 	}
 
@@ -280,7 +280,8 @@ func estimateSliceMemory(rv reflect.Value) int64 {
 	}
 
 	elemSize := rv.Type().Elem().Size()
-	sliceHeader := int64(unsafe.Sizeof(reflect.SliceHeader{}))
+	// Use unsafe.Slice instead of deprecated reflect.SliceHeader
+	sliceHeader := int64(unsafe.Sizeof(uintptr(0)) * 3) // ptr, len, cap
 	elementsSize := int64(rv.Cap()) * int64(elemSize)
 
 	return sliceHeader + elementsSize
@@ -295,7 +296,7 @@ func estimateMapMemory(rv reflect.Value) int64 {
 	// Rough estimation: map overhead + (key size + value size) * length
 	keySize := rv.Type().Key().Size()
 	valueSize := rv.Type().Elem().Size()
-	mapOverhead := int64(48) // Approximate map header overhead
+	mapOverhead := int64(mapOverheadBytes)
 
 	return mapOverhead + int64(rv.Len())*(int64(keySize)+int64(valueSize))
 }
@@ -446,7 +447,7 @@ func (mph *MemoryPressureHandler) Stop() {
 
 // monitorLoop runs the memory pressure monitoring loop
 func (mph *MemoryPressureHandler) monitorLoop() {
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(monitoringIntervalSeconds * time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -507,6 +508,16 @@ const (
 	AggressiveGC
 	// AdaptiveGC adapts based on system conditions
 	AdaptiveGC
+
+	// Memory and performance constants
+	mapOverheadBytes           = 48   // Approximate map header overhead in bytes
+	monitoringIntervalSeconds  = 5    // Memory monitoring interval in seconds
+	gcRateThreshold            = 0.1  // GC rate threshold for adaptive strategy
+	aggressiveGCOffset         = 0.1  // Offset for aggressive GC triggering
+	conservativeGCOffset       = 0.1  // Offset for conservative GC triggering
+	adaptiveGCOffset           = 0.05 // Offset for adaptive GC triggering
+	defaultGCPressureThreshold = 0.8  // Default GC pressure threshold
+	defaultMemoryThresholdGB   = 1024 // Default memory threshold in MB (1GB)
 )
 
 // GCTrigger provides configurable GC triggering strategies
@@ -527,9 +538,9 @@ func NewGCTrigger(strategy GCStrategy, threshold float64) *GCTrigger {
 func (gc *GCTrigger) ShouldTriggerGC(memoryPressure float64) bool {
 	switch gc.strategy {
 	case ConservativeGC:
-		return memoryPressure > gc.threshold+0.1 // Only trigger at very high pressure
+		return memoryPressure > gc.threshold+conservativeGCOffset // Only trigger at very high pressure
 	case AggressiveGC:
-		return memoryPressure > (gc.threshold - 0.1) // Trigger earlier
+		return memoryPressure > (gc.threshold - aggressiveGCOffset) // Trigger earlier
 	case AdaptiveGC:
 		// Adapt based on current system load
 		var memStats runtime.MemStats
@@ -537,8 +548,8 @@ func (gc *GCTrigger) ShouldTriggerGC(memoryPressure float64) bool {
 		if memStats.Mallocs > 0 {
 			gcRate := float64(memStats.NumGC) / float64(memStats.Mallocs)
 
-			if gcRate > 0.1 { // High GC rate, be more conservative
-				return memoryPressure > gc.threshold+0.05
+			if gcRate > gcRateThreshold { // High GC rate, be more conservative
+				return memoryPressure > gc.threshold+adaptiveGCOffset
 			}
 		}
 		return memoryPressure > gc.threshold

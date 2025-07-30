@@ -2,6 +2,7 @@ package memory
 
 import (
 	"runtime"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -111,17 +112,16 @@ func TestMemoryPressureHandler(t *testing.T) {
 	handler := NewMemoryPressureHandler(1024*1024, 0.7) // 1MB threshold, 70% pressure
 	defer handler.Stop()
 
-	// Set up callbacks
-	spillCalled := false
-	cleanupCalled := false
+	// Set up callbacks with atomic variables to avoid data races
+	var spillCalled, cleanupCalled int32
 
 	handler.SetSpillCallback(func() error {
-		spillCalled = true
+		atomic.StoreInt32(&spillCalled, 1)
 		return nil
 	})
 
 	handler.SetCleanupCallback(func() error {
-		cleanupCalled = true
+		atomic.StoreInt32(&cleanupCalled, 1)
 		return nil
 	})
 
@@ -136,7 +136,9 @@ func TestMemoryPressureHandler(t *testing.T) {
 
 	// Check if callbacks were triggered (may not always trigger in tests)
 	// This is more of a smoke test
-	t.Logf("Spill called: %v, Cleanup called: %v", spillCalled, cleanupCalled)
+	spillCalledValue := atomic.LoadInt32(&spillCalled) == 1
+	cleanupCalledValue := atomic.LoadInt32(&cleanupCalled) == 1
+	t.Logf("Spill called: %v, Cleanup called: %v", spillCalledValue, cleanupCalledValue)
 }
 
 // mockResource implements the Resource interface for testing
