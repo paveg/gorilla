@@ -925,7 +925,7 @@ func (e *Evaluator) evaluateNthValue(
 	if !ok {
 		return nil, fmt.Errorf("NTH_VALUE first argument must be a column")
 	}
-	
+
 	column, exists := columns[colExpr.name]
 	if !exists {
 		return nil, fmt.Errorf("column %s not found", colExpr.name)
@@ -936,30 +936,30 @@ func (e *Evaluator) evaluateNthValue(
 	case *array.Int64:
 		builder := array.NewInt64Builder(e.mem)
 		defer builder.Release()
-		
+
 		// Simplified logic: Get the nth value for each frame
 		for i := 0; i < dataLength; i++ {
-			if n-1 < arr.Len() && !arr.IsNull(n-1) {
+			if n <= arr.Len() && !arr.IsNull(n-1) {
 				builder.Append(arr.Value(n - 1))
 			} else {
 				builder.AppendNull()
 			}
 		}
 		return builder.NewArray(), nil
-		
+
 	case *array.String:
 		builder := array.NewStringBuilder(e.mem)
 		defer builder.Release()
-		
+
 		for i := 0; i < dataLength; i++ {
-			if n-1 < arr.Len() && !arr.IsNull(n-1) {
+			if n <= arr.Len() && !arr.IsNull(n-1) {
 				builder.Append(arr.Value(n - 1))
 			} else {
 				builder.AppendNull()
 			}
 		}
 		return builder.NewArray(), nil
-		
+
 	default:
 		return nil, fmt.Errorf("unsupported column type for NTH_VALUE: %T", column)
 	}
@@ -1095,4 +1095,3 @@ func (e *Evaluator) buildPartitions(
 	}
 	return [][]int{partition}
 }
-
