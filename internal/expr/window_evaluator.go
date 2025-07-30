@@ -804,7 +804,7 @@ func (e *Evaluator) calculateFloat64Aggregation(
 
 // evaluatePercentRank implements PERCENT_RANK() window function
 func (e *Evaluator) evaluatePercentRank(
-	expr *WindowFunctionExpr,
+	_ *WindowFunctionExpr,
 	window *WindowSpec,
 	columns map[string]arrow.Array,
 	dataLength int,
@@ -864,7 +864,7 @@ func (e *Evaluator) evaluatePercentRank(
 
 // evaluateCumeDist implements CUME_DIST() window function
 func (e *Evaluator) evaluateCumeDist(
-	expr *WindowFunctionExpr,
+	_ *WindowFunctionExpr,
 	window *WindowSpec,
 	columns map[string]arrow.Array,
 	dataLength int,
@@ -908,6 +908,11 @@ func (e *Evaluator) evaluateCumeDist(
 	return builder.NewArray(), nil
 }
 
+const (
+	// nthValueMinArgs is the minimum number of arguments required for NTH_VALUE function
+	nthValueMinArgs = 2
+)
+
 // evaluateNthValue implements NTH_VALUE() window function
 func (e *Evaluator) evaluateNthValue(
 	expr *WindowFunctionExpr,
@@ -915,7 +920,7 @@ func (e *Evaluator) evaluateNthValue(
 	columns map[string]arrow.Array,
 	dataLength int,
 ) (arrow.Array, error) {
-	if len(expr.args) < 2 {
+	if len(expr.args) < nthValueMinArgs {
 		return nil, fmt.Errorf("NTH_VALUE requires two arguments")
 	}
 
@@ -991,7 +996,7 @@ func (e *Evaluator) evaluateNtile(
 // Helper methods for window function calculations
 
 // calculateRanks calculates ranks for ordering
-func (e *Evaluator) calculateRanks(window *WindowSpec, columns map[string]arrow.Array, dataLength int) ([]int, error) {
+func (e *Evaluator) calculateRanks(_ *WindowSpec, columns map[string]arrow.Array, dataLength int) ([]int, error) {
 	// Simplified rank calculation - in reality this would need proper ordering
 	ranks := make([]int, dataLength)
 	for i := 0; i < dataLength; i++ {
@@ -1001,7 +1006,11 @@ func (e *Evaluator) calculateRanks(window *WindowSpec, columns map[string]arrow.
 }
 
 // calculateRanksForPartition calculates ranks within a partition
-func (e *Evaluator) calculateRanksForPartition(partition []int, window *WindowSpec, columns map[string]arrow.Array) ([]int, error) {
+func (e *Evaluator) calculateRanksForPartition(
+	partition []int,
+	window *WindowSpec,
+	columns map[string]arrow.Array,
+) ([]int, error) {
 	ranks := make([]int, len(partition))
 	for i := 0; i < len(partition); i++ {
 		ranks[i] = i + 1
@@ -1010,7 +1019,11 @@ func (e *Evaluator) calculateRanksForPartition(partition []int, window *WindowSp
 }
 
 // calculateCumulativeDistribution calculates cumulative distribution
-func (e *Evaluator) calculateCumulativeDistribution(partition []int, window *WindowSpec, columns map[string]arrow.Array) ([]float64, error) {
+func (e *Evaluator) calculateCumulativeDistribution(
+	partition []int,
+	window *WindowSpec,
+	columns map[string]arrow.Array,
+) ([]float64, error) {
 	var size int
 	if len(partition) > 0 {
 		size = len(partition)
@@ -1052,7 +1065,11 @@ func (e *Evaluator) calculateNtiles(rowCount, buckets int) []int {
 }
 
 // buildPartitions creates partitions based on partition columns
-func (e *Evaluator) buildPartitions(partitionBy []string, columns map[string]arrow.Array, dataLength int) ([][]int, error) {
+func (e *Evaluator) buildPartitions(
+	partitionBy []string,
+	columns map[string]arrow.Array,
+	dataLength int,
+) ([][]int, error) {
 	// Simplified partitioning - in reality this would need proper grouping logic
 	// For now, return a single partition with all rows
 	partition := make([]int, dataLength)
