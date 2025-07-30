@@ -1676,7 +1676,7 @@ func (lgb *LazyGroupBy) Having(predicate expr.Expr) *LazyFrame {
 // Parameters:
 //
 //	ctx: Optional context for cancellation support. If provided, the operation
-//	     can be cancelled before completion.
+//	     can be canceled before completion.
 //
 // Returns:
 //
@@ -1707,7 +1707,7 @@ func (lgb *LazyGroupBy) Having(predicate expr.Expr) *LazyFrame {
 //
 // Cancellation:
 // If a context is provided, the operation will check for cancellation and return
-// early if the context is cancelled. This is useful for long-running operations.
+// early if the context is canceled. This is useful for long-running operations.
 func (lf *LazyFrame) Collect(ctx ...context.Context) (*DataFrame, error) {
 	// Handle optional context parameter for backward compatibility
 	if len(ctx) > 0 {

@@ -1081,7 +1081,7 @@ func ExampleSQLExecutor() {
 //
 // This example shows how operations are deferred and optimized when using
 // lazy evaluation, including automatic parallelization and query optimization.
-func ExampleDataFrame_LazyEvaluation() {
+func ExampleDataFrameLazyEvaluation() {
 	mem := memory.NewGoAllocator()
 
 	// Create sample employee data
@@ -1094,8 +1094,9 @@ func ExampleDataFrame_LazyEvaluation() {
 	defer df.Release()
 
 	// Chain multiple operations - all deferred until Collect()
+	const ageThreshold = 30
 	result, err := df.Lazy().
-		Filter(Col("age").Gt(Lit(int64(30)))). // Filter for employees over 30
+		Filter(Col("age").Gt(Lit(int64(ageThreshold)))). // Filter for employees over threshold
 		Select("employee", "department", "salary").
 		Collect()
 
@@ -1112,7 +1113,7 @@ func ExampleDataFrame_LazyEvaluation() {
 //
 // This example shows the recommended patterns for memory management including
 // defer usage, cleanup in error conditions, and resource lifecycle management.
-func ExampleDataFrame_MemoryManagement() {
+func ExampleDataFrameMemoryManagement() {
 	mem := memory.NewGoAllocator()
 
 	// Create function that demonstrates proper cleanup
@@ -1129,8 +1130,9 @@ func ExampleDataFrame_MemoryManagement() {
 		defer df.Release() // Essential - cleans up DataFrame resources
 
 		// Perform operations that might error
+		const idThreshold = 2
 		result, err := df.Lazy().
-			Filter(Col("id").Gt(Lit(int64(2)))).
+			Filter(Col("id").Gt(Lit(int64(idThreshold)))).
 			Collect()
 		if err != nil {
 			return err // Deferred cleanups still execute on error return
