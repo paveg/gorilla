@@ -102,6 +102,13 @@ func (w *WindowSpec) Range(frame *WindowFrame) *WindowSpec {
 	return w
 }
 
+// Groups sets a GROUPS frame for the window
+func (w *WindowSpec) Groups(frame *WindowFrame) *WindowSpec {
+	frame.frameType = FrameTypeGroups
+	w.frame = frame
+	return w
+}
+
 // String returns the string representation of the window spec
 func (w *WindowSpec) String() string {
 	var parts []string
@@ -300,6 +307,38 @@ func LastValue(expr Expr) *WindowFunctionExpr {
 	return &WindowFunctionExpr{
 		funcName: "LAST_VALUE",
 		args:     []Expr{expr},
+	}
+}
+
+// PercentRank creates a PERCENT_RANK() window function
+func PercentRank() *WindowFunctionExpr {
+	return &WindowFunctionExpr{
+		funcName: "PERCENT_RANK",
+		args:     nil,
+	}
+}
+
+// CumeDist creates a CUME_DIST() window function
+func CumeDist() *WindowFunctionExpr {
+	return &WindowFunctionExpr{
+		funcName: "CUME_DIST",
+		args:     nil,
+	}
+}
+
+// NthValue creates a NTH_VALUE() window function
+func NthValue(expr Expr, n int) *WindowFunctionExpr {
+	return &WindowFunctionExpr{
+		funcName: "NTH_VALUE",
+		args:     []Expr{expr, &LiteralExpr{value: n}},
+	}
+}
+
+// Ntile creates a NTILE() window function
+func Ntile(buckets int) *WindowFunctionExpr {
+	return &WindowFunctionExpr{
+		funcName: "NTILE",
+		args:     []Expr{&LiteralExpr{value: buckets}},
 	}
 }
 

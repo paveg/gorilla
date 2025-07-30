@@ -1742,6 +1742,14 @@ func (e *Evaluator) evaluateWindowFunction(expr *WindowFunctionExpr, window *Win
 		return e.evaluateFirstValue(expr, window, columns, dataLength)
 	case "LAST_VALUE":
 		return e.evaluateLastValue(expr, window, columns, dataLength)
+	case "PERCENT_RANK":
+		return e.evaluatePercentRank(expr, window, columns, dataLength)
+	case "CUME_DIST":
+		return e.evaluateCumeDist(expr, window, columns, dataLength)
+	case "NTH_VALUE":
+		return e.evaluateNthValue(expr, window, columns, dataLength)
+	case "NTILE":
+		return e.evaluateNtile(expr, window, columns, dataLength)
 	default:
 		return nil, fmt.Errorf("unsupported window function: %s", expr.funcName)
 	}

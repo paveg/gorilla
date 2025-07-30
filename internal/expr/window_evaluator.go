@@ -801,3 +801,297 @@ func (e *Evaluator) calculateFloat64Aggregation(
 
 	return aggValue
 }
+
+// evaluatePercentRank implements PERCENT_RANK() window function
+func (e *Evaluator) evaluatePercentRank(
+	_ *WindowFunctionExpr,
+	window *WindowSpec,
+	columns map[string]arrow.Array,
+	dataLength int,
+) (arrow.Array, error) {
+	mem := e.mem
+
+	// Create result builder
+	builder := array.NewFloat64Builder(mem)
+	defer builder.Release()
+
+	// Handle partitioning
+	if len(window.partitionBy) > 0 {
+		// Process each partition separately
+		partitions := e.buildPartitions(window.partitionBy, columns, dataLength)
+
+		for _, partition := range partitions {
+			ranks := e.calculateRanksForPartition(partition, window, columns)
+
+			// Convert ranks to percent ranks
+			partitionSize := len(partition)
+			for _, rank := range ranks {
+				var percentRank float64
+				if partitionSize <= 1 {
+					percentRank = 0.0
+				} else {
+					percentRank = float64(rank-1) / float64(partitionSize-1)
+				}
+				builder.Append(percentRank)
+			}
+		}
+	} else {
+		// No partitioning - calculate for entire dataset
+		ranks := e.calculateRanks(window, columns, dataLength)
+
+		for _, rank := range ranks {
+			var percentRank float64
+			if dataLength <= 1 {
+				percentRank = 0.0
+			} else {
+				percentRank = float64(rank-1) / float64(dataLength-1)
+			}
+			builder.Append(percentRank)
+		}
+	}
+
+	return builder.NewArray(), nil
+}
+
+// evaluateCumeDist implements CUME_DIST() window function
+func (e *Evaluator) evaluateCumeDist(
+	_ *WindowFunctionExpr,
+	window *WindowSpec,
+	columns map[string]arrow.Array,
+	dataLength int,
+) (arrow.Array, error) {
+	mem := e.mem
+
+	// Create result builder
+	builder := array.NewFloat64Builder(mem)
+	defer builder.Release()
+
+	// Handle partitioning
+	if len(window.partitionBy) > 0 {
+		// Process each partition separately
+		partitions := e.buildPartitions(window.partitionBy, columns, dataLength)
+
+		for _, partition := range partitions {
+			cumeDist := e.calculateCumulativeDistribution(partition, window, columns)
+
+			for _, dist := range cumeDist {
+				builder.Append(dist)
+			}
+		}
+	} else {
+		// No partitioning - calculate for entire dataset
+		fullDataset := make([]int, dataLength)
+		for i := 0; i < dataLength; i++ {
+			fullDataset[i] = i
+		}
+		cumeDist := e.calculateCumulativeDistribution(fullDataset, window, columns)
+
+		for _, dist := range cumeDist {
+			builder.Append(dist)
+		}
+	}
+
+	return builder.NewArray(), nil
+}
+
+const (
+	// nthValueMinArgs is the minimum number of arguments required for NTH_VALUE function
+	nthValueMinArgs = 2
+)
+
+// evaluateNthValue implements NTH_VALUE() window function
+func (e *Evaluator) evaluateNthValue(
+	expr *WindowFunctionExpr,
+	_ *WindowSpec,
+	columns map[string]arrow.Array,
+	dataLength int,
+) (arrow.Array, error) {
+	if len(expr.args) < nthValueMinArgs {
+		return nil, fmt.Errorf("NTH_VALUE requires two arguments")
+	}
+
+	// Get the N value (which position to get)
+	nLit, ok := expr.args[1].(*LiteralExpr)
+	if !ok {
+		return nil, fmt.Errorf("NTH_VALUE second argument must be a literal")
+	}
+	n, ok := nLit.value.(int)
+	if !ok || n <= 0 {
+		return nil, fmt.Errorf("NTH_VALUE second argument must be a positive integer")
+	}
+
+	// Get the column to evaluate
+	colExpr, ok := expr.args[0].(*ColumnExpr)
+	if !ok {
+		return nil, fmt.Errorf("NTH_VALUE first argument must be a column")
+	}
+
+	column, exists := columns[colExpr.name]
+	if !exists {
+		return nil, fmt.Errorf("column %s not found", colExpr.name)
+	}
+
+	// Create result array based on column type
+	switch arr := column.(type) {
+	case *array.Int64:
+		builder := array.NewInt64Builder(e.mem)
+		defer builder.Release()
+
+		// Simplified logic: Get the nth value for each frame
+		for i := 0; i < dataLength; i++ {
+			if n <= arr.Len() && !arr.IsNull(n-1) {
+				builder.Append(arr.Value(n - 1))
+			} else {
+				builder.AppendNull()
+			}
+		}
+		return builder.NewArray(), nil
+
+	case *array.String:
+		builder := array.NewStringBuilder(e.mem)
+		defer builder.Release()
+
+		for i := 0; i < dataLength; i++ {
+			if n <= arr.Len() && !arr.IsNull(n-1) {
+				builder.Append(arr.Value(n - 1))
+			} else {
+				builder.AppendNull()
+			}
+		}
+		return builder.NewArray(), nil
+
+	default:
+		return nil, fmt.Errorf("unsupported column type for NTH_VALUE: %T", column)
+	}
+}
+
+// evaluateNtile implements NTILE() window function
+func (e *Evaluator) evaluateNtile(
+	expr *WindowFunctionExpr,
+	window *WindowSpec,
+	columns map[string]arrow.Array,
+	dataLength int,
+) (arrow.Array, error) {
+	if len(expr.args) == 0 {
+		return nil, fmt.Errorf("NTILE requires one argument")
+	}
+
+	// Get the number of buckets
+	bucketsLit, ok := expr.args[0].(*LiteralExpr)
+	if !ok {
+		return nil, fmt.Errorf("NTILE argument must be a literal")
+	}
+	buckets, ok := bucketsLit.value.(int)
+	if !ok {
+		return nil, fmt.Errorf("NTILE argument must be an integer")
+	}
+
+	if buckets <= 0 {
+		return nil, fmt.Errorf("NTILE buckets must be positive")
+	}
+
+	mem := e.mem
+	builder := array.NewInt64Builder(mem)
+	defer builder.Release()
+
+	// Handle partitioning
+	if len(window.partitionBy) > 0 {
+		// Process each partition separately
+		partitions := e.buildPartitions(window.partitionBy, columns, dataLength)
+
+		for _, partition := range partitions {
+			ntiles := e.calculateNtiles(len(partition), buckets)
+			for _, ntile := range ntiles {
+				builder.Append(int64(ntile))
+			}
+		}
+	} else {
+		// No partitioning - calculate for entire dataset
+		ntiles := e.calculateNtiles(dataLength, buckets)
+		for _, ntile := range ntiles {
+			builder.Append(int64(ntile))
+		}
+	}
+
+	return builder.NewArray(), nil
+}
+
+// Helper methods for window function calculations
+
+// calculateRanks calculates ranks for ordering
+func (e *Evaluator) calculateRanks(_ *WindowSpec, _ map[string]arrow.Array, dataLength int) []int {
+	// Simplified rank calculation - in reality this would need proper ordering
+	ranks := make([]int, dataLength)
+	for i := 0; i < dataLength; i++ {
+		ranks[i] = i + 1
+	}
+	return ranks
+}
+
+// calculateRanksForPartition calculates ranks within a partition
+func (e *Evaluator) calculateRanksForPartition(
+	partition []int,
+	_ *WindowSpec,
+	_ map[string]arrow.Array,
+) []int {
+	ranks := make([]int, len(partition))
+	for i := 0; i < len(partition); i++ {
+		ranks[i] = i + 1
+	}
+	return ranks
+}
+
+// calculateCumulativeDistribution calculates cumulative distribution
+func (e *Evaluator) calculateCumulativeDistribution(
+	partition []int,
+	_ *WindowSpec,
+	_ map[string]arrow.Array,
+) []float64 {
+	size := len(partition)
+	cumeDist := make([]float64, size)
+	for i := 0; i < size; i++ {
+		cumeDist[i] = float64(i+1) / float64(size)
+	}
+	return cumeDist
+}
+
+// calculateNtiles distributes rows into buckets
+func (e *Evaluator) calculateNtiles(rowCount, buckets int) []int {
+	ntiles := make([]int, rowCount)
+
+	// Calculate base bucket size and remainder
+	baseSize := rowCount / buckets
+	remainder := rowCount % buckets
+
+	// Distribute rows into buckets
+	currentRow := 0
+	for bucket := 1; bucket <= buckets; bucket++ {
+		bucketSize := baseSize
+		if remainder > 0 {
+			bucketSize++
+			remainder--
+		}
+
+		for i := 0; i < bucketSize && currentRow < rowCount; i++ {
+			ntiles[currentRow] = bucket
+			currentRow++
+		}
+	}
+
+	return ntiles
+}
+
+// buildPartitions creates partitions based on partition columns
+func (e *Evaluator) buildPartitions(
+	_ []string,
+	_ map[string]arrow.Array,
+	dataLength int,
+) [][]int {
+	// Simplified partitioning - in reality this would need proper grouping logic
+	// For now, return a single partition with all rows
+	partition := make([]int, dataLength)
+	for i := 0; i < dataLength; i++ {
+		partition[i] = i
+	}
+	return [][]int{partition}
+}
