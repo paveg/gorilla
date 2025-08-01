@@ -15,7 +15,7 @@ func TestSetupMemoryTest(t *testing.T) {
 	// Test that allocator is not nil
 	require.NotNil(t, mem.Allocator)
 
-	// Test that we can use the allocator  
+	// Test that we can use the allocator
 	df := testutil.CreateTestDataFrame(mem.Allocator)
 	defer df.Release()
 
@@ -33,7 +33,7 @@ func TestCreateTestDataFrame(t *testing.T) {
 		// Test default structure
 		assert.Equal(t, 4, df.Len())
 		assert.Equal(t, 4, df.Width()) // name, age, department, salary
-		
+
 		expectedColumns := []string{"name", "age", "department", "salary"}
 		testutil.AssertDataFrameHasColumns(t, df, expectedColumns)
 	})
@@ -65,7 +65,7 @@ func TestCreateSimpleTestDataFrame(t *testing.T) {
 
 	assert.Equal(t, 2, df.Len())
 	assert.Equal(t, 2, df.Width())
-	
+
 	expectedColumns := []string{"name", "age"}
 	testutil.AssertDataFrameHasColumns(t, df, expectedColumns)
 }
@@ -76,7 +76,7 @@ func TestAssertDataFrameEqual(t *testing.T) {
 
 	df1 := testutil.CreateSimpleTestDataFrame(mem.Allocator)
 	defer df1.Release()
-	
+
 	df2 := testutil.CreateSimpleTestDataFrame(mem.Allocator)
 	defer df2.Release()
 
@@ -107,7 +107,7 @@ func TestAssertDataFrameNotEmpty(t *testing.T) {
 
 // TestMemoryContextCleanup verifies that the memory context can be safely released.
 func TestMemoryContextCleanup(t *testing.T) {
-	mem := testutil.SetupMemoryTest(t) 
+	mem := testutil.SetupMemoryTest(t)
 
 	// Create some objects that use the allocator
 	df := testutil.CreateTestDataFrame(mem.Allocator)
@@ -115,14 +115,14 @@ func TestMemoryContextCleanup(t *testing.T) {
 
 	// Should not panic
 	mem.Release()
-	
+
 	// Calling Release multiple times should be safe
 	mem.Release()
 }
 
 // BenchmarkCreateTestDataFrame benchmarks the test DataFrame creation.
 func BenchmarkCreateTestDataFrame(b *testing.B) {
-	mem := testutil.SetupMemoryTest(nil) // Use nil for benchmarks
+	mem := testutil.SetupMemoryTest(b)
 	defer mem.Release()
 
 	b.ResetTimer()

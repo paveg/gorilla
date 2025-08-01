@@ -48,12 +48,12 @@ func TestCreateTestTableWithData(t *testing.T) {
 		"flag":  []bool{true, false, true},
 	}
 
-	table := testutil.CreateTestTableWithData(mem.Allocator, "custom_table", data)
+	table := testutil.CreateTestTableWithData(mem.Allocator, data)
 	defer table.Release()
 
 	assert.Equal(t, 3, table.Len())
 	assert.Equal(t, 4, table.Width())
-	
+
 	expectedColumns := []string{"id", "name", "value", "flag"}
 	testutil.AssertDataFrameHasColumns(t, table, expectedColumns)
 }
@@ -63,7 +63,7 @@ func TestSQLTestContextCleanup(t *testing.T) {
 
 	// Should not panic
 	sqlCtx.Release()
-	
+
 	// Multiple releases should be safe
 	sqlCtx.Release()
 }

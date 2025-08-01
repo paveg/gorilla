@@ -42,11 +42,11 @@ func TestDataFramePatternExample(t *testing.T) {
 	df := testutil.CreateTestDataFrame(mem.Allocator)
 	defer df.Release()
 
-	assert.Equal(t, 4, df.Len()) // Default row count
+	assert.Equal(t, 4, df.Len())   // Default row count
 	assert.Equal(t, 4, df.Width()) // name, age, department, salary
 
 	// Custom configurations
-	customDF := testutil.CreateTestDataFrame(mem.Allocator, 
+	customDF := testutil.CreateTestDataFrame(mem.Allocator,
 		testutil.WithRowCount(10),
 		testutil.WithActiveColumn(),
 	)
@@ -136,7 +136,7 @@ func TestCustomTablePatternExample(t *testing.T) {
 		"in_stock":     []bool{true, false, true, true},
 	}
 
-	table := testutil.CreateTestTableWithData(mem.Allocator, "products", customData)
+	table := testutil.CreateTestTableWithData(mem.Allocator, customData)
 	defer table.Release()
 
 	assert.Equal(t, 4, table.Len())
@@ -149,25 +149,25 @@ func TestCustomTablePatternExample(t *testing.T) {
 // TestDuplicationReduction demonstrates the code reduction achieved.
 func TestDuplicationReduction(t *testing.T) {
 	// This test demonstrates how the utilities reduce code duplication
-	
+
 	// Measure: Before testutil, each test would have 15-20 lines of setup
 	// After testutil: 3-5 lines of setup
-	
+
 	// Before: Manual memory management, series creation, DataFrame construction, custom assertions
 	// After: Single utility calls with automatic cleanup
-	
+
 	mem := testutil.SetupMemoryTest(t) // 1 line replaces 1 line
 	defer mem.Release()                // 1 line replaces 0 lines (automatic)
 
 	df := testutil.CreateTestDataFrame(mem.Allocator) // 1 line replaces 6-8 lines
-	defer df.Release()                               // 1 line replaces 1 line
+	defer df.Release()                                // 1 line replaces 1 line
 
-	testutil.AssertDataFrameNotEmpty(t, df)         // 1 line replaces 3-4 lines
-	testutil.AssertDataFrameHasColumns(t, df,       // 2 lines replace 5-10 lines
+	testutil.AssertDataFrameNotEmpty(t, df)   // 1 line replaces 3-4 lines
+	testutil.AssertDataFrameHasColumns(t, df, // 2 lines replace 5-10 lines
 		[]string{"name", "age", "department", "salary"})
 
 	// Total: 6 lines vs 15-25 lines previously
 	// Reduction: ~60-75% code reduction in test setup and assertions
-	
+
 	t.Logf("Test utilities successfully reduce code duplication by 60-75%%")
 }

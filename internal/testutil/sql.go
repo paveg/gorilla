@@ -36,23 +36,24 @@ func (ctx *SQLTestContext) Release() {
 // - Suitable for testing SELECT, WHERE, GROUP BY, HAVING operations
 //
 // Example usage:
-//   sqlCtx := testutil.SetupSQLTest(t)
-//   defer sqlCtx.Release()
-//   
-//   stmt, err := sql.ParseSQL("SELECT name FROM employees WHERE age > 30")
-//   lazy, err := sqlCtx.Translator.TranslateStatement(stmt)
+//
+//	sqlCtx := testutil.SetupSQLTest(t)
+//	defer sqlCtx.Release()
+//
+//	stmt, err := sql.ParseSQL("SELECT name FROM employees WHERE age > 30")
+//	lazy, err := sqlCtx.Translator.TranslateStatement(stmt)
 func SetupSQLTest(t *testing.T) *SQLTestContext {
 	t.Helper()
-	
+
 	allocator := memory.NewGoAllocator()
 	translator := sql.NewSQLTranslator(allocator)
-	
+
 	// Create standard test table with employee data
 	testTable := CreateTestDataFrame(allocator, WithActiveColumn())
-	
+
 	// Register the table with a standard name
 	translator.RegisterTable("employees", testTable)
-	
+
 	return &SQLTestContext{
 		Translator: translator,
 		TestTable:  testTable,
@@ -67,14 +68,14 @@ func SetupSQLTest(t *testing.T) *SQLTestContext {
 // Useful for basic SQL parsing and translation tests.
 func SetupSimpleSQLTest(t *testing.T) *SQLTestContext {
 	t.Helper()
-	
+
 	allocator := memory.NewGoAllocator()
 	translator := sql.NewSQLTranslator(allocator)
-	
+
 	// Create simple test table
 	testTable := CreateSimpleTestDataFrame(allocator)
 	translator.RegisterTable("test_table", testTable)
-	
+
 	return &SQLTestContext{
 		Translator: translator,
 		TestTable:  testTable,
@@ -89,20 +90,20 @@ func SetupSimpleSQLTest(t *testing.T) *SQLTestContext {
 // This consolidates the common pattern of parsing -> translating -> collecting SQL queries.
 func (ctx *SQLTestContext) ExecuteSQLQuery(t *testing.T, query string) *dataframe.DataFrame {
 	t.Helper()
-	
+
 	// Parse SQL
 	stmt, err := sql.ParseSQL(query)
 	require.NoError(t, err, "SQL parsing should succeed")
-	
+
 	// Translate to lazy frame
 	lazy, err := ctx.Translator.TranslateStatement(stmt)
 	require.NoError(t, err, "SQL translation should succeed")
 	defer lazy.Release()
-	
+
 	// Execute query
 	result, err := lazy.Collect()
 	require.NoError(t, err, "SQL execution should succeed")
-	
+
 	return result
 }
 
@@ -110,22 +111,22 @@ func (ctx *SQLTestContext) ExecuteSQLQuery(t *testing.T, query string) *datafram
 // This consolidates common SQL test assertion patterns.
 func (ctx *SQLTestContext) AssertSQLQueryResult(t *testing.T, query string, expectedRowCount int, expectedColumns []string) *dataframe.DataFrame {
 	t.Helper()
-	
+
 	result := ctx.ExecuteSQLQuery(t, query)
-	
+
 	// Validate result structure
 	AssertDataFrameNotEmpty(t, result)
 	require.Equal(t, expectedRowCount, result.Len(), "result row count should match")
 	AssertDataFrameHasColumns(t, result, expectedColumns)
-	
+
 	return result
 }
 
 // CreateTestTableWithData creates a DataFrame with specific test data for SQL tests.
 // This allows tests to create custom tables beyond the standard employee table.
-func CreateTestTableWithData(allocator memory.Allocator, _ string, data map[string]interface{}) *dataframe.DataFrame {
+func CreateTestTableWithData(allocator memory.Allocator, data map[string]interface{}) *dataframe.DataFrame {
 	var seriesList []dataframe.ISeries
-	
+
 	for colName, colData := range data {
 		switch values := colData.(type) {
 		case []string:
@@ -144,6 +145,6 @@ func CreateTestTableWithData(allocator memory.Allocator, _ string, data map[stri
 			panic("unsupported data type for test table creation")
 		}
 	}
-	
+
 	return dataframe.New(seriesList...)
 }
