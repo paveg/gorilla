@@ -204,18 +204,18 @@ func TestDataFrame_GroupBy(t *testing.T) {
 func TestDataFrame_Join(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
-	empIds := gorilla.NewSeries("id", []int64{1, 2, 3}, mem)
+	empIDs := gorilla.NewSeries("id", []int64{1, 2, 3}, mem)
 	empNames := gorilla.NewSeries("name", []string{"Alice", "Bob", "Charlie"}, mem)
-	defer empIds.Release()
+	defer empIDs.Release()
 	defer empNames.Release()
-	employees := gorilla.NewDataFrame(empIds, empNames)
+	employees := gorilla.NewDataFrame(empIDs, empNames)
 	defer employees.Release()
 
-	deptIds := gorilla.NewSeries("id", []int64{1, 2, 3}, mem)
+	deptIDs := gorilla.NewSeries("id", []int64{1, 2, 3}, mem)
 	deptNames := gorilla.NewSeries("department", []string{"Eng", "Sales", "Marketing"}, mem)
-	defer deptIds.Release()
+	defer deptIDs.Release()
 	defer deptNames.Release()
-	departments := gorilla.NewDataFrame(deptIds, deptNames)
+	departments := gorilla.NewDataFrame(deptIDs, deptNames)
 	defer departments.Release()
 
 	result, err := employees.Join(departments, &gorilla.JoinOptions{
@@ -375,17 +375,17 @@ func TestBuildInfo(t *testing.T) {
 	}
 }
 
-func TestExample(t *testing.T) {
+func TestExample(_ *testing.T) {
 	// This test just runs the example to ensure it doesn't panic.
 	gorilla.Example()
 }
 
-func TestExampleDataFrameGroupBy(t *testing.T) {
+func TestExampleDataFrameGroupBy(_ *testing.T) {
 	// This test just runs the example to ensure it doesn't panic.
 	gorilla.ExampleDataFrameGroupBy()
 }
 
-func TestExampleDataFrameJoin(t *testing.T) {
+func TestExampleDataFrameJoin(_ *testing.T) {
 	// This test just runs the example to ensure it doesn't panic.
 	gorilla.ExampleDataFrameJoin()
 }
@@ -405,7 +405,7 @@ func TestLazyFrame_String(t *testing.T) {
 	}
 }
 
-func TestLazyFrame_Release(t *testing.T) {
+func TestLazyFrame_Release(_ *testing.T) {
 	mem := memory.NewGoAllocator()
 
 	df := gorilla.NewDataFrame(
@@ -515,19 +515,19 @@ func TestLazyFrame_Join(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
 	// Left DataFrame
-	leftIds := gorilla.NewSeries("id", []int64{1, 2, 3}, mem)
+	leftIDs := gorilla.NewSeries("id", []int64{1, 2, 3}, mem)
 	leftNames := gorilla.NewSeries("name", []string{"Alice", "Bob", "Charlie"}, mem)
-	defer leftIds.Release()
+	defer leftIDs.Release()
 	defer leftNames.Release()
-	leftDf := gorilla.NewDataFrame(leftIds, leftNames)
+	leftDf := gorilla.NewDataFrame(leftIDs, leftNames)
 	defer leftDf.Release()
 
 	// Right DataFrame
-	rightIds := gorilla.NewSeries("id", []int64{1, 2, 4}, mem)
+	rightIDs := gorilla.NewSeries("id", []int64{1, 2, 4}, mem)
 	rightDepts := gorilla.NewSeries("dept", []string{"Eng", "Sales", "Marketing"}, mem)
-	defer rightIds.Release()
+	defer rightIDs.Release()
 	defer rightDepts.Release()
-	rightDf := gorilla.NewDataFrame(rightIds, rightDepts)
+	rightDf := gorilla.NewDataFrame(rightIDs, rightDepts)
 	defer rightDf.Release()
 
 	// Test inner join
@@ -578,7 +578,7 @@ func TestExpression_Mean(t *testing.T) {
 	}
 
 	foundDepts := make(map[string]bool)
-	for i := 0; i < result.Len(); i++ {
+	for i := range result.Len() {
 		dept := deptArr.Value(i)
 		avg := avgArr.Value(i)
 
@@ -626,7 +626,7 @@ func TestExpression_Min(t *testing.T) {
 	deptArr := deptCol.Array().(*array.String)
 	minArr := minCol.Array().(*array.Float64)
 
-	for i := 0; i < result.Len(); i++ {
+	for i := range result.Len() {
 		if deptArr.Value(i) == "Sales" {
 			if minArr.Value(i) != 80.0 {
 				t.Errorf("Expected min salary for Sales to be 80, got %f", minArr.Value(i))
@@ -661,7 +661,7 @@ func TestExpression_Max(t *testing.T) {
 	deptArr := deptCol.Array().(*array.String)
 	maxArr := maxCol.Array().(*array.Float64)
 
-	for i := 0; i < result.Len(); i++ {
+	for i := range result.Len() {
 		if deptArr.Value(i) == "Eng" {
 			if maxArr.Value(i) != 120.0 {
 				t.Errorf("Expected max salary for Eng to be 120, got %f", maxArr.Value(i))
@@ -671,7 +671,6 @@ func TestExpression_Max(t *testing.T) {
 }
 
 func TestExpression_If(t *testing.T) {
-	t.Skip("If expression not fully implemented yet")
 	mem := memory.NewGoAllocator()
 
 	salaries := gorilla.NewSeries("salary", []int64{100, 80, 120}, mem)
@@ -697,7 +696,7 @@ func TestExpression_If(t *testing.T) {
 	levelArr := levelCol.Array().(*array.String)
 
 	expected := []string{"low", "low", "high"}
-	for i := 0; i < result.Len(); i++ {
+	for i := range result.Len() {
 		if levelArr.Value(i) != expected[i] {
 			t.Errorf("At index %d: expected '%s', got '%s'", i, expected[i], levelArr.Value(i))
 		}
@@ -733,7 +732,7 @@ func TestExpression_Coalesce(t *testing.T) {
 	finalArr := finalCol.Array().(*array.Int64)
 
 	expected := []int64{100, 50, 300}
-	for i := 0; i < result.Len(); i++ {
+	for i := range result.Len() {
 		if finalArr.Value(i) != expected[i] {
 			t.Errorf("At index %d: expected %d, got %d", i, expected[i], finalArr.Value(i))
 		}
@@ -741,7 +740,6 @@ func TestExpression_Coalesce(t *testing.T) {
 }
 
 func TestExpression_Concat(t *testing.T) {
-	t.Skip("Concat expression not fully implemented yet")
 	mem := memory.NewGoAllocator()
 
 	firstNames := gorilla.NewSeries("first", []string{"John", "Jane", "Bob"}, mem)
@@ -769,7 +767,7 @@ func TestExpression_Concat(t *testing.T) {
 	fullNameArr := fullNameCol.Array().(*array.String)
 
 	expected := []string{"John Doe", "Jane Smith", "Bob Johnson"}
-	for i := 0; i < result.Len(); i++ {
+	for i := range result.Len() {
 		if fullNameArr.Value(i) != expected[i] {
 			t.Errorf("At index %d: expected '%s', got '%s'", i, expected[i], fullNameArr.Value(i))
 		}
@@ -803,7 +801,7 @@ func TestExpression_Case(t *testing.T) {
 	gradeArr := gradeCol.Array().(*array.String)
 
 	expected := []string{"A", "C", "B", "F"}
-	for i := 0; i < result.Len(); i++ {
+	for i := range result.Len() {
 		if gradeArr.Value(i) != expected[i] {
 			t.Errorf("At index %d: expected '%s', got '%s'", i, expected[i], gradeArr.Value(i))
 		}
@@ -851,18 +849,18 @@ func TestDataFrame_SortBy_Error(t *testing.T) {
 func TestDataFrame_Join_Error(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
-	leftIds := gorilla.NewSeries("id", []int64{1, 2}, mem)
+	leftIDs := gorilla.NewSeries("id", []int64{1, 2}, mem)
 	leftNames := gorilla.NewSeries("name", []string{"Alice", "Bob"}, mem)
-	defer leftIds.Release()
+	defer leftIDs.Release()
 	defer leftNames.Release()
-	leftDf := gorilla.NewDataFrame(leftIds, leftNames)
+	leftDf := gorilla.NewDataFrame(leftIDs, leftNames)
 	defer leftDf.Release()
 
-	rightIds := gorilla.NewSeries("id", []int64{1, 2}, mem)
+	rightIDs := gorilla.NewSeries("id", []int64{1, 2}, mem)
 	rightDepts := gorilla.NewSeries("dept", []string{"Eng", "Sales"}, mem)
-	defer rightIds.Release()
+	defer rightIDs.Release()
 	defer rightDepts.Release()
-	rightDf := gorilla.NewDataFrame(rightIds, rightDepts)
+	rightDf := gorilla.NewDataFrame(rightIDs, rightDepts)
 	defer rightDf.Release()
 
 	// Try to join with non-existent key

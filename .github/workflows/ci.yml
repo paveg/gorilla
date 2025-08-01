@@ -47,7 +47,9 @@ jobs:
       run: go vet ./...
 
     - name: Run tests with coverage
-      run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+      # Use -short flag to skip long-running performance and memory tests
+      # Full test suite runs in the 'full-test' job when needed
+      run: go test -short -race -coverprofile=coverage.out -covermode=atomic ./...
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
@@ -72,9 +74,9 @@ jobs:
         go-version: '1.23'
 
     - name: golangci-lint
-      uses: golangci/golangci-lint-action@v6
+      uses: golangci/golangci-lint-action@v7
       with:
-        version: latest
+        version: v2.3.0
         args: --timeout=5m
 
   build:
@@ -133,7 +135,7 @@ jobs:
         go-version: '1.23'
 
     - name: Run benchmarks
-      run: go test -bench=. -benchmem ./... | tee benchmark.txt
+      run: go test -short -bench=. -benchmem ./... | tee benchmark.txt
 
     - name: Upload benchmark results
       uses: actions/upload-artifact@v4
@@ -154,7 +156,7 @@ jobs:
         go-version: '1.23'
 
     - name: Run integration tests with coverage
-      run: go test -v -coverprofile=integration-coverage.out -covermode=atomic ./internal/dataframe -run "Integration"
+      run: go test -short -v -coverprofile=integration-coverage.out -covermode=atomic ./internal/dataframe -run "Integration"
 
     - name: Upload integration coverage to Codecov
       uses: codecov/codecov-action@v4
@@ -174,3 +176,34 @@ jobs:
     - name: Test usage example
       run: |
         timeout 30s go run ./examples/usage.go
+
+  full-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    # Run full tests only on main branch or when explicitly requested
+    if: github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'run-full-tests')
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.23'
+
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-1.23-full-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-1.23-full-
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Run full test suite (including long-running tests)
+      run: go test -race -v ./...
+      timeout-minutes: 20

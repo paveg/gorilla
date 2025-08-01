@@ -1,3 +1,4 @@
+//nolint:testpackage // requires internal access to unexported types and functions
 package sql
 
 import (
@@ -10,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestHavingValidationScenarios tests HAVING clause validation scenarios that work with current parser
+// TestHavingValidationScenarios tests HAVING clause validation scenarios that work with current parser.
 func TestHavingValidationScenarios(t *testing.T) {
 	mem := memory.NewGoAllocator()
 	translator := NewSQLTranslator(mem)
@@ -145,7 +146,7 @@ func TestHavingValidationScenarios(t *testing.T) {
 	}
 }
 
-// TestHavingAggregationTypes tests HAVING with different aggregation types
+// TestHavingAggregationTypes tests HAVING with different aggregation types.
 func TestHavingAggregationTypes(t *testing.T) {
 	mem := memory.NewGoAllocator()
 	translator := NewSQLTranslator(mem)
@@ -242,7 +243,7 @@ func TestHavingAggregationTypes(t *testing.T) {
 	}
 }
 
-// TestHavingBusinessScenarios tests realistic business scenarios
+// TestHavingBusinessScenarios tests realistic business scenarios.
 func TestHavingBusinessScenarios(t *testing.T) {
 	mem := memory.NewGoAllocator()
 	translator := NewSQLTranslator(mem)
@@ -345,7 +346,7 @@ func TestHavingBusinessScenarios(t *testing.T) {
 	}
 }
 
-// TestHavingMemoryCleanup tests proper memory management with HAVING operations
+// TestHavingMemoryCleanup tests proper memory management with HAVING operations.
 func TestHavingMemoryCleanup(t *testing.T) {
 	mem := memory.NewGoAllocator()
 	translator := NewSQLTranslator(mem)
@@ -367,7 +368,7 @@ func TestHavingMemoryCleanup(t *testing.T) {
 	`
 
 	// Test multiple executions to ensure no memory leaks
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		func() {
 			stmt, err := ParseSQL(query)
 			require.NoError(t, err, "Failed to parse SQL on iteration %d", i)
@@ -382,7 +383,7 @@ func TestHavingMemoryCleanup(t *testing.T) {
 	}
 }
 
-// TestHavingErrorHandling tests proper error handling in HAVING scenarios
+// TestHavingErrorHandling tests proper error handling in HAVING scenarios.
 func TestHavingErrorHandling(t *testing.T) {
 	mem := memory.NewGoAllocator()
 	translator := NewSQLTranslator(mem)
@@ -459,7 +460,7 @@ func TestHavingErrorHandling(t *testing.T) {
 	}
 }
 
-// TestHavingEndToEndIntegration tests complete HAVING workflows
+// TestHavingEndToEndIntegration tests complete HAVING workflows.
 func TestHavingEndToEndIntegration(t *testing.T) {
 	mem := memory.NewGoAllocator()
 	translator := NewSQLTranslator(mem)
@@ -552,7 +553,7 @@ func TestHavingEndToEndIntegration(t *testing.T) {
 	}
 }
 
-// BenchmarkHavingTranslation benchmarks HAVING clause translation performance
+// BenchmarkHavingTranslation benchmarks HAVING clause translation performance.
 func BenchmarkHavingTranslation(b *testing.B) {
 	mem := memory.NewGoAllocator()
 	translator := NewSQLTranslator(mem)
@@ -562,7 +563,7 @@ func BenchmarkHavingTranslation(b *testing.B) {
 	salaries := make([]float64, 1000)
 	deptNames := []string{"Engineering", "Sales", "HR", "Marketing", "Support"}
 
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(50000 + (i * 100))
 	}
@@ -591,10 +592,10 @@ func BenchmarkHavingTranslation(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
-		lazy, err := translator.TranslateStatement(stmt)
-		if err != nil {
-			b.Fatal(err)
+	for range b.N {
+		lazy, translateErr := translator.TranslateStatement(stmt)
+		if translateErr != nil {
+			b.Fatal(translateErr)
 		}
 		_ = lazy // Don't collect to avoid execution overhead in benchmark
 	}

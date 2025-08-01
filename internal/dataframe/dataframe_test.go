@@ -1,3 +1,4 @@
+//nolint:testpackage // requires internal access to unexported types and functions
 package dataframe
 
 import (
@@ -8,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func createTestDataFrame(t *testing.T) *DataFrame {
+func createTestDataFrame(_ *testing.T) *DataFrame {
 	mem := memory.NewGoAllocator()
 
 	names := series.New("name", []string{"Alice", "Bob", "Charlie"}, mem)

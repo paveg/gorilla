@@ -1,3 +1,4 @@
+//nolint:testpackage // requires internal access to unexported types and functions
 package dataframe
 
 import (
@@ -101,9 +102,9 @@ func TestDataFrameCorrelationErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := df.Correlation(tt.col1, tt.col2)
 			if tt.expectErr {
-				assert.Error(t, err)
+				require.Error(t, err)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 		})
 	}
@@ -164,7 +165,7 @@ func TestDataFrameRollingWindow(t *testing.T) {
 
 			require.Equal(t, len(tt.expected), arr.Len())
 
-			for i := 0; i < arr.Len(); i++ {
+			for i := range arr.Len() {
 				expected := tt.expected[i]
 				if math.IsNaN(expected) {
 					assert.True(t, arr.IsNull(i) || math.IsNaN(arr.(*array.Float64).Value(i)))
@@ -203,7 +204,7 @@ func TestDataFrameWindowFunctions(t *testing.T) {
 		expected := []int64{1, 2, 3, 4, 5, 6, 7, 8}
 		require.Equal(t, len(expected), arr.Len())
 
-		for i := 0; i < arr.Len(); i++ {
+		for i := range arr.Len() {
 			assert.Equal(t, expected[i], arr.(*array.Int64).Value(i))
 		}
 	})
@@ -223,7 +224,7 @@ func TestDataFrameWindowFunctions(t *testing.T) {
 		expected := []int64{4, 1, 5, 1, 6, 8, 3, 7}
 		require.Equal(t, len(expected), arr.Len())
 
-		for i := 0; i < arr.Len(); i++ {
+		for i := range arr.Len() {
 			assert.Equal(t, expected[i], arr.(*array.Int64).Value(i))
 		}
 	})
@@ -259,7 +260,7 @@ func TestDataFrameWindowFunctions(t *testing.T) {
 		defer arr.Release()
 
 		// Shifted values, last value should be null/NaN
-		for i := 0; i < arr.Len()-1; i++ {
+		for i := range arr.Len() - 1 {
 			expected := values[i+1]
 			assert.InDelta(t, expected, arr.(*array.Float64).Value(i), 0.0001)
 		}
@@ -297,7 +298,7 @@ func TestDataFrameWindowFunctionWithPartition(t *testing.T) {
 		expected := []int64{1, 2, 1, 2, 3, 3, 4, 4}
 		require.Equal(t, len(expected), arr.Len())
 
-		for i := 0; i < arr.Len(); i++ {
+		for i := range arr.Len() {
 			assert.Equal(t, expected[i], arr.(*array.Int64).Value(i))
 		}
 	})

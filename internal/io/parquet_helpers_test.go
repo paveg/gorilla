@@ -1,4 +1,4 @@
-package io
+package io_test
 
 import (
 	"testing"
@@ -65,7 +65,7 @@ func createLargeDataFrame(t *testing.T, mem memory.Allocator, size int) *datafra
 	values := make([]float64, size)
 	names := make([]string, size)
 
-	for i := 0; i < size; i++ {
+	for i := range size {
 		ids[i] = int64(i)
 		values[i] = float64(i) * multiplier
 		names[i] = string(rune('A' + (i % alphabetSize)))
@@ -103,7 +103,7 @@ func createDataFrameWithNulls(t *testing.T, mem memory.Allocator) *dataframe.Dat
 
 func assertDataFramesEqual(t *testing.T, expected, actual *dataframe.DataFrame) {
 	assert.Equal(t, expected.Len(), actual.Len(), "number of rows mismatch")
-	assert.Equal(t, len(expected.Columns()), len(actual.Columns()), "number of columns mismatch")
+	assert.Len(t, actual.Columns(), len(expected.Columns()), "number of columns mismatch")
 	assert.Equal(t, expected.Columns(), actual.Columns(), "column names mismatch")
 
 	for _, colName := range expected.Columns() {

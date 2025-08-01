@@ -1,4 +1,4 @@
-package expr
+package expr_test
 
 import (
 	"testing"
@@ -6,6 +6,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/paveg/gorilla/internal/expr"
 	"github.com/paveg/gorilla/internal/series"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,9 +28,9 @@ func TestEnhancedArithmeticTypeCoercion(t *testing.T) {
 		}
 
 		// int32 + int64 should promote to int64
-		expr := Col("a").Add(Col("b"))
-		eval := NewEvaluator(nil)
-		result, err := eval.Evaluate(expr, columns)
+		addExpr := expr.Col("a").Add(expr.Col("b"))
+		eval := expr.NewEvaluator(nil)
+		result, err := eval.Evaluate(addExpr, columns)
 		require.NoError(t, err)
 		defer result.Release()
 
@@ -52,9 +53,9 @@ func TestEnhancedArithmeticTypeCoercion(t *testing.T) {
 		}
 
 		// float32 + float64 should promote to float64
-		expr := Col("a").Add(Col("b"))
-		eval := NewEvaluator(nil)
-		result, err := eval.Evaluate(expr, columns)
+		addExpr := expr.Col("a").Add(expr.Col("b"))
+		eval := expr.NewEvaluator(nil)
+		result, err := eval.Evaluate(addExpr, columns)
 		require.NoError(t, err)
 		defer result.Release()
 
@@ -80,9 +81,9 @@ func TestEnhancedArithmeticTypeCoercion(t *testing.T) {
 		}
 
 		// int32 + float64 should promote to float64
-		expr := Col("a").Add(Col("b"))
-		eval := NewEvaluator(nil)
-		result, err := eval.Evaluate(expr, columns)
+		addExpr := expr.Col("a").Add(expr.Col("b"))
+		eval := expr.NewEvaluator(nil)
+		result, err := eval.Evaluate(addExpr, columns)
 		require.NoError(t, err)
 		defer result.Release()
 
@@ -112,16 +113,16 @@ func TestEnhancedComparisonTypeCoercion(t *testing.T) {
 		}
 
 		// int32 > int64 should work with type coercion
-		expr := Col("a").Gt(Col("b"))
-		eval := NewEvaluator(nil)
-		result, err := eval.EvaluateBoolean(expr, columns)
+		gtExpr := expr.Col("a").Gt(expr.Col("b"))
+		eval := expr.NewEvaluator(nil)
+		result, err := eval.EvaluateBoolean(gtExpr, columns)
 		require.NoError(t, err)
 		defer result.Release()
 
 		// Verify result: [false, false, true]
 		boolResult := result.(*array.Boolean)
 		expected := []bool{false, false, true}
-		for i := 0; i < boolResult.Len(); i++ {
+		for i := range boolResult.Len() {
 			assert.Equal(t, expected[i], boolResult.Value(i))
 		}
 	})
@@ -139,16 +140,16 @@ func TestEnhancedComparisonTypeCoercion(t *testing.T) {
 		}
 
 		// float32 > float64 should work with type coercion
-		expr := Col("a").Gt(Col("b"))
-		eval := NewEvaluator(nil)
-		result, err := eval.EvaluateBoolean(expr, columns)
+		gtExpr := expr.Col("a").Gt(expr.Col("b"))
+		eval := expr.NewEvaluator(nil)
+		result, err := eval.EvaluateBoolean(gtExpr, columns)
 		require.NoError(t, err)
 		defer result.Release()
 
 		// Verify result: [false, true, true]
 		boolResult := result.(*array.Boolean)
 		expected := []bool{false, true, true}
-		for i := 0; i < boolResult.Len(); i++ {
+		for i := range boolResult.Len() {
 			assert.Equal(t, expected[i], boolResult.Value(i))
 		}
 	})
@@ -182,7 +183,7 @@ func TestTypePromotionRules(t *testing.T) {
 	}
 }
 
-// getPromotedType determines the promoted type for mixed arithmetic operations
+// getPromotedType determines the promoted type for mixed arithmetic operations.
 func getPromotedType(leftType, rightType string) string {
 	// Type promotion hierarchy for arithmetic operations
 	typeHierarchy := map[string]int{

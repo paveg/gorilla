@@ -1,3 +1,4 @@
+//nolint:testpackage // requires internal access to unexported types and functions
 package dataframe
 
 import (
@@ -10,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Helper function to create binary expressions with literals
+// Helper function to create binary expressions with literals.
 func createBinaryLiteral(left interface{}, op expr.BinaryOp, right interface{}) expr.Expr {
 	// For testing purposes, we'll create a struct that mimics BinaryExpr
 	return &mockBinaryExpr{
@@ -20,14 +21,14 @@ func createBinaryLiteral(left interface{}, op expr.BinaryOp, right interface{}) 
 	}
 }
 
-// Mock binary expression for testing constant folding
+// Mock binary expression for testing constant folding.
 type mockBinaryExpr struct {
 	left  expr.Expr
 	op    expr.BinaryOp
 	right expr.Expr
 }
 
-func (m *mockBinaryExpr) Type() expr.ExprType {
+func (m *mockBinaryExpr) Type() expr.Type {
 	return expr.ExprBinary
 }
 
@@ -47,13 +48,13 @@ func (m *mockBinaryExpr) Right() expr.Expr {
 	return m.right
 }
 
-// Mock unary expression for testing
+// Mock unary expression for testing.
 type mockUnaryExpr struct {
 	op      expr.UnaryOp
 	operand expr.Expr
 }
 
-func (m *mockUnaryExpr) Type() expr.ExprType {
+func (m *mockUnaryExpr) Type() expr.Type {
 	return expr.ExprUnary
 }
 
@@ -69,13 +70,13 @@ func (m *mockUnaryExpr) Operand() expr.Expr {
 	return m.operand
 }
 
-// Mock function expression for testing
+// Mock function expression for testing.
 type mockFunctionExpr struct {
 	name string
 	args []expr.Expr
 }
 
-func (m *mockFunctionExpr) Type() expr.ExprType {
+func (m *mockFunctionExpr) Type() expr.Type {
 	return expr.ExprFunction
 }
 
@@ -434,7 +435,7 @@ func TestConstantFoldingRule_EdgeCases(t *testing.T) {
 		literal, ok := result.(*expr.LiteralExpr)
 		require.True(t, ok)
 		// Should return 0.0 for float division by zero
-		assert.Equal(t, 0.0, literal.Value()) // Should return 0.0 for division by zero
+		assert.InDelta(t, 0.0, literal.Value(), 0.001) // Should return 0.0 for division by zero
 	})
 
 	t.Run("Type coercion int to float", func(t *testing.T) {
@@ -443,7 +444,7 @@ func TestConstantFoldingRule_EdgeCases(t *testing.T) {
 
 		literal, ok := result.(*expr.LiteralExpr)
 		require.True(t, ok)
-		assert.Equal(t, 7.5, literal.Value()) // Should be coerced to float
+		assert.InDelta(t, 7.5, literal.Value(), 0.001) // Should be coerced to float
 	})
 }
 

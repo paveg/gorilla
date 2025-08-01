@@ -1,6 +1,7 @@
 package expr
 
 import (
+	"errors"
 	"fmt"
 	"runtime"
 
@@ -14,7 +15,7 @@ const (
 	typeString = "string"
 )
 
-// WindowParallelConfig holds configuration for parallel window function execution
+// WindowParallelConfig holds configuration for parallel window function execution.
 type WindowParallelConfig struct {
 	// Minimum number of partitions to trigger parallel execution
 	MinPartitionsForParallel int
@@ -26,7 +27,7 @@ type WindowParallelConfig struct {
 	AdaptiveParallelization bool
 }
 
-// DefaultWindowParallelConfig returns the default configuration for parallel window execution
+// DefaultWindowParallelConfig returns the default configuration for parallel window execution.
 func DefaultWindowParallelConfig() *WindowParallelConfig {
 	const (
 		defaultMinPartitions      = 4
@@ -40,13 +41,13 @@ func DefaultWindowParallelConfig() *WindowParallelConfig {
 	}
 }
 
-// partitionTask represents a partition processing task
+// partitionTask represents a partition processing task.
 type partitionTask struct {
 	partitionIndex int
 	rowIndices     []int
 }
 
-// partitionResult represents the result of processing a partition
+// partitionResult represents the result of processing a partition.
 type partitionResult struct {
 	partitionIndex  int
 	results         []interface{}
@@ -54,7 +55,7 @@ type partitionResult struct {
 	err             error
 }
 
-// shouldUseParallelExecution determines if parallel execution should be used for window functions
+// shouldUseParallelExecution determines if parallel execution should be used for window functions.
 func (e *Evaluator) shouldUseParallelExecution(partitions [][]int, config *WindowParallelConfig) bool {
 	if !config.AdaptiveParallelization {
 		return len(partitions) >= config.MinPartitionsForParallel
@@ -72,7 +73,7 @@ func (e *Evaluator) shouldUseParallelExecution(partitions [][]int, config *Windo
 		(partitionCount >= 2 && totalRows >= config.MinRowsForParallelSort)
 }
 
-// evaluateRankParallel implements parallel RANK() window function
+// evaluateRankParallel implements parallel RANK() window function.
 func (e *Evaluator) evaluateRankParallel(
 	window *WindowSpec,
 	columns map[string]arrow.Array,
@@ -87,7 +88,7 @@ func (e *Evaluator) evaluateRankParallel(
 	)
 }
 
-// evaluateDenseRankParallel implements parallel DENSE_RANK() window function
+// evaluateDenseRankParallel implements parallel DENSE_RANK() window function.
 func (e *Evaluator) evaluateDenseRankParallel(
 	window *WindowSpec,
 	columns map[string]arrow.Array,
@@ -102,7 +103,7 @@ func (e *Evaluator) evaluateDenseRankParallel(
 	)
 }
 
-// evaluateLagParallel implements parallel LAG() window function
+// evaluateLagParallel implements parallel LAG() window function.
 func (e *Evaluator) evaluateLagParallel(
 	expr *WindowFunctionExpr,
 	window *WindowSpec,
@@ -110,7 +111,7 @@ func (e *Evaluator) evaluateLagParallel(
 	dataLength int,
 ) (arrow.Array, error) {
 	if len(expr.args) < 1 {
-		return nil, fmt.Errorf("LAG function requires at least 1 argument")
+		return nil, errors.New("LAG function requires at least 1 argument")
 	}
 
 	// Get the column to lag
@@ -123,9 +124,9 @@ func (e *Evaluator) evaluateLagParallel(
 	// Get the offset (default to 1)
 	offset := int64(1)
 	if len(expr.args) > 1 {
-		offsetExpr, err := e.Evaluate(expr.args[1], columns)
-		if err != nil {
-			return nil, fmt.Errorf("evaluating LAG offset: %w", err)
+		offsetExpr, offsetErr := e.Evaluate(expr.args[1], columns)
+		if offsetErr != nil {
+			return nil, fmt.Errorf("evaluating LAG offset: %w", offsetErr)
 		}
 		defer offsetExpr.Release()
 
@@ -145,7 +146,7 @@ func (e *Evaluator) evaluateLagParallel(
 	)
 }
 
-// evaluateLeadParallel implements parallel LEAD() window function
+// evaluateLeadParallel implements parallel LEAD() window function.
 func (e *Evaluator) evaluateLeadParallel(
 	expr *WindowFunctionExpr,
 	window *WindowSpec,
@@ -153,7 +154,7 @@ func (e *Evaluator) evaluateLeadParallel(
 	dataLength int,
 ) (arrow.Array, error) {
 	if len(expr.args) < 1 {
-		return nil, fmt.Errorf("LEAD function requires at least 1 argument")
+		return nil, errors.New("LEAD function requires at least 1 argument")
 	}
 
 	// Get the column to lead
@@ -166,9 +167,9 @@ func (e *Evaluator) evaluateLeadParallel(
 	// Get the offset (default to 1)
 	offset := int64(1)
 	if len(expr.args) > 1 {
-		offsetExpr, err := e.Evaluate(expr.args[1], columns)
-		if err != nil {
-			return nil, fmt.Errorf("evaluating LEAD offset: %w", err)
+		offsetExpr, offsetErr := e.Evaluate(expr.args[1], columns)
+		if offsetErr != nil {
+			return nil, fmt.Errorf("evaluating LEAD offset: %w", offsetErr)
 		}
 		defer offsetExpr.Release()
 
@@ -189,7 +190,7 @@ func (e *Evaluator) evaluateLeadParallel(
 	)
 }
 
-// evaluateOffsetWindowFunctionParallel is a specialized parallel executor for LAG/LEAD functions
+// evaluateOffsetWindowFunctionParallel is a specialized parallel executor for LAG/LEAD functions.
 func (e *Evaluator) evaluateOffsetWindowFunctionParallel(
 	funcName string,
 	expr *WindowFunctionExpr,
@@ -231,7 +232,7 @@ func (e *Evaluator) evaluateOffsetWindowFunctionParallel(
 	return e.buildOffsetWindowResult(results, dataLength, arrayType)
 }
 
-// evaluateWindowFunctionParallel is a generic parallel executor for window functions
+// evaluateWindowFunctionParallel is a generic parallel executor for window functions.
 func (e *Evaluator) evaluateWindowFunctionParallel(
 	funcName string,
 	window *WindowSpec,
@@ -270,7 +271,7 @@ func (e *Evaluator) evaluateWindowFunctionParallel(
 	return e.buildWindowResult(results, dataLength, typeInt64)
 }
 
-// executePartitionsParallel executes window function partitions in parallel
+// executePartitionsParallel executes window function partitions in parallel.
 func (e *Evaluator) executePartitionsParallel(
 	partitions [][]int,
 	window *WindowSpec,
@@ -298,7 +299,7 @@ func (e *Evaluator) executePartitionsParallel(
 
 	// Process partitions in parallel
 	results := parallel.ProcessIndexed(wp, tasks,
-		func(taskIndex int, task partitionTask) partitionResult {
+		func(_ int, task partitionTask) partitionResult {
 			// Create independent memory allocator for thread safety
 			workerMem := memory.NewGoAllocator()
 
@@ -328,12 +329,12 @@ func (e *Evaluator) executePartitionsParallel(
 	return results, nil
 }
 
-// processRankPartition processes a single partition for RANK() function
+// processRankPartition processes a single partition for RANK() function.
 func (e *Evaluator) processRankPartition(
 	partition []int,
 	window *WindowSpec,
 	columns map[string]arrow.Array,
-	workerMem memory.Allocator,
+	_ memory.Allocator,
 ) ([]interface{}, error) {
 	// Sort partition if ORDER BY is specified
 	sortedIndices := partition
@@ -370,12 +371,12 @@ func (e *Evaluator) processRankPartition(
 	return results, nil
 }
 
-// processDenseRankPartition processes a single partition for DENSE_RANK() function
+// processDenseRankPartition processes a single partition for DENSE_RANK() function.
 func (e *Evaluator) processDenseRankPartition(
 	partition []int,
 	window *WindowSpec,
 	columns map[string]arrow.Array,
-	workerMem memory.Allocator,
+	_ memory.Allocator,
 ) ([]interface{}, error) {
 	// Sort partition if ORDER BY is specified
 	sortedIndices := partition
@@ -412,7 +413,7 @@ func (e *Evaluator) processDenseRankPartition(
 	return results, nil
 }
 
-// sortPartitionParallel sorts a partition with adaptive threshold for parallelization
+// sortPartitionParallel sorts a partition with adaptive threshold for parallelization.
 func (e *Evaluator) sortPartitionParallel(
 	partition []int,
 	orderBy []OrderByExpr,
@@ -429,7 +430,7 @@ func (e *Evaluator) sortPartitionParallel(
 	return e.sortPartitionWithFallback(partition, orderBy, columns)
 }
 
-// sortPartitionWithFallback performs a sequential sort as a fallback mechanism
+// sortPartitionWithFallback performs a sequential sort as a fallback mechanism.
 func (e *Evaluator) sortPartitionWithFallback(
 	partition []int,
 	orderBy []OrderByExpr,
@@ -441,7 +442,7 @@ func (e *Evaluator) sortPartitionWithFallback(
 	return e.sortPartition(partition, orderBy, columns)
 }
 
-// buildWindowResult builds the final result array from partition results
+// buildWindowResult builds the final result array from partition results.
 func (e *Evaluator) buildWindowResult(
 	partitionResults []partitionResult,
 	dataLength int,
@@ -464,11 +465,13 @@ func (e *Evaluator) buildWindowResult(
 	case typeInt64:
 		builder := array.NewInt64Builder(e.mem)
 		defer builder.Release()
-		for i := 0; i < dataLength; i++ {
+		for i := range dataLength {
 			if finalResult[i] == nil {
 				builder.AppendNull()
+			} else if int64Val, ok := finalResult[i].(int64); ok {
+				builder.Append(int64Val)
 			} else {
-				builder.Append(finalResult[i].(int64))
+				builder.AppendNull() // Fallback for type assertion failure
 			}
 		}
 		return builder.NewArray(), nil
@@ -477,7 +480,7 @@ func (e *Evaluator) buildWindowResult(
 	}
 }
 
-// findIndexInSlice finds the index of a value in a slice
+// findIndexInSlice finds the index of a value in a slice.
 func (e *Evaluator) findIndexInSlice(slice []int, value int) int {
 	for i, v := range slice {
 		if v == value {
@@ -487,7 +490,7 @@ func (e *Evaluator) findIndexInSlice(slice []int, value int) int {
 	return -1
 }
 
-// shouldUseWindowParallelExecution determines if parallel execution should be used for a window function
+// shouldUseWindowParallelExecution determines if parallel execution should be used for a window function.
 func (e *Evaluator) shouldUseWindowParallelExecution(
 	window *WindowSpec,
 	columns map[string]arrow.Array,
@@ -504,7 +507,7 @@ func (e *Evaluator) shouldUseWindowParallelExecution(
 	return e.shouldUseParallelExecution(partitions, config)
 }
 
-// getWindowParallelConfig returns the parallel configuration for window functions
+// getWindowParallelConfig returns the parallel configuration for window functions.
 func (e *Evaluator) getWindowParallelConfig() *WindowParallelConfig {
 	// Currently, this function returns a default configuration for parallel execution.
 	// TODO: Integrate with global configuration system to allow dynamic configuration.
@@ -514,7 +517,7 @@ func (e *Evaluator) getWindowParallelConfig() *WindowParallelConfig {
 	return DefaultWindowParallelConfig()
 }
 
-// executeOffsetPartitionsParallel executes LAG/LEAD window function partitions in parallel
+// executeOffsetPartitionsParallel executes LAG/LEAD window function partitions in parallel.
 func (e *Evaluator) executeOffsetPartitionsParallel(
 	partitions [][]int,
 	window *WindowSpec,
@@ -545,7 +548,7 @@ func (e *Evaluator) executeOffsetPartitionsParallel(
 
 	// Process partitions in parallel
 	results := parallel.ProcessIndexed(wp, tasks,
-		func(taskIndex int, task offsetPartitionTask) offsetPartitionResult {
+		func(_ int, task offsetPartitionTask) offsetPartitionResult {
 			// Process the offset partition
 			partitionResults := e.processOffsetPartition(
 				task.rowIndices,
@@ -573,7 +576,7 @@ func (e *Evaluator) executeOffsetPartitionsParallel(
 	return results, nil
 }
 
-// processOffsetPartition processes a single partition for LAG/LEAD functions
+// processOffsetPartition processes a single partition for LAG/LEAD functions.
 func (e *Evaluator) processOffsetPartition(
 	partition []int,
 	window *WindowSpec,
@@ -623,7 +626,7 @@ func (e *Evaluator) processOffsetPartition(
 	return results
 }
 
-// buildOffsetWindowResult builds the final result array from offset partition results
+// buildOffsetWindowResult builds the final result array from offset partition results.
 func (e *Evaluator) buildOffsetWindowResult(
 	partitionResults []offsetPartitionResult,
 	dataLength int,
@@ -645,7 +648,7 @@ func (e *Evaluator) buildOffsetWindowResult(
 	return e.buildTypedArrayResultParallel(finalResult, dataLength, resultType)
 }
 
-// offsetPartitionTask represents a partition processing task for offset functions
+// offsetPartitionTask represents a partition processing task for offset functions.
 type offsetPartitionTask struct {
 	partitionIndex int
 	rowIndices     []int
@@ -653,7 +656,7 @@ type offsetPartitionTask struct {
 	offset         int64
 }
 
-// offsetPartitionResult represents the result of processing an offset partition
+// offsetPartitionResult represents the result of processing an offset partition.
 type offsetPartitionResult struct {
 	partitionIndex  int
 	results         []interface{}
@@ -661,7 +664,7 @@ type offsetPartitionResult struct {
 	err             error
 }
 
-// buildTypedArrayResultParallel builds typed array results for parallel window functions
+// buildTypedArrayResultParallel builds typed array results for parallel window functions.
 func (e *Evaluator) buildTypedArrayResultParallel(
 	result []interface{},
 	dataLength int,
@@ -669,39 +672,63 @@ func (e *Evaluator) buildTypedArrayResultParallel(
 ) (arrow.Array, error) {
 	switch arrayType {
 	case typeInt64:
-		builder := array.NewInt64Builder(e.mem)
-		defer builder.Release()
-		for i := 0; i < dataLength; i++ {
-			if result[i] == nil {
-				builder.AppendNull()
-			} else {
-				builder.Append(result[i].(int64))
-			}
-		}
-		return builder.NewArray(), nil
+		return e.buildParallelInt64Array(result, dataLength)
 	case typeString:
-		builder := array.NewStringBuilder(e.mem)
-		defer builder.Release()
-		for i := 0; i < dataLength; i++ {
-			if result[i] == nil {
-				builder.AppendNull()
-			} else {
-				builder.Append(result[i].(string))
-			}
-		}
-		return builder.NewArray(), nil
+		return e.buildParallelStringArray(result, dataLength)
 	case typeFloat64:
-		builder := array.NewFloat64Builder(e.mem)
-		defer builder.Release()
-		for i := 0; i < dataLength; i++ {
-			if result[i] == nil {
-				builder.AppendNull()
-			} else {
-				builder.Append(result[i].(float64))
-			}
-		}
-		return builder.NewArray(), nil
+		return e.buildParallelFloat64Array(result, dataLength)
 	default:
 		return nil, fmt.Errorf("unsupported array type: %s", arrayType)
 	}
+}
+
+// buildParallelInt64Array builds an Int64 array for parallel processing.
+func (e *Evaluator) buildParallelInt64Array(result []interface{}, dataLength int) (arrow.Array, error) {
+	builder := array.NewInt64Builder(e.mem)
+	defer builder.Release()
+
+	for i := range dataLength {
+		if result[i] == nil {
+			builder.AppendNull()
+		} else if int64Val, ok := result[i].(int64); ok {
+			builder.Append(int64Val)
+		} else {
+			builder.AppendNull() // Fallback for type assertion failure.
+		}
+	}
+	return builder.NewArray(), nil
+}
+
+// buildParallelStringArray builds a String array for parallel processing.
+func (e *Evaluator) buildParallelStringArray(result []interface{}, dataLength int) (arrow.Array, error) {
+	builder := array.NewStringBuilder(e.mem)
+	defer builder.Release()
+
+	for i := range dataLength {
+		if result[i] == nil {
+			builder.AppendNull()
+		} else if stringVal, ok := result[i].(string); ok {
+			builder.Append(stringVal)
+		} else {
+			builder.AppendNull() // Fallback for type assertion failure.
+		}
+	}
+	return builder.NewArray(), nil
+}
+
+// buildParallelFloat64Array builds a Float64 array for parallel processing.
+func (e *Evaluator) buildParallelFloat64Array(result []interface{}, dataLength int) (arrow.Array, error) {
+	builder := array.NewFloat64Builder(e.mem)
+	defer builder.Release()
+
+	for i := range dataLength {
+		if result[i] == nil {
+			builder.AppendNull()
+		} else if float64Val, ok := result[i].(float64); ok {
+			builder.Append(float64Val)
+		} else {
+			builder.AppendNull() // Fallback for type assertion failure.
+		}
+	}
+	return builder.NewArray(), nil
 }

@@ -1,4 +1,4 @@
-package expr
+package expr_test
 
 import (
 	"testing"
@@ -7,6 +7,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/paveg/gorilla/internal/expr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -14,39 +15,39 @@ import (
 func TestIntervalExpr(t *testing.T) {
 	tests := []struct {
 		name     string
-		interval *IntervalExpr
+		interval *expr.IntervalExpr
 		expected string
 	}{
 		{
 			name:     "Days interval",
-			interval: Days(7),
+			interval: expr.Days(7),
 			expected: "interval(7 days)",
 		},
 		{
 			name:     "Hours interval",
-			interval: Hours(24),
+			interval: expr.Hours(24),
 			expected: "interval(24 hours)",
 		},
 		{
 			name:     "Minutes interval",
-			interval: Minutes(30),
+			interval: expr.Minutes(30),
 			expected: "interval(30 minutes)",
 		},
 		{
 			name:     "Months interval",
-			interval: Months(3),
+			interval: expr.Months(3),
 			expected: "interval(3 months)",
 		},
 		{
 			name:     "Years interval",
-			interval: Years(1),
+			interval: expr.Years(1),
 			expected: "interval(1 years)",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, ExprLiteral, tt.interval.Type())
+			assert.Equal(t, expr.ExprLiteral, tt.interval.Type())
 			assert.Equal(t, tt.expected, tt.interval.String())
 		})
 	}
@@ -54,7 +55,7 @@ func TestIntervalExpr(t *testing.T) {
 
 func TestDateAdd(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	evaluator := NewEvaluator(mem)
+	evaluator := expr.NewEvaluator(mem)
 
 	// Create test timestamps (2024-01-15 12:30:00 UTC and 2024-02-20 18:45:00 UTC)
 	baseTime1 := time.Date(2024, 1, 15, 12, 30, 0, 0, time.UTC)
@@ -74,37 +75,37 @@ func TestDateAdd(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		expr           *FunctionExpr
+		expr           *expr.FunctionExpr
 		expectedTimes  []time.Time
 		expectedLength int
 	}{
 		{
 			name:           "Add 7 days",
-			expr:           DateAdd(Col("timestamp_col"), Days(7)),
+			expr:           expr.DateAdd(expr.Col("timestamp_col"), expr.Days(7)),
 			expectedTimes:  []time.Time{baseTime1.AddDate(0, 0, 7), baseTime2.AddDate(0, 0, 7)},
 			expectedLength: 2,
 		},
 		{
 			name:           "Add 3 hours",
-			expr:           DateAdd(Col("timestamp_col"), Hours(3)),
+			expr:           expr.DateAdd(expr.Col("timestamp_col"), expr.Hours(3)),
 			expectedTimes:  []time.Time{baseTime1.Add(3 * time.Hour), baseTime2.Add(3 * time.Hour)},
 			expectedLength: 2,
 		},
 		{
 			name:           "Add 45 minutes",
-			expr:           DateAdd(Col("timestamp_col"), Minutes(45)),
+			expr:           expr.DateAdd(expr.Col("timestamp_col"), expr.Minutes(45)),
 			expectedTimes:  []time.Time{baseTime1.Add(45 * time.Minute), baseTime2.Add(45 * time.Minute)},
 			expectedLength: 2,
 		},
 		{
 			name:           "Add 2 months",
-			expr:           DateAdd(Col("timestamp_col"), Months(2)),
+			expr:           expr.DateAdd(expr.Col("timestamp_col"), expr.Months(2)),
 			expectedTimes:  []time.Time{baseTime1.AddDate(0, 2, 0), baseTime2.AddDate(0, 2, 0)},
 			expectedLength: 2,
 		},
 		{
 			name:           "Add 1 year",
-			expr:           DateAdd(Col("timestamp_col"), Years(1)),
+			expr:           expr.DateAdd(expr.Col("timestamp_col"), expr.Years(1)),
 			expectedTimes:  []time.Time{baseTime1.AddDate(1, 0, 0), baseTime2.AddDate(1, 0, 0)},
 			expectedLength: 2,
 		},
@@ -120,10 +121,16 @@ func TestDateAdd(t *testing.T) {
 			require.True(t, ok)
 			assert.Equal(t, tt.expectedLength, timestampResult.Len())
 
-			for i := 0; i < tt.expectedLength; i++ {
+			for i := range tt.expectedLength {
 				tsValue := int64(timestampResult.Value(i))
-				resultTime := time.Unix(tsValue/nanosPerSecond, tsValue%nanosPerSecond).UTC()
-				assert.True(t, tt.expectedTimes[i].Equal(resultTime), "Expected %v, got %v", tt.expectedTimes[i], resultTime)
+				resultTime := time.Unix(tsValue/1e9, tsValue%1e9).UTC()
+				assert.True(
+					t,
+					tt.expectedTimes[i].Equal(resultTime),
+					"Expected %v, got %v",
+					tt.expectedTimes[i],
+					resultTime,
+				)
 			}
 		})
 	}
@@ -131,7 +138,7 @@ func TestDateAdd(t *testing.T) {
 
 func TestDateSub(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	evaluator := NewEvaluator(mem)
+	evaluator := expr.NewEvaluator(mem)
 
 	// Create test timestamps (2024-01-15 12:30:00 UTC and 2024-02-20 18:45:00 UTC)
 	baseTime1 := time.Date(2024, 1, 15, 12, 30, 0, 0, time.UTC)
@@ -151,37 +158,37 @@ func TestDateSub(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		expr           *FunctionExpr
+		expr           *expr.FunctionExpr
 		expectedTimes  []time.Time
 		expectedLength int
 	}{
 		{
 			name:           "Subtract 7 days",
-			expr:           DateSub(Col("timestamp_col"), Days(7)),
+			expr:           expr.DateSub(expr.Col("timestamp_col"), expr.Days(7)),
 			expectedTimes:  []time.Time{baseTime1.AddDate(0, 0, -7), baseTime2.AddDate(0, 0, -7)},
 			expectedLength: 2,
 		},
 		{
 			name:           "Subtract 3 hours",
-			expr:           DateSub(Col("timestamp_col"), Hours(3)),
+			expr:           expr.DateSub(expr.Col("timestamp_col"), expr.Hours(3)),
 			expectedTimes:  []time.Time{baseTime1.Add(-3 * time.Hour), baseTime2.Add(-3 * time.Hour)},
 			expectedLength: 2,
 		},
 		{
 			name:           "Subtract 45 minutes",
-			expr:           DateSub(Col("timestamp_col"), Minutes(45)),
+			expr:           expr.DateSub(expr.Col("timestamp_col"), expr.Minutes(45)),
 			expectedTimes:  []time.Time{baseTime1.Add(-45 * time.Minute), baseTime2.Add(-45 * time.Minute)},
 			expectedLength: 2,
 		},
 		{
 			name:           "Subtract 2 months",
-			expr:           DateSub(Col("timestamp_col"), Months(2)),
+			expr:           expr.DateSub(expr.Col("timestamp_col"), expr.Months(2)),
 			expectedTimes:  []time.Time{baseTime1.AddDate(0, -2, 0), baseTime2.AddDate(0, -2, 0)},
 			expectedLength: 2,
 		},
 		{
 			name:           "Subtract 1 year",
-			expr:           DateSub(Col("timestamp_col"), Years(1)),
+			expr:           expr.DateSub(expr.Col("timestamp_col"), expr.Years(1)),
 			expectedTimes:  []time.Time{baseTime1.AddDate(-1, 0, 0), baseTime2.AddDate(-1, 0, 0)},
 			expectedLength: 2,
 		},
@@ -197,10 +204,16 @@ func TestDateSub(t *testing.T) {
 			require.True(t, ok)
 			assert.Equal(t, tt.expectedLength, timestampResult.Len())
 
-			for i := 0; i < tt.expectedLength; i++ {
+			for i := range tt.expectedLength {
 				tsValue := int64(timestampResult.Value(i))
-				resultTime := time.Unix(tsValue/nanosPerSecond, tsValue%nanosPerSecond).UTC()
-				assert.True(t, tt.expectedTimes[i].Equal(resultTime), "Expected %v, got %v", tt.expectedTimes[i], resultTime)
+				resultTime := time.Unix(tsValue/1e9, tsValue%1e9).UTC()
+				assert.True(
+					t,
+					tt.expectedTimes[i].Equal(resultTime),
+					"Expected %v, got %v",
+					tt.expectedTimes[i],
+					resultTime,
+				)
 			}
 		})
 	}
@@ -208,7 +221,7 @@ func TestDateSub(t *testing.T) {
 
 func TestDateDiff(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	evaluator := NewEvaluator(mem)
+	evaluator := expr.NewEvaluator(mem)
 
 	// Create test timestamps
 	startTime1 := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -240,25 +253,25 @@ func TestDateDiff(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		expr           *FunctionExpr
+		expr           *expr.FunctionExpr
 		expectedValues []int64
 		expectedLength int
 	}{
 		{
 			name:           "Diff in days",
-			expr:           DateDiff(Col("start_col"), Col("end_col"), "days"),
+			expr:           expr.DateDiff(expr.Col("start_col"), expr.Col("end_col"), "days"),
 			expectedValues: []int64{7, 0}, // 7 days, 0 days
 			expectedLength: 2,
 		},
 		{
 			name:           "Diff in hours",
-			expr:           DateDiff(Col("start_col"), Col("end_col"), "hours"),
+			expr:           expr.DateDiff(expr.Col("start_col"), expr.Col("end_col"), "hours"),
 			expectedValues: []int64{168, 3}, // 7*24 = 168 hours, 3 hours
 			expectedLength: 2,
 		},
 		{
 			name:           "Diff in minutes",
-			expr:           DateDiff(Col("start_col"), Col("end_col"), "minutes"),
+			expr:           expr.DateDiff(expr.Col("start_col"), expr.Col("end_col"), "minutes"),
 			expectedValues: []int64{10080, 210}, // 7*24*60 = 10080 minutes, 3.5*60 = 210 minutes
 			expectedLength: 2,
 		},
@@ -274,7 +287,7 @@ func TestDateDiff(t *testing.T) {
 			require.True(t, ok)
 			assert.Equal(t, tt.expectedLength, int64Result.Len())
 
-			for i := 0; i < tt.expectedLength; i++ {
+			for i := range tt.expectedLength {
 				assert.Equal(t, tt.expectedValues[i], int64Result.Value(i))
 			}
 		})
@@ -283,7 +296,7 @@ func TestDateDiff(t *testing.T) {
 
 func TestDateDiffMonthsAndYears(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	evaluator := NewEvaluator(mem)
+	evaluator := expr.NewEvaluator(mem)
 
 	// Create test timestamps for month/year calculations
 	startTime := time.Date(2023, 1, 15, 0, 0, 0, 0, time.UTC)
@@ -309,17 +322,17 @@ func TestDateDiffMonthsAndYears(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		expr          *FunctionExpr
+		expr          *expr.FunctionExpr
 		expectedValue int64
 	}{
 		{
 			name:          "Diff in months (adjust for day)",
-			expr:          DateDiff(Col("start_col"), Col("end_col"), "months"),
+			expr:          expr.DateDiff(expr.Col("start_col"), expr.Col("end_col"), "months"),
 			expectedValue: 13, // 14 months minus 1 for day adjustment
 		},
 		{
 			name:          "Diff in years",
-			expr:          DateDiff(Col("start_col"), Col("end_col"), "years"),
+			expr:          expr.DateDiff(expr.Col("start_col"), expr.Col("end_col"), "years"),
 			expectedValue: 1,
 		},
 	}
@@ -340,7 +353,7 @@ func TestDateDiffMonthsAndYears(t *testing.T) {
 
 func TestDateArithmeticWithNulls(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	evaluator := NewEvaluator(mem)
+	evaluator := expr.NewEvaluator(mem)
 
 	// Create array with null values
 	builder := array.NewTimestampBuilder(mem, &arrow.TimestampType{Unit: arrow.Nanosecond})
@@ -359,15 +372,15 @@ func TestDateArithmeticWithNulls(t *testing.T) {
 
 	tests := []struct {
 		name string
-		expr *FunctionExpr
+		expr *expr.FunctionExpr
 	}{
 		{
 			name: "DateAdd with nulls",
-			expr: DateAdd(Col("timestamp_col"), Days(7)),
+			expr: expr.DateAdd(expr.Col("timestamp_col"), expr.Days(7)),
 		},
 		{
 			name: "DateSub with nulls",
-			expr: DateSub(Col("timestamp_col"), Hours(3)),
+			expr: expr.DateSub(expr.Col("timestamp_col"), expr.Hours(3)),
 		},
 	}
 
@@ -402,31 +415,31 @@ func TestDateArithmeticChaining(t *testing.T) {
 
 	tests := []struct {
 		name string
-		expr Expr
+		expr expr.Expr
 	}{
 		{
 			name: "Column DateAdd method",
-			expr: Col("timestamp_col").DateAdd(Days(7)),
+			expr: expr.Col("timestamp_col").DateAdd(expr.Days(7)),
 		},
 		{
 			name: "Column DateSub method",
-			expr: Col("timestamp_col").DateSub(Hours(3)),
+			expr: expr.Col("timestamp_col").DateSub(expr.Hours(3)),
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			funcExpr, ok := tt.expr.(*FunctionExpr)
+			funcExpr, ok := tt.expr.(*expr.FunctionExpr)
 			require.True(t, ok)
-			assert.Contains(t, []string{"date_add", "date_sub"}, funcExpr.name)
-			assert.Len(t, funcExpr.args, 2)
+			assert.Contains(t, []string{"date_add", "date_sub"}, funcExpr.Name())
+			assert.Len(t, funcExpr.Args(), 2)
 		})
 	}
 }
 
 func TestDateArithmeticErrors(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	evaluator := NewEvaluator(mem)
+	evaluator := expr.NewEvaluator(mem)
 
 	// Create non-timestamp array for error testing
 	int64Builder := array.NewInt64Builder(mem)
@@ -441,17 +454,17 @@ func TestDateArithmeticErrors(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		expr        *FunctionExpr
+		expr        *expr.FunctionExpr
 		expectedErr string
 	}{
 		{
 			name:        "DateAdd with non-timestamp",
-			expr:        DateAdd(Col("int_col"), Days(7)),
+			expr:        expr.DateAdd(expr.Col("int_col"), expr.Days(7)),
 			expectedErr: "date_add function requires a timestamp argument",
 		},
 		{
 			name:        "DateSub with non-timestamp",
-			expr:        DateSub(Col("int_col"), Hours(3)),
+			expr:        expr.DateSub(expr.Col("int_col"), expr.Hours(3)),
 			expectedErr: "date_sub function requires a timestamp argument",
 		},
 	}
@@ -467,7 +480,7 @@ func TestDateArithmeticErrors(t *testing.T) {
 
 func TestUnsupportedDateDiffUnit(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	evaluator := NewEvaluator(mem)
+	evaluator := expr.NewEvaluator(mem)
 
 	// Create test timestamps
 	baseTime := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -483,7 +496,7 @@ func TestUnsupportedDateDiffUnit(t *testing.T) {
 	}
 
 	// Test unsupported unit - should now return an error for better error visibility
-	expr := DateDiff(Col("start_col"), Col("end_col"), "invalid_unit")
+	expr := expr.DateDiff(expr.Col("start_col"), expr.Col("end_col"), "invalid_unit")
 	_, err := evaluator.Evaluate(expr, columns)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "date_diff function unsupported unit: invalid_unit")

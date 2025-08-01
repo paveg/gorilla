@@ -208,7 +208,7 @@ type GroupBy struct {
 //
 //	result, err := df.Lazy().Filter(final).Collect()
 
-// JoinType represents the type of join operation
+// JoinType represents the type of join operation.
 type JoinType int
 
 const (
@@ -218,7 +218,7 @@ const (
 	FullOuterJoin
 )
 
-// JoinOptions specifies parameters for join operations
+// JoinOptions specifies parameters for join operations.
 type JoinOptions struct {
 	Type      JoinType
 	LeftKey   string   // Single join key for left DataFrame
@@ -758,19 +758,19 @@ func ExampleDataFrameJoin() {
 	mem := memory.NewGoAllocator()
 
 	// Create employees DataFrame
-	empIds := NewSeries("id", []int64{1, 2, 3}, mem)
+	empIDs := NewSeries("id", []int64{1, 2, 3}, mem)
 	empNames := NewSeries("name", []string{"Alice", "Bob", "Charlie"}, mem)
-	defer empIds.Release()
+	defer empIDs.Release()
 	defer empNames.Release()
-	employees := NewDataFrame(empIds, empNames)
+	employees := NewDataFrame(empIDs, empNames)
 	defer employees.Release()
 
 	// Create departments DataFrame
-	deptIds := NewSeries("id", []int64{1, 2, 3}, mem)
+	deptIDs := NewSeries("id", []int64{1, 2, 3}, mem)
 	deptNames := NewSeries("department", []string{"Engineering", "Sales", "Marketing"}, mem)
-	defer deptIds.Release()
+	defer deptIDs.Release()
 	defer deptNames.Release()
-	departments := NewDataFrame(deptIds, deptNames)
+	departments := NewDataFrame(deptIDs, deptNames)
 	defer departments.Release()
 
 	// Perform inner join

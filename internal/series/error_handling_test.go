@@ -1,12 +1,12 @@
-package series
+package series_test
 
 import (
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	dferrors "github.com/paveg/gorilla/internal/errors"
+	"github.com/paveg/gorilla/internal/series"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -32,38 +32,38 @@ func TestNewSafe_SupportedTypes(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			switch v := tt.values.(type) {
 			case []string:
-				series, err := NewSafe("test", v, mem)
+				series, err := series.NewSafe("test", v, mem)
 				require.NoError(t, err)
 				defer series.Release()
 				assert.Equal(t, "test", series.Name())
 				assert.Equal(t, len(v), series.Len())
 			case []int64:
-				series, err := NewSafe("test", v, mem)
+				series, err := series.NewSafe("test", v, mem)
 				require.NoError(t, err)
 				defer series.Release()
 				assert.Equal(t, len(v), series.Len())
 			case []int32:
-				series, err := NewSafe("test", v, mem)
+				series, err := series.NewSafe("test", v, mem)
 				require.NoError(t, err)
 				defer series.Release()
 				assert.Equal(t, len(v), series.Len())
 			case []float64:
-				series, err := NewSafe("test", v, mem)
+				series, err := series.NewSafe("test", v, mem)
 				require.NoError(t, err)
 				defer series.Release()
 				assert.Equal(t, len(v), series.Len())
 			case []float32:
-				series, err := NewSafe("test", v, mem)
+				series, err := series.NewSafe("test", v, mem)
 				require.NoError(t, err)
 				defer series.Release()
 				assert.Equal(t, len(v), series.Len())
 			case []bool:
-				series, err := NewSafe("test", v, mem)
+				series, err := series.NewSafe("test", v, mem)
 				require.NoError(t, err)
 				defer series.Release()
 				assert.Equal(t, len(v), series.Len())
 			case []time.Time:
-				series, err := NewSafe("test", v, mem)
+				series, err := series.NewSafe("test", v, mem)
 				require.NoError(t, err)
 				defer series.Release()
 				assert.Equal(t, len(v), series.Len())
@@ -89,25 +89,25 @@ func TestNewSafe_UnsupportedTypes(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			switch v := tt.values.(type) {
 			case []complex128:
-				series, err := NewSafe("test", v, mem)
+				series, err := series.NewSafe("test", v, mem)
 				require.Error(t, err)
 				assert.Nil(t, series)
 
 				var dfErr *dferrors.DataFrameError
-				require.True(t, errors.As(err, &dfErr))
+				require.ErrorAs(t, err, &dfErr)
 				assert.Equal(t, "series creation", dfErr.Op)
 				assert.Contains(t, dfErr.Message, "complex128")
 			case []struct{ X int }:
-				series, err := NewSafe("test", v, mem)
+				series, err := series.NewSafe("test", v, mem)
 				require.Error(t, err)
 				assert.Nil(t, series)
 
 				var dfErr *dferrors.DataFrameError
-				require.True(t, errors.As(err, &dfErr))
+				require.ErrorAs(t, err, &dfErr)
 				assert.Equal(t, "series creation", dfErr.Op)
 				assert.Contains(t, dfErr.Message, "struct")
 			case []map[string]int:
-				series, err := NewSafe("test", v, mem)
+				series, err := series.NewSafe("test", v, mem)
 				require.Error(t, err)
 				assert.Nil(t, series)
 			}
@@ -121,7 +121,7 @@ func TestValuesSafe_SupportedTypes(t *testing.T) {
 
 	t.Run("string series", func(t *testing.T) {
 		original := []string{"a", "b", "c"}
-		series := New("test", original, mem)
+		series := series.New("test", original, mem)
 		defer series.Release()
 
 		values, err := series.ValuesSafe()
@@ -131,7 +131,7 @@ func TestValuesSafe_SupportedTypes(t *testing.T) {
 
 	t.Run("int64 series", func(t *testing.T) {
 		original := []int64{1, 2, 3}
-		series := New("test", original, mem)
+		series := series.New("test", original, mem)
 		defer series.Release()
 
 		values, err := series.ValuesSafe()
@@ -141,7 +141,7 @@ func TestValuesSafe_SupportedTypes(t *testing.T) {
 
 	t.Run("bool series", func(t *testing.T) {
 		original := []bool{true, false, true}
-		series := New("test", original, mem)
+		series := series.New("test", original, mem)
 		defer series.Release()
 
 		values, err := series.ValuesSafe()
@@ -152,12 +152,12 @@ func TestValuesSafe_SupportedTypes(t *testing.T) {
 	t.Run("time series", func(t *testing.T) {
 		now := time.Now().UTC()
 		original := []time.Time{now, now.Add(time.Hour), now.Add(2 * time.Hour)}
-		series := New("test", original, mem)
+		series := series.New("test", original, mem)
 		defer series.Release()
 
 		values, err := series.ValuesSafe()
 		require.NoError(t, err)
-		require.Equal(t, len(original), len(values))
+		require.Len(t, values, len(original))
 
 		// Time values should be approximately equal (within nanosecond precision)
 		for i, expected := range original {
@@ -173,7 +173,7 @@ func TestValuesSafe_BackwardCompatibility(t *testing.T) {
 
 	t.Run("string series compatibility", func(t *testing.T) {
 		original := []string{"a", "b", "c"}
-		series := New("test", original, mem)
+		series := series.New("test", original, mem)
 		defer series.Release()
 
 		unsafeValues := series.Values()
@@ -185,7 +185,7 @@ func TestValuesSafe_BackwardCompatibility(t *testing.T) {
 
 	t.Run("int64 series compatibility", func(t *testing.T) {
 		original := []int64{1, 2, 3}
-		series := New("test", original, mem)
+		series := series.New("test", original, mem)
 		defer series.Release()
 
 		unsafeValues := series.Values()
@@ -200,7 +200,7 @@ func TestNewSafe_EmptySlice(t *testing.T) {
 	mem := memory.NewGoAllocator()
 	// mem.AssertSize not available in this version
 
-	series, err := NewSafe("empty", []string{}, mem)
+	series, err := series.NewSafe("empty", []string{}, mem)
 	require.NoError(t, err)
 	defer series.Release()
 
@@ -213,8 +213,8 @@ func TestNewSafe_EmptySlice(t *testing.T) {
 }
 
 func TestNewSafe_NilAllocator(t *testing.T) {
-	// Test that NewSafe properly handles nil allocator (should create default)
-	series, err := NewSafe("test", []string{"a", "b"}, nil)
+	// Test that series.NewSafe properly handles nil allocator (should create default)
+	series, err := series.NewSafe("test", []string{"a", "b"}, nil)
 	require.NoError(t, err)
 	defer series.Release()
 
@@ -228,20 +228,20 @@ func TestNew_vs_NewSafe_Panics(t *testing.T) {
 
 	unsupportedData := []complex128{1 + 2i, 3 + 4i}
 
-	t.Run("New panics on unsupported type", func(t *testing.T) {
+	t.Run("series.New panics on unsupported type", func(t *testing.T) {
 		assert.Panics(t, func() {
-			series := New("test", unsupportedData, mem)
+			series := series.New("test", unsupportedData, mem)
 			defer series.Release()
 		})
 	})
 
-	t.Run("NewSafe returns error on unsupported type", func(t *testing.T) {
-		series, err := NewSafe("test", unsupportedData, mem)
+	t.Run("series.NewSafe returns error on unsupported type", func(t *testing.T) {
+		series, err := series.NewSafe("test", unsupportedData, mem)
 		require.Error(t, err)
 		assert.Nil(t, series)
 
 		var dfErr *dferrors.DataFrameError
-		require.True(t, errors.As(err, &dfErr))
+		require.ErrorAs(t, err, &dfErr)
 		assert.Equal(t, "series creation", dfErr.Op)
 		assert.Contains(t, dfErr.Message, "unsupported type")
 	})
@@ -255,16 +255,16 @@ func TestValuesSafe_Performance(t *testing.T) {
 	// Create large dataset
 	size := 10000
 	data := make([]int64, size)
-	for i := 0; i < size; i++ {
+	for i := range size {
 		data[i] = int64(i)
 	}
 
-	series := New("large", data, mem)
+	series := series.New("large", data, mem)
 	defer series.Release()
 
 	values, err := series.ValuesSafe()
 	require.NoError(t, err)
-	assert.Equal(t, size, len(values))
+	assert.Len(t, values, size)
 	assert.Equal(t, int64(0), values[0])
 	assert.Equal(t, int64(size-1), values[size-1])
 }

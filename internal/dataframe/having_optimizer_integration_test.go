@@ -1,3 +1,4 @@
+//nolint:testpackage // requires internal access to unexported types and functions
 package dataframe
 
 import (
@@ -11,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestCompiledHavingEvaluator_Basic tests the basic functionality of the optimization framework
+// TestCompiledHavingEvaluator_Basic tests the basic functionality of the optimization framework.
 func TestCompiledHavingEvaluator_Basic(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
@@ -85,7 +86,7 @@ func TestCompiledHavingEvaluator_Basic(t *testing.T) {
 
 			// Get metrics to verify framework is working
 			metrics := evaluator.GetMetrics()
-			assert.Greater(t, metrics.CompilationTime.Nanoseconds(), int64(0), "Compilation should take measurable time")
+			assert.Positive(t, metrics.CompilationTime.Nanoseconds(), "Compilation should take measurable time")
 
 			// Test that evaluator is ready
 			assert.NotNil(t, evaluator.compiledExpr, "Expression should be compiled")
@@ -93,7 +94,7 @@ func TestCompiledHavingEvaluator_Basic(t *testing.T) {
 	}
 }
 
-// TestCompiledHavingEvaluator_PerformanceHints tests performance optimization hints
+// TestCompiledHavingEvaluator_PerformanceHints tests performance optimization hints.
 func TestCompiledHavingEvaluator_PerformanceHints(t *testing.T) {
 	predicate := expr.Col("avg_salary").Gt(expr.Lit(75000.0))
 
@@ -143,7 +144,7 @@ func TestCompiledHavingEvaluator_PerformanceHints(t *testing.T) {
 	}
 }
 
-// TestCompiledHavingEvaluator_ConstantOptimization tests constant expression optimization
+// TestCompiledHavingEvaluator_ConstantOptimization tests constant expression optimization.
 func TestCompiledHavingEvaluator_ConstantOptimization(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -204,7 +205,7 @@ func TestCompiledHavingEvaluator_ConstantOptimization(t *testing.T) {
 	}
 }
 
-// TestCompiledHavingEvaluator_MemoryManagement tests proper memory cleanup
+// TestCompiledHavingEvaluator_MemoryManagement tests proper memory cleanup.
 func TestCompiledHavingEvaluator_MemoryManagement(t *testing.T) {
 	predicate := expr.Col("count").Gt(expr.Lit(int64(10)))
 	hint := PerformanceHint{

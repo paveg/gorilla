@@ -1,3 +1,4 @@
+//nolint:testpackage // requires internal access to unexported types and functions
 package dataframe
 
 import (
@@ -522,7 +523,7 @@ func TestGroupByOperationComplexHaving(t *testing.T) {
 		teamCol, exists := result.Column("team")
 		require.True(t, exists)
 		teamResults := make([]string, 0)
-		for i := 0; i < teamCol.Len(); i++ {
+		for i := range teamCol.Len() {
 			teamResults = append(teamResults, teamCol.GetAsString(i))
 		}
 		assert.Contains(t, teamResults, "A")
@@ -701,7 +702,7 @@ func TestGroupByOperationMemoryManagement(t *testing.T) {
 		// Create larger dataset to test memory management
 		groups := make([]string, 1000)
 		values := make([]int64, 1000)
-		for i := 0; i < 1000; i++ {
+		for i := range 1000 {
 			groups[i] = string(rune('A' + (i % 5))) // 5 groups
 			values[i] = int64(i)
 		}
@@ -740,7 +741,7 @@ func TestGroupByOperationMemoryManagement(t *testing.T) {
 		defer df.Release()
 
 		// Perform multiple operations with proper cleanup
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			threshold := int64(250 + i*10)
 			havingPredicate := expr.Sum(expr.Col("value")).Gt(expr.Lit(threshold))
 			operation := NewGroupByOperationWithHaving(
@@ -780,7 +781,7 @@ func TestGroupByOperationErrorHandling(t *testing.T) {
 		)
 
 		_, err := operation.Apply(df)
-		assert.Error(t, err)
+		require.Error(t, err)
 		// The error should indicate either HAVING validation or column not found
 		// Both are valid error cases for invalid predicates
 		errorContainsExpected := strings.Contains(err.Error(), "HAVING clause must contain aggregation functions") ||
@@ -803,7 +804,7 @@ func TestGroupByOperationErrorHandling(t *testing.T) {
 		)
 
 		_, err := operation.Apply(df)
-		assert.Error(t, err)
+		require.Error(t, err)
 		// Error should mention the missing column in aggregation context
 	})
 
@@ -898,7 +899,7 @@ func TestGroupByOperationLazyIntegration(t *testing.T) {
 		productCol, exists := result.Column("product")
 		require.True(t, exists)
 		productResults := make([]string, 0)
-		for i := 0; i < productCol.Len(); i++ {
+		for i := range productCol.Len() {
 			productResults = append(productResults, productCol.GetAsString(i))
 		}
 		assert.Contains(t, productResults, "A")
@@ -945,7 +946,7 @@ func TestGroupByOperationPerformance(t *testing.T) {
 		size := 10000
 		categories := make([]string, size)
 		values := make([]int64, size)
-		for i := 0; i < size; i++ {
+		for i := range size {
 			categories[i] = string(rune('A' + (i % 100))) // 100 different groups
 			values[i] = int64(i)
 		}
@@ -977,7 +978,7 @@ func TestGroupByOperationPerformance(t *testing.T) {
 	})
 }
 
-// Benchmark tests for GroupByOperation with HAVING
+// Benchmark tests for GroupByOperation with HAVING.
 func BenchmarkGroupByOperationWithHaving(b *testing.B) {
 	mem := memory.NewGoAllocator()
 
@@ -985,7 +986,7 @@ func BenchmarkGroupByOperationWithHaving(b *testing.B) {
 	size := 1000
 	categories := make([]string, size)
 	values := make([]int64, size)
-	for i := 0; i < size; i++ {
+	for i := range size {
 		categories[i] = string(rune('A' + (i % 10))) // 10 groups
 		values[i] = int64(i)
 	}
@@ -1004,7 +1005,7 @@ func BenchmarkGroupByOperationWithHaving(b *testing.B) {
 	)
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		result, err := operation.Apply(df)
 		if err != nil {
 			b.Fatal(err)
@@ -1020,7 +1021,7 @@ func BenchmarkGroupByOperationWithoutHaving(b *testing.B) {
 	size := 1000
 	categories := make([]string, size)
 	values := make([]int64, size)
-	for i := 0; i < size; i++ {
+	for i := range size {
 		categories[i] = string(rune('A' + (i % 10))) // 10 groups
 		values[i] = int64(i)
 	}
@@ -1037,7 +1038,7 @@ func BenchmarkGroupByOperationWithoutHaving(b *testing.B) {
 	)
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		result, err := operation.Apply(df)
 		if err != nil {
 			b.Fatal(err)

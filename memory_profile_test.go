@@ -1,4 +1,4 @@
-package gorilla
+package gorilla_test
 
 import (
 	"runtime"
@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// BenchmarkHavingMemoryAllocations profiles memory usage patterns
+// BenchmarkHavingMemoryAllocations profiles memory usage patterns.
 func BenchmarkHavingMemoryAllocations(b *testing.B) {
 	mem := memory.NewGoAllocator()
 
@@ -21,7 +21,7 @@ func BenchmarkHavingMemoryAllocations(b *testing.B) {
 	salaries := make([]float64, size)
 
 	deptNames := []string{"Engineering", "Sales", "HR", "Marketing", "Support"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(40000 + (i * 3))
 	}
@@ -44,7 +44,7 @@ func BenchmarkHavingMemoryAllocations(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			result, err := df.Lazy().
 				GroupBy("department").
 				Having(expr.Mean(expr.Col("salary")).As("avg_salary").Gt(expr.Lit(60000.0))).
@@ -89,7 +89,7 @@ func BenchmarkHavingMemoryAllocations(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			// Manual groupby then filter
 			aggregated, err := df.Lazy().
 				GroupBy("department").
@@ -127,7 +127,7 @@ func BenchmarkHavingMemoryAllocations(b *testing.B) {
 	})
 }
 
-// TestHavingMemoryLeakDetection specifically tests for memory leaks
+// TestHavingMemoryLeakDetection specifically tests for memory leaks.
 func TestHavingMemoryLeakDetection(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
@@ -136,7 +136,7 @@ func TestHavingMemoryLeakDetection(t *testing.T) {
 	salaries := make([]float64, size)
 
 	deptNames := []string{"Engineering", "Sales", "HR"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(40000 + (i * 3))
 	}
@@ -154,7 +154,7 @@ func TestHavingMemoryLeakDetection(t *testing.T) {
 
 	// Run many operations
 	iterations := 100
-	for i := 0; i < iterations; i++ {
+	for i := range iterations {
 		result, err := df.Lazy().
 			GroupBy("department").
 			Having(expr.Mean(expr.Col("salary")).As("avg_salary").Gt(expr.Lit(55000.0))).

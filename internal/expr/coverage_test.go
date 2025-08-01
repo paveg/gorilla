@@ -1,4 +1,4 @@
-package expr
+package expr_test
 
 import (
 	"testing"
@@ -6,107 +6,108 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/paveg/gorilla/internal/expr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// TestColumnExpr_ArithmeticOperations tests arithmetic operations on ColumnExpr
+// TestColumnExpr_ArithmeticOperations tests arithmetic operations on ColumnExpr.
 func TestColumnExpr_ArithmeticOperations(t *testing.T) {
-	col := Col("value")
+	col := expr.Col("value")
 
 	tests := []struct {
 		name     string
-		expr     *BinaryExpr
-		expected BinaryOp
+		expr     *expr.BinaryExpr
+		expected expr.BinaryOp
 	}{
 		{
 			name:     "column subtraction",
-			expr:     col.Sub(Lit(3)),
-			expected: OpSub,
+			expr:     col.Sub(expr.Lit(3)),
+			expected: expr.OpSub,
 		},
 		{
 			name:     "column division",
-			expr:     col.Div(Lit(4)),
-			expected: OpDiv,
+			expr:     col.Div(expr.Lit(4)),
+			expected: expr.OpDiv,
 		},
 		{
 			name:     "column multiplication",
-			expr:     col.Mul(Lit(6)),
-			expected: OpMul,
+			expr:     col.Mul(expr.Lit(6)),
+			expected: expr.OpMul,
 		},
 		{
 			name:     "column addition",
-			expr:     col.Add(Lit(5)),
-			expected: OpAdd,
+			expr:     col.Add(expr.Lit(5)),
+			expected: expr.OpAdd,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.NotNil(t, tt.expr)
-			assert.Equal(t, ExprBinary, tt.expr.Type())
+			assert.Equal(t, expr.ExprBinary, tt.expr.Type())
 			assert.Equal(t, tt.expected, tt.expr.Op())
 		})
 	}
 }
 
-// TestColumnExpr_ComparisonOperations tests comparison operations on ColumnExpr
+// TestColumnExpr_ComparisonOperations tests comparison operations on ColumnExpr.
 func TestColumnExpr_ComparisonOperations(t *testing.T) {
-	col := Col("value")
+	col := expr.Col("value")
 
 	tests := []struct {
 		name string
-		expr *BinaryExpr
-		op   BinaryOp
+		expr *expr.BinaryExpr
+		op   expr.BinaryOp
 	}{
 		{
 			name: "column equals",
-			expr: col.Eq(Lit(5)),
-			op:   OpEq,
+			expr: col.Eq(expr.Lit(5)),
+			op:   expr.OpEq,
 		},
 		{
 			name: "column not equals",
-			expr: col.Ne(Lit(3)),
-			op:   OpNe,
+			expr: col.Ne(expr.Lit(3)),
+			op:   expr.OpNe,
 		},
 		{
 			name: "column less than",
-			expr: col.Lt(Lit(5)),
-			op:   OpLt,
+			expr: col.Lt(expr.Lit(5)),
+			op:   expr.OpLt,
 		},
 		{
 			name: "column less than or equal",
-			expr: col.Le(Lit(5)),
-			op:   OpLe,
+			expr: col.Le(expr.Lit(5)),
+			op:   expr.OpLe,
 		},
 		{
 			name: "column greater than or equal",
-			expr: col.Ge(Lit(3)),
-			op:   OpGe,
+			expr: col.Ge(expr.Lit(3)),
+			op:   expr.OpGe,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.NotNil(t, tt.expr)
-			assert.Equal(t, ExprBinary, tt.expr.Type())
+			assert.Equal(t, expr.ExprBinary, tt.expr.Type())
 			assert.Equal(t, tt.op, tt.expr.Op())
 		})
 	}
 }
 
-// TestColumnExpr_MathFunctions tests math functions on ColumnExpr
+// TestColumnExpr_MathFunctions tests math functions on ColumnExpr.
 func TestColumnExpr_MathFunctions(t *testing.T) {
-	col := Col("value")
+	col := expr.Col("value")
 
 	tests := []struct {
 		name     string
-		function *FunctionExpr
+		function *expr.FunctionExpr
 		funcName string
 	}{
 		{"abs", col.Abs(), "abs"},
 		{"round", col.Round(), "round"},
-		{"round_to", col.RoundTo(Lit(2)), "round"},
+		{"round_to", col.RoundTo(expr.Lit(2)), "round"},
 		{"floor", col.Floor(), "floor"},
 		{"ceil", col.Ceil(), "ceil"},
 		{"sqrt", col.Sqrt(), "sqrt"},
@@ -118,44 +119,44 @@ func TestColumnExpr_MathFunctions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.NotNil(t, tt.function)
-			assert.Equal(t, ExprFunction, tt.function.Type())
+			assert.Equal(t, expr.ExprFunction, tt.function.Type())
 			assert.Equal(t, tt.funcName, tt.function.Name())
 		})
 	}
 }
 
-// TestColumnExpr_StringFunctions tests string functions on ColumnExpr
+// TestColumnExpr_StringFunctions tests string functions on ColumnExpr.
 func TestColumnExpr_StringFunctions(t *testing.T) {
-	col := Col("text")
+	col := expr.Col("text")
 
 	tests := []struct {
 		name     string
-		function *FunctionExpr
+		function *expr.FunctionExpr
 		funcName string
 	}{
 		{"upper", col.Upper(), "upper"},
 		{"lower", col.Lower(), "lower"},
 		{"length", col.Length(), "length"},
 		{"trim", col.Trim(), "trim"},
-		{"substring", col.Substring(Lit(0), Lit(5)), "substring"},
+		{"substring", col.Substring(expr.Lit(0), expr.Lit(5)), "substring"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.NotNil(t, tt.function)
-			assert.Equal(t, ExprFunction, tt.function.Type())
+			assert.Equal(t, expr.ExprFunction, tt.function.Type())
 			assert.Equal(t, tt.funcName, tt.function.Name())
 		})
 	}
 }
 
-// TestColumnExpr_CastFunctions tests cast functions on ColumnExpr
+// TestColumnExpr_CastFunctions tests cast functions on ColumnExpr.
 func TestColumnExpr_CastFunctions(t *testing.T) {
-	col := Col("value")
+	col := expr.Col("value")
 
 	tests := []struct {
 		name     string
-		function *FunctionExpr
+		function *expr.FunctionExpr
 		funcName string
 	}{
 		{"cast_to_string", col.CastToString(), "cast_string"},
@@ -167,19 +168,19 @@ func TestColumnExpr_CastFunctions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.NotNil(t, tt.function)
-			assert.Equal(t, ExprFunction, tt.function.Type())
+			assert.Equal(t, expr.ExprFunction, tt.function.Type())
 			assert.Equal(t, tt.funcName, tt.function.Name())
 		})
 	}
 }
 
-// TestColumnExpr_DateTimeFunctions tests datetime functions on ColumnExpr
+// TestColumnExpr_DateTimeFunctions tests datetime functions on ColumnExpr.
 func TestColumnExpr_DateTimeFunctions(t *testing.T) {
-	col := Col("timestamp")
+	col := expr.Col("timestamp")
 
 	tests := []struct {
 		name     string
-		function *FunctionExpr
+		function *expr.FunctionExpr
 		funcName string
 	}{
 		{"year", col.Year(), "year"},
@@ -193,13 +194,13 @@ func TestColumnExpr_DateTimeFunctions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.NotNil(t, tt.function)
-			assert.Equal(t, ExprFunction, tt.function.Type())
+			assert.Equal(t, expr.ExprFunction, tt.function.Type())
 			assert.Equal(t, tt.funcName, tt.function.Name())
 		})
 	}
 }
 
-// TestEvaluator_BooleanOperations tests boolean evaluation
+// TestEvaluator_BooleanOperations tests boolean evaluation.
 func TestEvaluator_BooleanOperations(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
@@ -215,41 +216,41 @@ func TestEvaluator_BooleanOperations(t *testing.T) {
 		"bool_col": boolArray,
 	}
 
-	evaluator := NewEvaluator(mem)
+	evaluator := expr.NewEvaluator(mem)
 
 	t.Run("evaluate boolean column", func(t *testing.T) {
-		result, err := evaluator.EvaluateBoolean(Col("bool_col"), data)
+		result, err := evaluator.EvaluateBoolean(expr.Col("bool_col"), data)
 		require.NoError(t, err)
 		assert.NotNil(t, result)
 		assert.Equal(t, 4, result.Len())
 		boolResult := result.(*array.Boolean)
-		assert.Equal(t, true, boolResult.Value(0))
-		assert.Equal(t, false, boolResult.Value(1))
+		assert.True(t, boolResult.Value(0))
+		assert.False(t, boolResult.Value(1))
 	})
 
 	t.Run("evaluate boolean literal", func(t *testing.T) {
-		result, err := evaluator.EvaluateBoolean(Lit(true), data)
+		result, err := evaluator.EvaluateBoolean(expr.Lit(true), data)
 		require.NoError(t, err)
 		assert.NotNil(t, result)
 		assert.Equal(t, 4, result.Len()) // Literal is broadcast to match data size
 		boolResult := result.(*array.Boolean)
-		assert.Equal(t, true, boolResult.Value(0))
+		assert.True(t, boolResult.Value(0))
 	})
 
 	t.Run("evaluate boolean comparison", func(t *testing.T) {
-		result, err := evaluator.EvaluateBoolean(Col("bool_col").Eq(Lit(true)), data)
+		result, err := evaluator.EvaluateBoolean(expr.Col("bool_col").Eq(expr.Lit(true)), data)
 		require.NoError(t, err)
 		assert.NotNil(t, result)
 		assert.Equal(t, 4, result.Len())
 		boolResult := result.(*array.Boolean)
-		assert.Equal(t, true, boolResult.Value(0))
-		assert.Equal(t, false, boolResult.Value(1))
-		assert.Equal(t, true, boolResult.Value(2))
-		assert.Equal(t, false, boolResult.Value(3))
+		assert.True(t, boolResult.Value(0))
+		assert.False(t, boolResult.Value(1))
+		assert.True(t, boolResult.Value(2))
+		assert.False(t, boolResult.Value(3))
 	})
 }
 
-// TestEvaluator_Int32Float32Operations tests int32 and float32 operations
+// TestEvaluator_Int32Float32Operations tests int32 and float32 operations.
 func TestEvaluator_Int32Float32Operations(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
@@ -272,11 +273,11 @@ func TestEvaluator_Int32Float32Operations(t *testing.T) {
 		"float32_col": float32Array,
 	}
 
-	evaluator := NewEvaluator(mem)
+	evaluator := expr.NewEvaluator(mem)
 
 	t.Run("int32 arithmetic", func(t *testing.T) {
 		// Test addition
-		result, err := evaluator.Evaluate(Col("int32_col").Add(Lit(int32(5))), data)
+		result, err := evaluator.Evaluate(expr.Col("int32_col").Add(expr.Lit(int32(5))), data)
 		require.NoError(t, err)
 		assert.NotNil(t, result)
 		assert.Equal(t, 4, result.Len())
@@ -288,37 +289,37 @@ func TestEvaluator_Int32Float32Operations(t *testing.T) {
 
 	t.Run("float32 arithmetic", func(t *testing.T) {
 		// Test multiplication
-		result, err := evaluator.Evaluate(Col("float32_col").Mul(Lit(float32(2.0))), data)
+		result, err := evaluator.Evaluate(expr.Col("float32_col").Mul(expr.Lit(float32(2.0))), data)
 		require.NoError(t, err)
 		assert.NotNil(t, result)
 		assert.Equal(t, 4, result.Len())
 		// Check values
 		f32Result := result.(*array.Float32)
-		assert.Equal(t, float32(3.0), f32Result.Value(0))
-		assert.Equal(t, float32(5.0), f32Result.Value(1))
+		assert.InDelta(t, float32(3.0), f32Result.Value(0), 0.001)
+		assert.InDelta(t, float32(5.0), f32Result.Value(1), 0.001)
 	})
 
 	t.Run("int32 comparison", func(t *testing.T) {
-		result, err := evaluator.EvaluateBoolean(Col("int32_col").Gt(Lit(int32(25))), data)
+		result, err := evaluator.EvaluateBoolean(expr.Col("int32_col").Gt(expr.Lit(int32(25))), data)
 		require.NoError(t, err)
 		assert.NotNil(t, result)
 		assert.Equal(t, 4, result.Len())
 		boolResult := result.(*array.Boolean)
-		assert.Equal(t, false, boolResult.Value(0))
-		assert.Equal(t, false, boolResult.Value(1))
-		assert.Equal(t, true, boolResult.Value(2))
-		assert.Equal(t, true, boolResult.Value(3))
+		assert.False(t, boolResult.Value(0))
+		assert.False(t, boolResult.Value(1))
+		assert.True(t, boolResult.Value(2))
+		assert.True(t, boolResult.Value(3))
 	})
 
 	t.Run("float32 comparison", func(t *testing.T) {
-		result, err := evaluator.EvaluateBoolean(Col("float32_col").Le(Lit(float32(3.0))), data)
+		result, err := evaluator.EvaluateBoolean(expr.Col("float32_col").Le(expr.Lit(float32(3.0))), data)
 		require.NoError(t, err)
 		assert.NotNil(t, result)
 		assert.Equal(t, 4, result.Len())
 		boolResult := result.(*array.Boolean)
-		assert.Equal(t, true, boolResult.Value(0))
-		assert.Equal(t, true, boolResult.Value(1))
-		assert.Equal(t, false, boolResult.Value(2))
-		assert.Equal(t, false, boolResult.Value(3))
+		assert.True(t, boolResult.Value(0))
+		assert.True(t, boolResult.Value(1))
+		assert.False(t, boolResult.Value(2))
+		assert.False(t, boolResult.Value(3))
 	})
 }

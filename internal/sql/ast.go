@@ -8,23 +8,23 @@ import (
 	"github.com/paveg/gorilla/internal/expr"
 )
 
-// SQLStatementType represents the type of SQL statement
-type SQLStatementType int
+// StatementType represents the type of SQL statement.
+type StatementType int
 
 const (
-	SelectStatementType SQLStatementType = iota
+	SelectStatementType StatementType = iota
 	InsertStatementType
 	UpdateStatementType
 	DeleteStatementType
 )
 
-// SQLStatement interface for all SQL statement types
-type SQLStatement interface {
-	StatementType() SQLStatementType
+// Statement interface for all SQL statement types.
+type Statement interface {
+	StatementType() StatementType
 	String() string
 }
 
-// SelectStatement represents a SQL SELECT statement
+// SelectStatement represents a SQL SELECT statement.
 type SelectStatement struct {
 	SelectList    []SelectItem
 	FromClause    *FromClause
@@ -35,7 +35,7 @@ type SelectStatement struct {
 	LimitClause   *LimitClause
 }
 
-func (s *SelectStatement) StatementType() SQLStatementType {
+func (s *SelectStatement) StatementType() StatementType {
 	return SelectStatementType
 }
 
@@ -82,7 +82,7 @@ func (s *SelectStatement) String() string {
 	return strings.Join(parts, " ")
 }
 
-// SelectItem represents an item in the SELECT list
+// SelectItem represents an item in the SELECT list.
 type SelectItem struct {
 	Expression expr.Expr
 	Alias      string
@@ -101,7 +101,7 @@ func (s *SelectItem) String() string {
 	return result
 }
 
-// FromClause represents the FROM clause with table references
+// FromClause represents the FROM clause with table references.
 type FromClause struct {
 	TableName string
 	Alias     string
@@ -121,7 +121,7 @@ func (f *FromClause) String() string {
 	return result
 }
 
-// JoinType represents different types of joins
+// JoinType represents different types of joins.
 type JoinType int
 
 const (
@@ -146,7 +146,7 @@ func (jt JoinType) String() string {
 	}
 }
 
-// JoinClause represents a JOIN clause
+// JoinClause represents a JOIN clause.
 type JoinClause struct {
 	Type      JoinType
 	TableName string
@@ -165,7 +165,7 @@ func (j *JoinClause) String() string {
 	return result
 }
 
-// WhereClause represents the WHERE clause
+// WhereClause represents the WHERE clause.
 type WhereClause struct {
 	Condition expr.Expr
 }
@@ -174,7 +174,7 @@ func (w *WhereClause) String() string {
 	return "WHERE " + w.Condition.String()
 }
 
-// GroupByClause represents the GROUP BY clause
+// GroupByClause represents the GROUP BY clause.
 type GroupByClause struct {
 	Columns []expr.Expr
 }
@@ -187,7 +187,7 @@ func (g *GroupByClause) String() string {
 	return "GROUP BY " + strings.Join(columnStrings, ", ")
 }
 
-// HavingClause represents the HAVING clause
+// HavingClause represents the HAVING clause.
 type HavingClause struct {
 	Condition expr.Expr
 }
@@ -196,7 +196,7 @@ func (h *HavingClause) String() string {
 	return "HAVING " + h.Condition.String()
 }
 
-// OrderByClause represents the ORDER BY clause
+// OrderByClause represents the ORDER BY clause.
 type OrderByClause struct {
 	OrderItems []OrderByItem
 }
@@ -209,7 +209,7 @@ func (o *OrderByClause) String() string {
 	return "ORDER BY " + strings.Join(itemStrings, ", ")
 }
 
-// OrderDirection represents sort direction
+// OrderDirection represents sort direction.
 type OrderDirection int
 
 const (
@@ -228,7 +228,7 @@ func (od OrderDirection) String() string {
 	}
 }
 
-// OrderByItem represents an item in the ORDER BY clause
+// OrderByItem represents an item in the ORDER BY clause.
 type OrderByItem struct {
 	Expression expr.Expr
 	Direction  OrderDirection
@@ -238,14 +238,14 @@ func (o *OrderByItem) String() string {
 	return o.Expression.String() + " " + o.Direction.String()
 }
 
-// Constants for LIMIT clause handling
+// Constants for LIMIT clause handling.
 const (
 	// OffsetOnlyLimit is a special value used in LimitClause.Count to indicate
-	// that this is an OFFSET-only query (no LIMIT constraint)
+	// that this is an OFFSET-only query (no LIMIT constraint).
 	OffsetOnlyLimit = -1
 )
 
-// LimitClause represents the LIMIT clause
+// LimitClause represents the LIMIT clause.
 type LimitClause struct {
 	Count  int64
 	Offset int64
@@ -259,13 +259,13 @@ func (l *LimitClause) String() string {
 	return result
 }
 
-// SQLFunction represents a SQL function call
-type SQLFunction struct {
+// Function represents a SQL function call.
+type Function struct {
 	Name string
 	Args []expr.Expr
 }
 
-func (f *SQLFunction) String() string {
+func (f *Function) String() string {
 	argStrings := make([]string, len(f.Args))
 	for i, arg := range f.Args {
 		argStrings[i] = arg.String()
@@ -273,13 +273,13 @@ func (f *SQLFunction) String() string {
 	return f.Name + "(" + strings.Join(argStrings, ", ") + ")"
 }
 
-// Sort directions
+// Sort directions.
 const (
 	AscOrder  = "ASC"
 	DescOrder = "DESC"
 )
 
-// Aggregation functions
+// Aggregation functions.
 const (
 	CountFunction = "COUNT"
 	SumFunction   = "SUM"
@@ -288,7 +288,7 @@ const (
 	MaxFunction   = "MAX"
 )
 
-// String functions
+// String functions.
 const (
 	UpperFunction  = "UPPER"
 	LowerFunction  = "LOWER"
@@ -297,7 +297,7 @@ const (
 	SubstrFunction = "SUBSTR"
 )
 
-// Math functions
+// Math functions.
 const (
 	AbsFunction   = "ABS"
 	RoundFunction = "ROUND"
@@ -305,7 +305,7 @@ const (
 	CeilFunction  = "CEIL"
 )
 
-// Date functions
+// Date functions.
 const (
 	NowFunction      = "NOW"
 	DateAddFunction  = "DATE_ADD"

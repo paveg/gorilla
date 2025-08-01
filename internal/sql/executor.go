@@ -1,6 +1,7 @@
 package sql
 
 import (
+	"errors"
 	"fmt"
 	"math"
 
@@ -8,7 +9,7 @@ import (
 	"github.com/paveg/gorilla/internal/dataframe"
 )
 
-// safeInt64ToInt safely converts int64 to int with bounds checking
+// safeInt64ToInt safely converts int64 to int with bounds checking.
 func safeInt64ToInt(value int64) (int, error) {
 	if value < 0 {
 		return 0, fmt.Errorf("negative value not allowed: %d", value)
@@ -19,13 +20,28 @@ func safeInt64ToInt(value int64) (int, error) {
 	return int(value), nil
 }
 
-// SQLExecutor executes SQL queries against registered DataFrames
-type SQLExecutor struct {
+// Executor executes SQL queries against registered DataFrames.
+type Executor struct {
 	translator *SQLTranslator
 	mem        memory.Allocator
 }
 
-// NewSQLExecutor creates a new SQL executor
+// SQLExecutor is deprecated, use Executor instead.
+type SQLExecutor struct { //nolint:revive // Maintained for backward compatibility
+	translator *SQLTranslator
+	mem        memory.Allocator
+}
+
+// NewExecutor creates a new SQL executor.
+func NewExecutor(mem memory.Allocator) *Executor {
+	return &Executor{
+		translator: NewSQLTranslator(mem),
+		mem:        mem,
+	}
+}
+
+// NewSQLExecutor creates a new SQL executor.
+// Deprecated: Use NewExecutor instead.
 func NewSQLExecutor(mem memory.Allocator) *SQLExecutor {
 	return &SQLExecutor{
 		translator: NewSQLTranslator(mem),
@@ -33,12 +49,12 @@ func NewSQLExecutor(mem memory.Allocator) *SQLExecutor {
 	}
 }
 
-// RegisterTable registers a DataFrame with a table name
+// RegisterTable registers a DataFrame with a table name.
 func (e *SQLExecutor) RegisterTable(name string, df *dataframe.DataFrame) {
 	e.translator.RegisterTable(name, df)
 }
 
-// Execute executes a SQL query and returns the result DataFrame
+// Execute executes a SQL query and returns the result DataFrame.
 func (e *SQLExecutor) Execute(query string) (*dataframe.DataFrame, error) {
 	// Parse SQL query
 	stmt, err := ParseSQL(query)
@@ -72,7 +88,7 @@ func (e *SQLExecutor) Execute(query string) (*dataframe.DataFrame, error) {
 	return result, nil
 }
 
-// executeWithLimit executes query with LIMIT/OFFSET handling
+// executeWithLimit executes query with LIMIT/OFFSET handling.
 func (e *SQLExecutor) executeWithLimit(
 	lazy *dataframe.LazyFrame,
 	limitClause *LimitClause,
@@ -86,7 +102,7 @@ func (e *SQLExecutor) executeWithLimit(
 
 	// Validate result is not nil
 	if fullResult == nil {
-		return nil, fmt.Errorf("query execution returned nil result")
+		return nil, errors.New("query execution returned nil result")
 	}
 
 	// Apply OFFSET and LIMIT
@@ -159,23 +175,23 @@ func (e *SQLExecutor) executeWithLimit(
 	return slicedResult, nil
 }
 
-// createEmptyDataFrame creates an empty DataFrame with the same schema
+// createEmptyDataFrame creates an empty DataFrame with the same schema.
 func (e *SQLExecutor) createEmptyDataFrame(template *dataframe.DataFrame) *dataframe.DataFrame {
 	// For simplicity, return an empty DataFrame using the existing Slice method
 	return template.Slice(0, 0)
 }
 
-// GetRegisteredTables returns the list of registered table names
+// GetRegisteredTables returns the list of registered table names.
 func (e *SQLExecutor) GetRegisteredTables() []string {
 	return e.translator.GetRegisteredTables()
 }
 
-// ClearTables removes all registered tables
+// ClearTables removes all registered tables.
 func (e *SQLExecutor) ClearTables() {
 	e.translator.ClearTables()
 }
 
-// Explain returns the execution plan for a SQL query
+// Explain returns the execution plan for a SQL query.
 func (e *SQLExecutor) Explain(query string) (string, error) {
 	// Parse SQL query
 	stmt, err := ParseSQL(query)
@@ -199,7 +215,7 @@ func (e *SQLExecutor) Explain(query string) (string, error) {
 	return lazy.String(), nil
 }
 
-// ValidateQuery validates a SQL query without executing it
+// ValidateQuery validates a SQL query without executing it.
 func (e *SQLExecutor) ValidateQuery(query string) error {
 	// Parse SQL query
 	stmt, err := ParseSQL(query)
@@ -208,8 +224,8 @@ func (e *SQLExecutor) ValidateQuery(query string) error {
 	}
 
 	// Validate SQL syntax
-	if err := e.translator.ValidateSQLSyntax(stmt); err != nil {
-		return fmt.Errorf("validation error: %w", err)
+	if validateErr := e.translator.ValidateSQLSyntax(stmt); validateErr != nil {
+		return fmt.Errorf("validation error: %w", validateErr)
 	}
 
 	// Check table references
@@ -225,7 +241,7 @@ func (e *SQLExecutor) ValidateQuery(query string) error {
 	return nil
 }
 
-// BatchExecute executes multiple SQL statements in sequence
+// BatchExecute executes multiple SQL statements in sequence.
 func (e *SQLExecutor) BatchExecute(queries []string) ([]*dataframe.DataFrame, error) {
 	var results []*dataframe.DataFrame
 
@@ -244,16 +260,16 @@ func (e *SQLExecutor) BatchExecute(queries []string) ([]*dataframe.DataFrame, er
 	return results, nil
 }
 
-// SQLQuery represents a prepared SQL query for reuse
-type SQLQuery struct {
-	statement  SQLStatement
+// Query represents a prepared SQL query for reuse.
+type Query struct {
+	statement  Statement
 	translator *SQLTranslator
 	mem        memory.Allocator
 	validated  bool
 }
 
-// PrepareQuery prepares a SQL query for multiple executions
-func (e *SQLExecutor) PrepareQuery(query string) (*SQLQuery, error) {
+// PrepareQuery prepares a SQL query for multiple executions.
+func (e *SQLExecutor) PrepareQuery(query string) (*Query, error) {
 	// Parse SQL query
 	stmt, err := ParseSQL(query)
 	if err != nil {
@@ -265,7 +281,7 @@ func (e *SQLExecutor) PrepareQuery(query string) (*SQLQuery, error) {
 		return nil, fmt.Errorf("validation error: %w", validationErr)
 	}
 
-	return &SQLQuery{
+	return &Query{
 		statement:  stmt,
 		translator: e.translator,
 		mem:        e.mem,
@@ -273,10 +289,10 @@ func (e *SQLExecutor) PrepareQuery(query string) (*SQLQuery, error) {
 	}, nil
 }
 
-// Execute executes a prepared SQL query
-func (q *SQLQuery) Execute() (*dataframe.DataFrame, error) {
+// Execute executes a prepared SQL query.
+func (q *Query) Execute() (*dataframe.DataFrame, error) {
 	if !q.validated {
-		return nil, fmt.Errorf("query not validated")
+		return nil, errors.New("query not validated")
 	}
 
 	// Translate to LazyFrame operations
@@ -300,8 +316,8 @@ func (q *SQLQuery) Execute() (*dataframe.DataFrame, error) {
 	return result, nil
 }
 
-// executeWithLimit executes prepared query with LIMIT/OFFSET handling
-func (q *SQLQuery) executeWithLimit(lazy *dataframe.LazyFrame, limitClause *LimitClause) (*dataframe.DataFrame, error) {
+// executeWithLimit executes prepared query with LIMIT/OFFSET handling.
+func (q *Query) executeWithLimit(lazy *dataframe.LazyFrame, limitClause *LimitClause) (*dataframe.DataFrame, error) {
 	// This is a simplified version - in a full implementation, we would
 	// integrate LIMIT/OFFSET into the LazyFrame operations for better performance
 
@@ -314,7 +330,7 @@ func (q *SQLQuery) executeWithLimit(lazy *dataframe.LazyFrame, limitClause *Limi
 
 	// Validate result is not nil
 	if fullResult == nil {
-		return nil, fmt.Errorf("query execution returned nil result")
+		return nil, errors.New("query execution returned nil result")
 	}
 
 	// Apply OFFSET and LIMIT
@@ -374,8 +390,8 @@ func (q *SQLQuery) executeWithLimit(lazy *dataframe.LazyFrame, limitClause *Limi
 	return slicedResult, nil
 }
 
-// String returns the SQL query string
-func (q *SQLQuery) String() string {
+// String returns the SQL query string.
+func (q *Query) String() string {
 	if q.statement != nil {
 		return q.statement.String()
 	}

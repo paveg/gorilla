@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
@@ -16,10 +17,18 @@ func main() {
 	fmt.Println("=== Gorilla I/O Operations Demo ===")
 	fmt.Println()
 
-	// Create memory allocator
 	mem := memory.NewGoAllocator()
 
-	// Demo 1: Reading CSV data
+	demonstrateBasicCSVOperations(mem)
+	demonstrateCustomCSVOptions(mem)
+	demonstrateDataFrameCreation(mem)
+	demonstrateRoundTripProcessing(mem)
+	demonstrateTypeInference(mem)
+
+	fmt.Println("=== Demo Complete ===")
+}
+
+func demonstrateBasicCSVOperations(mem memory.Allocator) {
 	fmt.Println("1. Reading CSV Data:")
 	csvData := `name,age,salary,active
 Alice,25,50000.5,true
@@ -30,7 +39,8 @@ Diana,28,55000.0,true`
 	reader := io.NewCSVReader(strings.NewReader(csvData), io.DefaultCSVOptions(), mem)
 	df, err := reader.Read()
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("Error reading CSV data: %v", err)
+		os.Exit(1)
 	}
 	defer df.Release()
 
@@ -38,21 +48,38 @@ Diana,28,55000.0,true`
 	fmt.Printf("Columns: %v\n", df.Columns())
 	fmt.Println()
 
-	// Demo 2: Writing CSV data
+	writeCSVData(df)
+}
+
+func writeCSVData(df *dataframe.DataFrame) {
 	fmt.Println("2. Writing CSV Data:")
 	var output bytes.Buffer
 	writer := io.NewCSVWriter(&output, io.DefaultCSVOptions())
-	err = writer.Write(df)
+	err := writer.Write(df)
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("Error writing CSV data: %v", err)
+		os.Exit(1)
 	}
 
 	fmt.Println("Generated CSV:")
 	fmt.Print(output.String())
 	fmt.Println()
+}
 
-	// Demo 3: Custom CSV options
+func demonstrateCustomCSVOptions(mem memory.Allocator) {
 	fmt.Println("3. Custom CSV Options (semicolon delimiter, no headers):")
+	csvData := `name,age,salary,active
+Alice,25,50000.5,true
+Bob,30,60000.0,false`
+
+	reader := io.NewCSVReader(strings.NewReader(csvData), io.DefaultCSVOptions(), mem)
+	df, err := reader.Read()
+	if err != nil {
+		log.Printf("Error reading CSV data with custom options: %v", err)
+		os.Exit(1)
+	}
+	defer df.Release()
+
 	options := io.DefaultCSVOptions()
 	options.Delimiter = ';'
 	options.Header = false
@@ -61,65 +88,80 @@ Diana,28,55000.0,true`
 	customWriter := io.NewCSVWriter(&customOutput, options)
 	err = customWriter.Write(df)
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("Error writing CSV data with custom options: %v", err)
+		return
 	}
 
 	fmt.Println("Generated CSV with custom options:")
 	fmt.Print(customOutput.String())
 	fmt.Println()
+}
 
-	// Demo 4: Creating DataFrame and exporting to CSV
+func demonstrateDataFrameCreation(mem memory.Allocator) {
 	fmt.Println("4. Creating DataFrame and Exporting to CSV:")
 
-	// Create sample data
-	names := []string{"Eve", "Frank", "Grace", "Henry"}
-	ages := []int64{32, 45, 38, 29}
-	salaries := []float64{75000.0, 85000.0, 68000.0, 52000.0}
-	active := []bool{true, false, true, true}
-
-	// Create series
-	namesSeries, err := series.NewSafe("employee_name", names, mem)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer namesSeries.Release()
-
-	agesSeries, err := series.NewSafe("employee_age", ages, mem)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer agesSeries.Release()
-
-	salariesSeries, err := series.NewSafe("employee_salary", salaries, mem)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer salariesSeries.Release()
-
-	activeSeries, err := series.NewSafe("is_active", active, mem)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer activeSeries.Release()
-
-	// Create DataFrame
-	employeeDF := dataframe.New(namesSeries, agesSeries, salariesSeries, activeSeries)
+	employeeDF := createEmployeeDataFrame(mem)
 	defer employeeDF.Release()
 
-	// Export to CSV
 	var employeeOutput bytes.Buffer
 	employeeWriter := io.NewCSVWriter(&employeeOutput, io.DefaultCSVOptions())
-	err = employeeWriter.Write(employeeDF)
+	err := employeeWriter.Write(employeeDF)
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("Error writing employee DataFrame to CSV: %v", err)
+		return
 	}
 
 	fmt.Printf("Employee DataFrame: %d rows, %d columns\n", employeeDF.Len(), employeeDF.Width())
 	fmt.Println("Exported CSV:")
 	fmt.Print(employeeOutput.String())
 	fmt.Println()
+}
 
-	// Demo 5: Round-trip (CSV → DataFrame → CSV)
+func createEmployeeDataFrame(mem memory.Allocator) *dataframe.DataFrame {
+	names := []string{"Eve", "Frank", "Grace", "Henry"}
+	ages := []int64{32, 45, 38, 29}
+	salaries := []float64{75000.0, 85000.0, 68000.0, 52000.0}
+	active := []bool{true, false, true, true}
+
+	namesSeries, err := series.NewSafe("employee_name", names, mem)
+	if err != nil {
+		log.Printf("Error in I/O operation: %v", err)
+		os.Exit(1)
+	}
+
+	agesSeries, err := series.NewSafe("employee_age", ages, mem)
+	if err != nil {
+		namesSeries.Release()
+		log.Printf("Error in I/O operation: %v", err)
+		os.Exit(1)
+	}
+
+	salariesSeries, err := series.NewSafe("employee_salary", salaries, mem)
+	if err != nil {
+		namesSeries.Release()
+		agesSeries.Release()
+		log.Printf("Error in I/O operation: %v", err)
+		os.Exit(1)
+	}
+
+	activeSeries, err := series.NewSafe("is_active", active, mem)
+	if err != nil {
+		namesSeries.Release()
+		agesSeries.Release()
+		salariesSeries.Release()
+		log.Printf("Error in I/O operation: %v", err)
+		os.Exit(1)
+	}
+
+	defer namesSeries.Release()
+	defer agesSeries.Release()
+	defer salariesSeries.Release()
+	defer activeSeries.Release()
+
+	return dataframe.New(namesSeries, agesSeries, salariesSeries, activeSeries)
+}
+
+func demonstrateRoundTripProcessing(mem memory.Allocator) {
 	fmt.Println("5. Round-trip Processing:")
 
 	originalCSV := `product,price,quantity
@@ -127,20 +169,20 @@ Laptop,999.99,10
 Mouse,25.50,100
 Keyboard,75.00,50`
 
-	// Read CSV
 	roundTripReader := io.NewCSVReader(strings.NewReader(originalCSV), io.DefaultCSVOptions(), mem)
 	productDF, err := roundTripReader.Read()
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("Error in I/O operation: %v", err)
+		return
 	}
 	defer productDF.Release()
 
-	// Write back to CSV
 	var roundTripOutput bytes.Buffer
 	roundTripWriter := io.NewCSVWriter(&roundTripOutput, io.DefaultCSVOptions())
 	err = roundTripWriter.Write(productDF)
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("Error in I/O operation: %v", err)
+		return
 	}
 
 	fmt.Println("Original CSV:")
@@ -149,8 +191,9 @@ Keyboard,75.00,50`
 	fmt.Println("Round-trip result:")
 	fmt.Print(roundTripOutput.String())
 	fmt.Println()
+}
 
-	// Demo 6: Type inference demonstration
+func demonstrateTypeInference(mem memory.Allocator) {
 	fmt.Println("6. Type Inference:")
 	mixedData := `column,value
 string_col,hello
@@ -161,7 +204,8 @@ bool_col,true`
 	mixedReader := io.NewCSVReader(strings.NewReader(mixedData), io.DefaultCSVOptions(), mem)
 	mixedDF, err := mixedReader.Read()
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("Error in I/O operation: %v", err)
+		os.Exit(1)
 	}
 	defer mixedDF.Release()
 
@@ -171,7 +215,5 @@ bool_col,true`
 			fmt.Printf("Column '%s': %s\n", colName, col.DataType().Name())
 		}
 	}
-
 	fmt.Println()
-	fmt.Println("=== Demo Complete ===")
 }

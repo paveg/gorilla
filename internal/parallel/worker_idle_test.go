@@ -1,17 +1,21 @@
-package parallel
+package parallel_test
 
 import (
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/paveg/gorilla/internal/parallel"
 	"github.com/stretchr/testify/assert"
 )
 
-// TestWorkerIdleBehavior tests that workers don't busy-wait when idle
+// TestWorkerIdleBehavior tests that workers don't busy-wait when idle.
 func TestWorkerIdleBehavior(t *testing.T) {
-	t.Run("workers use blocking receive instead of busy-waiting", func(t *testing.T) {
-		pool := NewAdvancedWorkerPool(AdvancedWorkerPoolConfig{
+	if testing.Short() {
+		t.Skip("Skipping worker idle behavior tests in short mode")
+	}
+	t.Run("workers use blocking receive instead of busy-waiting", func(_ *testing.T) {
+		pool := parallel.NewAdvancedWorkerPool(parallel.AdvancedWorkerPoolConfig{
 			MinWorkers:         2,
 			MaxWorkers:         2,
 			WorkQueueSize:      10,
@@ -26,7 +30,7 @@ func TestWorkerIdleBehavior(t *testing.T) {
 		// Submit a single work item after a delay to test idle behavior
 		go func() {
 			time.Sleep(100 * time.Millisecond)
-			ProcessGeneric(pool, []int{1}, func(x int) int {
+			parallel.ProcessGeneric(pool, []int{1}, func(x int) int {
 				return x * 2
 			})
 		}()
@@ -38,7 +42,7 @@ func TestWorkerIdleBehavior(t *testing.T) {
 	})
 
 	t.Run("workers respond quickly to work after idle period", func(t *testing.T) {
-		pool := NewAdvancedWorkerPool(AdvancedWorkerPoolConfig{
+		pool := parallel.NewAdvancedWorkerPool(parallel.AdvancedWorkerPoolConfig{
 			MinWorkers:         1,
 			MaxWorkers:         1,
 			WorkQueueSize:      10,
@@ -52,7 +56,7 @@ func TestWorkerIdleBehavior(t *testing.T) {
 
 		// Submit work and measure response time
 		start := time.Now()
-		results := ProcessGeneric(pool, []int{1, 2, 3}, func(x int) int {
+		results := parallel.ProcessGeneric(pool, []int{1, 2, 3}, func(x int) int {
 			return x * 2
 		})
 		duration := time.Since(start)
@@ -66,7 +70,7 @@ func TestWorkerIdleBehavior(t *testing.T) {
 	})
 
 	t.Run("workers handle context cancellation gracefully", func(t *testing.T) {
-		pool := NewAdvancedWorkerPool(AdvancedWorkerPoolConfig{
+		pool := parallel.NewAdvancedWorkerPool(parallel.AdvancedWorkerPoolConfig{
 			MinWorkers:         2,
 			MaxWorkers:         2,
 			WorkQueueSize:      10,
@@ -86,10 +90,13 @@ func TestWorkerIdleBehavior(t *testing.T) {
 	})
 }
 
-// TestWorkerIdleStrategy tests different idle strategies
+// TestWorkerIdleStrategy tests different idle strategies.
 func TestWorkerIdleStrategy(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping worker idle strategy tests in short mode")
+	}
 	t.Run("exponential backoff for work stealing attempts", func(t *testing.T) {
-		pool := NewAdvancedWorkerPool(AdvancedWorkerPoolConfig{
+		pool := parallel.NewAdvancedWorkerPool(parallel.AdvancedWorkerPoolConfig{
 			MinWorkers:         2,
 			MaxWorkers:         2,
 			WorkQueueSize:      2, // Small queue to force work stealing attempts
@@ -109,11 +116,11 @@ func TestWorkerIdleStrategy(t *testing.T) {
 		results := make([][]int, 3)
 
 		// Submit multiple batches concurrently to create contention
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			wg.Add(1)
 			go func(batch int) {
 				defer wg.Done()
-				results[batch] = ProcessGeneric(pool, items, func(x int) int {
+				results[batch] = parallel.ProcessGeneric(pool, items, func(x int) int {
 					// Quick work to ensure stealing attempts
 					return x * 2
 				})
@@ -123,7 +130,7 @@ func TestWorkerIdleStrategy(t *testing.T) {
 		wg.Wait()
 
 		// Verify all work was completed correctly
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			assert.Len(t, results[i], 10)
 		}
 
@@ -135,10 +142,13 @@ func TestWorkerIdleStrategy(t *testing.T) {
 	})
 }
 
-// TestWorkerResourceEfficiency tests that the new implementation is more resource efficient
+// TestWorkerResourceEfficiency tests that the new implementation is more resource efficient.
 func TestWorkerResourceEfficiency(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping worker resource efficiency tests in short mode")
+	}
 	t.Run("idle workers don't consume excessive CPU", func(t *testing.T) {
-		pool := NewAdvancedWorkerPool(AdvancedWorkerPoolConfig{
+		pool := parallel.NewAdvancedWorkerPool(parallel.AdvancedWorkerPoolConfig{
 			MinWorkers:         4,
 			MaxWorkers:         4,
 			WorkQueueSize:      10,
@@ -150,7 +160,7 @@ func TestWorkerResourceEfficiency(t *testing.T) {
 		time.Sleep(500 * time.Millisecond)
 
 		// Submit work to verify workers are still responsive
-		results := ProcessGeneric(pool, []int{1, 2, 3, 4, 5}, func(x int) int {
+		results := parallel.ProcessGeneric(pool, []int{1, 2, 3, 4, 5}, func(x int) int {
 			return x * 2
 		})
 
@@ -159,10 +169,10 @@ func TestWorkerResourceEfficiency(t *testing.T) {
 	})
 }
 
-// BenchmarkWorkerIdlePerformance benchmarks the idle behavior performance
+// BenchmarkWorkerIdlePerformance benchmarks the idle behavior performance.
 func BenchmarkWorkerIdlePerformance(b *testing.B) {
 	b.Run("idle_workers_efficiency", func(b *testing.B) {
-		pool := NewAdvancedWorkerPool(AdvancedWorkerPoolConfig{
+		pool := parallel.NewAdvancedWorkerPool(parallel.AdvancedWorkerPoolConfig{
 			MinWorkers:         4,
 			MaxWorkers:         4,
 			WorkQueueSize:      10,
@@ -175,10 +185,10 @@ func BenchmarkWorkerIdlePerformance(b *testing.B) {
 
 		b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			// Submit work periodically to test responsiveness
 			if i%100 == 0 {
-				ProcessGeneric(pool, []int{1, 2, 3}, func(x int) int {
+				parallel.ProcessGeneric(pool, []int{1, 2, 3}, func(x int) int {
 					return x * 2
 				})
 			}
@@ -189,10 +199,13 @@ func BenchmarkWorkerIdlePerformance(b *testing.B) {
 	})
 }
 
-// TestWorkerIdleBackoffBehavior tests the exponential backoff behavior
+// TestWorkerIdleBackoffBehavior tests the exponential backoff behavior.
 func TestWorkerIdleBackoffBehavior(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping worker idle backoff behavior tests in short mode")
+	}
 	t.Run("backoff increases when no work is available", func(t *testing.T) {
-		pool := NewAdvancedWorkerPool(AdvancedWorkerPoolConfig{
+		pool := parallel.NewAdvancedWorkerPool(parallel.AdvancedWorkerPoolConfig{
 			MinWorkers:         1,
 			MaxWorkers:         1,
 			WorkQueueSize:      10,
@@ -206,7 +219,7 @@ func TestWorkerIdleBackoffBehavior(t *testing.T) {
 		// Submit work after the worker has been idle
 		// This tests that the backoff mechanism works correctly
 		start := time.Now()
-		results := ProcessGeneric(pool, []int{1}, func(x int) int {
+		results := parallel.ProcessGeneric(pool, []int{1}, func(x int) int {
 			return x * 2
 		})
 		duration := time.Since(start)

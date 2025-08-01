@@ -4,25 +4,25 @@ import (
 	"github.com/paveg/gorilla/internal/expr"
 )
 
-// QueryOptimizer applies optimization rules to improve query performance
+// QueryOptimizer applies optimization rules to improve query performance.
 type QueryOptimizer struct {
 	rules []OptimizationRule
 }
 
-// OptimizationRule represents a single optimization transformation
+// OptimizationRule represents a single optimization transformation.
 type OptimizationRule interface {
 	Apply(plan *ExecutionPlan) *ExecutionPlan
 	Name() string
 }
 
-// ExecutionPlan represents a planned query execution with metadata
+// ExecutionPlan represents a planned query execution with metadata.
 type ExecutionPlan struct {
 	source     *DataFrame
 	operations []LazyOperation
 	metadata   *PlanMetadata
 }
 
-// PlanMetadata contains analysis information about the execution plan
+// PlanMetadata contains analysis information about the execution plan.
 type PlanMetadata struct {
 	columnDependencies map[string][]string // operation -> required columns
 	estimatedRowCount  int
@@ -30,7 +30,7 @@ type PlanMetadata struct {
 	operationCosts     []int // estimated cost per operation
 }
 
-// NewQueryOptimizer creates a new optimizer with default rules
+// NewQueryOptimizer creates a new optimizer with default rules.
 func NewQueryOptimizer() *QueryOptimizer {
 	return &QueryOptimizer{
 		rules: []OptimizationRule{
@@ -43,7 +43,7 @@ func NewQueryOptimizer() *QueryOptimizer {
 	}
 }
 
-// Optimize applies all optimization rules to the execution plan
+// Optimize applies all optimization rules to the execution plan.
 func (qo *QueryOptimizer) Optimize(plan *ExecutionPlan) *ExecutionPlan {
 	optimized := plan
 
@@ -55,7 +55,7 @@ func (qo *QueryOptimizer) Optimize(plan *ExecutionPlan) *ExecutionPlan {
 	return optimized
 }
 
-// CreateExecutionPlan analyzes operations and creates an execution plan
+// CreateExecutionPlan analyzes operations and creates an execution plan.
 func CreateExecutionPlan(source *DataFrame, operations []LazyOperation) *ExecutionPlan {
 	metadata := analyzePlan(operations, source)
 
@@ -66,7 +66,7 @@ func CreateExecutionPlan(source *DataFrame, operations []LazyOperation) *Executi
 	}
 }
 
-// analyzePlan analyzes the operations to extract metadata
+// analyzePlan analyzes the operations to extract metadata.
 func analyzePlan(operations []LazyOperation, source *DataFrame) *PlanMetadata {
 	columnDeps := make(map[string][]string)
 	costs := make([]int, len(operations))
@@ -104,7 +104,7 @@ func analyzePlan(operations []LazyOperation, source *DataFrame) *PlanMetadata {
 	}
 }
 
-// extractOperationDependencies returns the columns required by an operation
+// extractOperationDependencies returns the columns required by an operation.
 func extractOperationDependencies(op LazyOperation) []string {
 	switch o := op.(type) {
 	case *FilterOperation:
@@ -127,7 +127,7 @@ func extractOperationDependencies(op LazyOperation) []string {
 	}
 }
 
-// extractExpressionDependencies extracts column dependencies from expressions
+// extractExpressionDependencies extracts column dependencies from expressions.
 func extractExpressionDependencies(e expr.Expr) []string {
 	var deps []string
 	switch exprType := e.(type) {
@@ -147,14 +147,14 @@ func extractExpressionDependencies(e expr.Expr) []string {
 	return deduplicateStrings(deps)
 }
 
-// Operation cost constants
+// Operation cost constants.
 const (
 	selectCostDivisor     = 10 // Select operations are lighter
 	sortCostMultiplier    = 10 // Sort operations are more expensive
 	groupByCostMultiplier = 5  // GroupBy operations have moderate overhead
 )
 
-// estimateOperationCost provides a rough cost estimate for operations
+// estimateOperationCost provides a rough cost estimate for operations.
 func estimateOperationCost(op LazyOperation, rowCount int) int {
 	switch op.(type) {
 	case *FilterOperation:
@@ -172,7 +172,7 @@ func estimateOperationCost(op LazyOperation, rowCount int) int {
 	}
 }
 
-// PredicatePushdownRule moves filter operations earlier in the pipeline
+// PredicatePushdownRule moves filter operations earlier in the pipeline.
 type PredicatePushdownRule struct{}
 
 func (r *PredicatePushdownRule) Name() string {
@@ -239,7 +239,7 @@ func (r *PredicatePushdownRule) Apply(plan *ExecutionPlan) *ExecutionPlan {
 	}
 }
 
-// canPushThroughSelect checks if a filter can be pushed before a select
+// canPushThroughSelect checks if a filter can be pushed before a select.
 func (r *PredicatePushdownRule) canPushThroughSelect(filter *FilterOperation, sel *SelectOperation) bool {
 	filterDeps := extractExpressionDependencies(filter.predicate)
 
@@ -259,7 +259,7 @@ func (r *PredicatePushdownRule) canPushThroughSelect(filter *FilterOperation, se
 	return true
 }
 
-// canPushThroughOperation checks if a filter can be pushed before an operation
+// canPushThroughOperation checks if a filter can be pushed before an operation.
 func (r *PredicatePushdownRule) canPushThroughOperation(filter *FilterOperation, op LazyOperation) bool {
 	filterDeps := extractExpressionDependencies(filter.predicate)
 
@@ -284,7 +284,7 @@ func (r *PredicatePushdownRule) canPushThroughOperation(filter *FilterOperation,
 	}
 }
 
-// FilterFusionRule combines multiple filter operations into a single operation
+// FilterFusionRule combines multiple filter operations into a single operation.
 type FilterFusionRule struct{}
 
 func (r *FilterFusionRule) Name() string {
@@ -332,7 +332,7 @@ func (r *FilterFusionRule) Apply(plan *ExecutionPlan) *ExecutionPlan {
 	}
 }
 
-// fuseFilters combines multiple filters using AND logic
+// fuseFilters combines multiple filters using AND logic.
 func (r *FilterFusionRule) fuseFilters(filters []*FilterOperation) *FilterOperation {
 	if len(filters) == 0 {
 		return nil
@@ -347,7 +347,7 @@ func (r *FilterFusionRule) fuseFilters(filters []*FilterOperation) *FilterOperat
 	return filters[0]
 }
 
-// ProjectionPushdownRule pushes column selections earlier to reduce data processing
+// ProjectionPushdownRule pushes column selections earlier to reduce data processing.
 type ProjectionPushdownRule struct{}
 
 func (r *ProjectionPushdownRule) Name() string {
@@ -390,52 +390,98 @@ func (r *ProjectionPushdownRule) Apply(plan *ExecutionPlan) *ExecutionPlan {
 	return plan
 }
 
-// analyzeRequiredColumns determines which columns are actually needed
+// analyzeRequiredColumns determines which columns are actually needed.
 func (r *ProjectionPushdownRule) analyzeRequiredColumns(operations []LazyOperation) []string {
 	required := make(map[string]bool)
+	hasExplicitSelect := r.processOperationsBackwards(operations, required)
+
+	if !hasExplicitSelect {
+		return nil // Signal that no projection pushdown should be applied.
+	}
+
+	return r.convertRequiredMapToSlice(required)
+}
+
+// processOperationsBackwards analyzes operations from end to start to find required columns.
+func (r *ProjectionPushdownRule) processOperationsBackwards(operations []LazyOperation, required map[string]bool) bool {
 	hasExplicitSelect := false
 
-	// Work backwards to find required columns
 	for i := len(operations) - 1; i >= 0; i-- {
 		op := operations[i]
-		deps := extractOperationDependencies(op)
-		for _, dep := range deps {
+		r.addOperationDependencies(op, required)
+
+		if r.handleSelectOperation(op, required) {
+			hasExplicitSelect = true
+		}
+
+		if r.handleGroupByOperation(op, required) {
+			hasExplicitSelect = true
+		}
+	}
+
+	return hasExplicitSelect
+}
+
+// addOperationDependencies adds column dependencies from an operation to the required set.
+func (r *ProjectionPushdownRule) addOperationDependencies(op LazyOperation, required map[string]bool) {
+	deps := extractOperationDependencies(op)
+	for _, dep := range deps {
+		required[dep] = true
+	}
+}
+
+// handleSelectOperation processes a select operation and updates required columns.
+func (r *ProjectionPushdownRule) handleSelectOperation(op LazyOperation, required map[string]bool) bool {
+	sel, ok := op.(*SelectOperation)
+	if !ok {
+		return false
+	}
+
+	// Reset required columns to only selected ones.
+	for key := range required {
+		delete(required, key)
+	}
+	for _, col := range sel.columns {
+		required[col] = true
+	}
+	return true
+}
+
+// handleGroupByOperation processes a group by operation and updates required columns.
+func (r *ProjectionPushdownRule) handleGroupByOperation(op LazyOperation, required map[string]bool) bool {
+	groupBy, ok := op.(*GroupByOperation)
+	if !ok {
+		return false
+	}
+
+	// Reset required columns to group by columns and aggregated columns.
+	for key := range required {
+		delete(required, key)
+	}
+	r.addGroupByColumns(groupBy, required)
+	r.addAggregationDependencies(groupBy, required)
+	return true
+}
+
+// addGroupByColumns adds group by columns to the required set.
+func (r *ProjectionPushdownRule) addGroupByColumns(groupBy *GroupByOperation, required map[string]bool) {
+	for _, col := range groupBy.groupByCols {
+		required[col] = true
+	}
+}
+
+// addAggregationDependencies adds aggregation column dependencies to the required set.
+func (r *ProjectionPushdownRule) addAggregationDependencies(groupBy *GroupByOperation, required map[string]bool) {
+	for _, agg := range groupBy.aggregations {
+		aggDeps := extractExpressionDependencies(agg.Column())
+		for _, dep := range aggDeps {
 			required[dep] = true
 		}
-
-		// If this is a select operation, it defines the final required columns
-		if sel, ok := op.(*SelectOperation); ok {
-			hasExplicitSelect = true
-			// Only need the selected columns
-			required = make(map[string]bool)
-			for _, col := range sel.columns {
-				required[col] = true
-			}
-		}
-
-		// GroupBy operations also define final columns (group columns + aggregated columns)
-		if groupBy, ok := op.(*GroupByOperation); ok {
-			hasExplicitSelect = true
-			// Only need the group by columns and aggregated columns
-			required = make(map[string]bool)
-			for _, col := range groupBy.groupByCols {
-				required[col] = true
-			}
-			for _, agg := range groupBy.aggregations {
-				aggDeps := extractExpressionDependencies(agg.Column())
-				for _, dep := range aggDeps {
-					required[dep] = true
-				}
-			}
-		}
 	}
+}
 
-	// If there's no explicit select operation, don't apply projection pushdown
-	// as all columns should be preserved in the final result
-	if !hasExplicitSelect {
-		return nil // Signal that no projection pushdown should be applied
-	}
-
+// convertRequiredMapToSlice converts the required columns map to a slice.
+func (r *ProjectionPushdownRule) convertRequiredMapToSlice(required map[string]bool) []string {
 	result := make([]string, 0, len(required))
 	for col := range required {
 		result = append(result, col)
@@ -443,7 +489,7 @@ func (r *ProjectionPushdownRule) analyzeRequiredColumns(operations []LazyOperati
 	return result
 }
 
-// findOptimalInsertionPoint finds where to insert early column pruning
+// findOptimalInsertionPoint finds where to insert early column pruning.
 func (r *ProjectionPushdownRule) findOptimalInsertionPoint(operations []LazyOperation, requiredColumns []string) int {
 	requiredSet := make(map[string]bool)
 	for _, col := range requiredColumns {
@@ -474,7 +520,7 @@ func (r *ProjectionPushdownRule) findOptimalInsertionPoint(operations []LazyOper
 	return 0 // Insert at the beginning if no conflicts
 }
 
-// deduplicateStrings removes duplicates from a string slice
+// deduplicateStrings removes duplicates from a string slice.
 func deduplicateStrings(slice []string) []string {
 	seen := make(map[string]bool)
 	result := []string{}
@@ -487,7 +533,7 @@ func deduplicateStrings(slice []string) []string {
 	return result
 }
 
-// OperationFusionRule combines compatible operations for better performance
+// OperationFusionRule combines compatible operations for better performance.
 type OperationFusionRule struct{}
 
 func (r *OperationFusionRule) Name() string {
@@ -533,7 +579,7 @@ func (r *OperationFusionRule) Apply(plan *ExecutionPlan) *ExecutionPlan {
 	}
 }
 
-// ConstantFoldingRule evaluates constant expressions at planning time
+// ConstantFoldingRule evaluates constant expressions at planning time.
 type ConstantFoldingRule struct{}
 
 func (r *ConstantFoldingRule) Name() string {
@@ -559,7 +605,7 @@ func (r *ConstantFoldingRule) Apply(plan *ExecutionPlan) *ExecutionPlan {
 	}
 }
 
-// optimizeOperation applies constant folding to a single operation
+// optimizeOperation applies constant folding to a single operation.
 func (r *ConstantFoldingRule) optimizeOperation(op LazyOperation) LazyOperation {
 	switch o := op.(type) {
 	case *FilterOperation:
@@ -573,7 +619,7 @@ func (r *ConstantFoldingRule) optimizeOperation(op LazyOperation) LazyOperation 
 	}
 }
 
-// BinaryExprInterface defines the interface for binary expressions
+// BinaryExprInterface defines the interface for binary expressions.
 type BinaryExprInterface interface {
 	expr.Expr
 	Left() expr.Expr
@@ -581,21 +627,21 @@ type BinaryExprInterface interface {
 	Right() expr.Expr
 }
 
-// UnaryExprInterface defines the interface for unary expressions
+// UnaryExprInterface defines the interface for unary expressions.
 type UnaryExprInterface interface {
 	expr.Expr
 	Op() expr.UnaryOp
 	Operand() expr.Expr
 }
 
-// FunctionExprInterface defines the interface for function expressions
+// FunctionExprInterface defines the interface for function expressions.
 type FunctionExprInterface interface {
 	expr.Expr
 	Name() string
 	Args() []expr.Expr
 }
 
-// foldBinaryExpr handles constant folding for binary expressions
+// foldBinaryExpr handles constant folding for binary expressions.
 func (r *ConstantFoldingRule) foldBinaryExpr(exprType BinaryExprInterface) expr.Expr {
 	// Recursively fold constants in left and right operands
 	leftFolded := r.foldConstants(exprType.Left())
@@ -615,7 +661,7 @@ func (r *ConstantFoldingRule) foldBinaryExpr(exprType BinaryExprInterface) expr.
 	return exprType
 }
 
-// tryEvaluateLiterals attempts to evaluate two literal expressions
+// tryEvaluateLiterals attempts to evaluate two literal expressions.
 func (r *ConstantFoldingRule) tryEvaluateLiterals(left, right expr.Expr, op expr.BinaryOp) expr.Expr {
 	leftLit, leftIsLit := left.(*expr.LiteralExpr)
 	rightLit, rightIsLit := right.(*expr.LiteralExpr)
@@ -626,7 +672,7 @@ func (r *ConstantFoldingRule) tryEvaluateLiterals(left, right expr.Expr, op expr
 	return nil
 }
 
-// tryCreateColumnExpression attempts to create a new column expression with folded operands
+// tryCreateColumnExpression attempts to create a new column expression with folded operands.
 func (r *ConstantFoldingRule) tryCreateColumnExpression(left, right expr.Expr, op expr.BinaryOp) expr.Expr {
 	leftCol, ok := left.(*expr.ColumnExpr)
 	if !ok {
@@ -636,7 +682,7 @@ func (r *ConstantFoldingRule) tryCreateColumnExpression(left, right expr.Expr, o
 	return r.createColumnBinaryExpr(leftCol, right, op)
 }
 
-// createColumnBinaryExpr creates a binary expression with a column as the left operand
+// createColumnBinaryExpr creates a binary expression with a column as the left operand.
 func (r *ConstantFoldingRule) createColumnBinaryExpr(
 	leftCol *expr.ColumnExpr, right expr.Expr, op expr.BinaryOp) expr.Expr {
 	switch op {
@@ -668,7 +714,7 @@ func (r *ConstantFoldingRule) createColumnBinaryExpr(
 	}
 }
 
-// foldConstants recursively evaluates constant subexpressions
+// foldConstants recursively evaluates constant subexpressions.
 func (r *ConstantFoldingRule) foldConstants(e expr.Expr) expr.Expr {
 	switch exprType := e.(type) {
 	case *expr.BinaryExpr:
@@ -689,7 +735,7 @@ func (r *ConstantFoldingRule) foldConstants(e expr.Expr) expr.Expr {
 	}
 }
 
-// foldUnaryExpr handles constant folding for unary expressions
+// foldUnaryExpr handles constant folding for unary expressions.
 func (r *ConstantFoldingRule) foldUnaryExpr(exprType UnaryExprInterface) expr.Expr {
 	// Recursively fold constants in operand
 	operandFolded := r.foldConstants(exprType.Operand())
@@ -716,7 +762,7 @@ func (r *ConstantFoldingRule) foldUnaryExpr(exprType UnaryExprInterface) expr.Ex
 	return exprType
 }
 
-// foldFunctionExpr handles constant folding for function expressions
+// foldFunctionExpr handles constant folding for function expressions.
 func (r *ConstantFoldingRule) foldFunctionExpr(exprType FunctionExprInterface) expr.Expr {
 	// Recursively fold constants in function arguments
 	argsFolded := make([]expr.Expr, len(exprType.Args()))
@@ -758,7 +804,7 @@ func (r *ConstantFoldingRule) foldFunctionExpr(exprType FunctionExprInterface) e
 	return exprType
 }
 
-// evaluateBinaryLiterals performs constant evaluation for binary operations on literals
+// evaluateBinaryLiterals performs constant evaluation for binary operations on literals.
 func (r *ConstantFoldingRule) evaluateBinaryLiterals(
 	left *expr.LiteralExpr, op expr.BinaryOp, right *expr.LiteralExpr) *expr.LiteralExpr {
 	leftVal := left.Value()
@@ -777,22 +823,23 @@ func (r *ConstantFoldingRule) evaluateBinaryLiterals(
 	return nil // Cannot evaluate this operation
 }
 
-// isArithmeticOp checks if the operation is arithmetic
+// isArithmeticOp checks if the operation is arithmetic.
 func (r *ConstantFoldingRule) isArithmeticOp(op expr.BinaryOp) bool {
 	return op == expr.OpAdd || op == expr.OpSub || op == expr.OpMul || op == expr.OpDiv
 }
 
-// isComparisonOp checks if the operation is comparison
+// isComparisonOp checks if the operation is comparison.
 func (r *ConstantFoldingRule) isComparisonOp(op expr.BinaryOp) bool {
-	return op == expr.OpEq || op == expr.OpNe || op == expr.OpLt || op == expr.OpLe || op == expr.OpGt || op == expr.OpGe
+	return op == expr.OpEq || op == expr.OpNe || op == expr.OpLt || op == expr.OpLe || op == expr.OpGt ||
+		op == expr.OpGe
 }
 
-// isLogicalOp checks if the operation is logical
+// isLogicalOp checks if the operation is logical.
 func (r *ConstantFoldingRule) isLogicalOp(op expr.BinaryOp) bool {
 	return op == expr.OpAnd || op == expr.OpOr
 }
 
-// evaluateArithmeticOp handles arithmetic operations
+// evaluateArithmeticOp handles arithmetic operations.
 func (r *ConstantFoldingRule) evaluateArithmeticOp(leftVal, rightVal interface{}, op expr.BinaryOp) *expr.LiteralExpr {
 	switch op {
 	case expr.OpAdd:
@@ -824,7 +871,7 @@ func (r *ConstantFoldingRule) evaluateArithmeticOp(leftVal, rightVal interface{}
 	}
 }
 
-// evaluateComparisonOp handles comparison operations
+// evaluateComparisonOp handles comparison operations.
 func (r *ConstantFoldingRule) evaluateComparisonOp(leftVal, rightVal interface{}, op expr.BinaryOp) *expr.LiteralExpr {
 	cmpResult := r.compareValues(leftVal, rightVal)
 	switch op {
@@ -848,7 +895,7 @@ func (r *ConstantFoldingRule) evaluateComparisonOp(leftVal, rightVal interface{}
 	}
 }
 
-// evaluateLogicalOp handles logical operations
+// evaluateLogicalOp handles logical operations.
 func (r *ConstantFoldingRule) evaluateLogicalOp(leftVal, rightVal interface{}, op expr.BinaryOp) *expr.LiteralExpr {
 	leftBool, leftOk := leftVal.(bool)
 	rightBool, rightOk := rightVal.(bool)
@@ -862,7 +909,16 @@ func (r *ConstantFoldingRule) evaluateLogicalOp(leftVal, rightVal interface{}, o
 		return expr.Lit(leftBool && rightBool)
 	case expr.OpOr:
 		return expr.Lit(leftBool || rightBool)
-	case expr.OpAdd, expr.OpSub, expr.OpMul, expr.OpDiv, expr.OpEq, expr.OpNe, expr.OpLt, expr.OpLe, expr.OpGt, expr.OpGe:
+	case expr.OpAdd,
+		expr.OpSub,
+		expr.OpMul,
+		expr.OpDiv,
+		expr.OpEq,
+		expr.OpNe,
+		expr.OpLt,
+		expr.OpLe,
+		expr.OpGt,
+		expr.OpGe:
 		// These operations are handled by other functions
 		return nil
 	default:
@@ -870,7 +926,7 @@ func (r *ConstantFoldingRule) evaluateLogicalOp(leftVal, rightVal interface{}, o
 	}
 }
 
-// evaluateArithmetic handles arithmetic operations with type coercion
+// evaluateArithmetic handles arithmetic operations with type coercion.
 func (r *ConstantFoldingRule) evaluateArithmetic(leftVal, rightVal interface{},
 	intOp func(int64, int64) int64, floatOp func(float64, float64) float64) *expr.LiteralExpr {
 	// If either operand is float, use float operation
@@ -896,7 +952,7 @@ func (r *ConstantFoldingRule) evaluateArithmetic(leftVal, rightVal interface{},
 	return nil // Cannot perform arithmetic
 }
 
-// evaluateUnaryLiteral performs constant evaluation for unary operations on literals
+// evaluateUnaryLiteral performs constant evaluation for unary operations on literals.
 func (r *ConstantFoldingRule) evaluateUnaryLiteral(op expr.UnaryOp, operand *expr.LiteralExpr) *expr.LiteralExpr {
 	val := operand.Value()
 
@@ -919,7 +975,7 @@ func (r *ConstantFoldingRule) evaluateUnaryLiteral(op expr.UnaryOp, operand *exp
 	return nil // Cannot evaluate this operation
 }
 
-// evaluateFunctionLiterals performs constant evaluation for functions with literal arguments
+// evaluateFunctionLiterals performs constant evaluation for functions with literal arguments.
 func (r *ConstantFoldingRule) evaluateFunctionLiterals(funcName string, args []expr.Expr) *expr.LiteralExpr {
 	// Extract literal values
 	values := make([]interface{}, len(args))
@@ -935,17 +991,10 @@ func (r *ConstantFoldingRule) evaluateFunctionLiterals(funcName string, args []e
 	switch funcName {
 	case "abs":
 		if len(values) == 1 {
-			if intVal, ok := r.convertToInt64(values[0]); ok {
-				if intVal < 0 {
-					return expr.Lit(-intVal)
+			if result := r.evaluateAbsFunction(values[0]); result != nil {
+				if litExpr, ok := result.(*expr.LiteralExpr); ok {
+					return litExpr
 				}
-				return expr.Lit(intVal)
-			}
-			if floatVal, ok := r.convertToFloat64(values[0]); ok {
-				if floatVal < 0 {
-					return expr.Lit(-floatVal)
-				}
-				return expr.Lit(floatVal)
 			}
 		}
 	case "round":
@@ -961,7 +1010,7 @@ func (r *ConstantFoldingRule) evaluateFunctionLiterals(funcName string, args []e
 	return nil // Cannot evaluate this function
 }
 
-// compareValues compares two values and returns -1, 0, or 1
+// compareValues compares two values and returns -1, 0, or 1.
 func (r *ConstantFoldingRule) compareValues(left, right interface{}) int {
 	// Try different types of comparison
 	if result, ok := r.compareNumeric(left, right); ok {
@@ -976,7 +1025,7 @@ func (r *ConstantFoldingRule) compareValues(left, right interface{}) int {
 	return 0 // Cannot compare, consider equal
 }
 
-// compareNumeric compares numeric values
+// compareNumeric compares numeric values.
 func (r *ConstantFoldingRule) compareNumeric(left, right interface{}) (int, bool) {
 	// Try integer comparison first
 	if leftInt, leftOk := r.convertToInt64(left); leftOk {
@@ -995,7 +1044,7 @@ func (r *ConstantFoldingRule) compareNumeric(left, right interface{}) (int, bool
 	return 0, false
 }
 
-// compareString compares string values
+// compareString compares string values.
 func (r *ConstantFoldingRule) compareString(left, right interface{}) (int, bool) {
 	leftStr, leftOk := left.(string)
 	rightStr, rightOk := right.(string)
@@ -1012,7 +1061,7 @@ func (r *ConstantFoldingRule) compareString(left, right interface{}) (int, bool)
 	return 0, true
 }
 
-// compareBool compares boolean values
+// compareBool compares boolean values.
 func (r *ConstantFoldingRule) compareBool(left, right interface{}) (int, bool) {
 	leftBool, leftOk := left.(bool)
 	rightBool, rightOk := right.(bool)
@@ -1029,7 +1078,7 @@ func (r *ConstantFoldingRule) compareBool(left, right interface{}) (int, bool) {
 	return 0, true
 }
 
-// compareInt64 compares two int64 values
+// compareInt64 compares two int64 values.
 func (r *ConstantFoldingRule) compareInt64(left, right int64) int {
 	if left < right {
 		return -1
@@ -1039,7 +1088,7 @@ func (r *ConstantFoldingRule) compareInt64(left, right int64) int {
 	return 0
 }
 
-// compareFloat64 compares two float64 values
+// compareFloat64 compares two float64 values.
 func (r *ConstantFoldingRule) compareFloat64(left, right float64) int {
 	if left < right {
 		return -1
@@ -1049,7 +1098,7 @@ func (r *ConstantFoldingRule) compareFloat64(left, right float64) int {
 	return 0
 }
 
-// convertToInt64 attempts to convert a value to int64
+// convertToInt64 attempts to convert a value to int64.
 func (r *ConstantFoldingRule) convertToInt64(val interface{}) (int64, bool) {
 	switch v := val.(type) {
 	case int64:
@@ -1072,7 +1121,7 @@ func (r *ConstantFoldingRule) convertToInt64(val interface{}) (int64, bool) {
 	return 0, false
 }
 
-// convertToFloat64 attempts to convert a value to float64
+// convertToFloat64 attempts to convert a value to float64.
 func (r *ConstantFoldingRule) convertToFloat64(val interface{}) (float64, bool) {
 	switch v := val.(type) {
 	case float64:
@@ -1087,4 +1136,23 @@ func (r *ConstantFoldingRule) convertToFloat64(val interface{}) (float64, bool) 
 		return float64(v), true
 	}
 	return 0, false
+}
+
+// evaluateAbsFunction evaluates absolute value function with type checking.
+func (r *ConstantFoldingRule) evaluateAbsFunction(value interface{}) expr.Expr {
+	if intVal, ok := r.convertToInt64(value); ok {
+		if intVal < 0 {
+			return expr.Lit(-intVal)
+		}
+		return expr.Lit(intVal)
+	}
+
+	if floatVal, ok := r.convertToFloat64(value); ok {
+		if floatVal < 0 {
+			return expr.Lit(-floatVal)
+		}
+		return expr.Lit(floatVal)
+	}
+
+	return nil
 }

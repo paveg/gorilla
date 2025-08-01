@@ -49,6 +49,10 @@ release:
 
 test:
 	@echo "Running tests..."
+	@go test -short ./...
+
+test-all:
+	@echo "Running all tests (including long-running tests)..."
 	@go test ./...
 
 lint:

@@ -1,3 +1,4 @@
+//nolint:testpackage // requires internal access to unexported types and functions
 package dataframe
 
 import (
@@ -11,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func createIntegrationTestDataFrame(t *testing.T) *DataFrame {
+func createIntegrationTestDataFrame(_ *testing.T) *DataFrame {
 	mem := memory.NewGoAllocator()
 
 	names := series.New("name", []string{"Alice", "Bob", "Charlie", "Diana", "Eve"}, mem)
@@ -57,7 +58,7 @@ func TestIntegrationFilterOperation(t *testing.T) {
 	expectedNames := []string{"Bob", "Charlie", "Eve"}
 	expectedAges := []int64{30, 35, 32}
 
-	for i := 0; i < result.Len(); i++ {
+	for i := range result.Len() {
 		assert.Equal(t, expectedNames[i], nameStringArray.Value(i))
 		assert.Equal(t, expectedAges[i], ageInt64Array.Value(i))
 	}
@@ -88,7 +89,7 @@ func TestIntegrationWithColumnOperation(t *testing.T) {
 	bonusFloat64Array := bonusArray.(*array.Float64)
 	expectedBonuses := []float64{5000.0, 6000.0, 7000.0, 5500.0, 6500.0}
 
-	for i := 0; i < result.Len(); i++ {
+	for i := range result.Len() {
 		assert.InDelta(t, expectedBonuses[i], bonusFloat64Array.Value(i), 0.01)
 	}
 }
@@ -127,7 +128,7 @@ func TestIntegrationComplexChaining(t *testing.T) {
 	nameStringArray := nameArray.(*array.String)
 
 	expectedNames := []string{"Bob", "Eve"}
-	for i := 0; i < result.Len(); i++ {
+	for i := range result.Len() {
 		assert.Equal(t, expectedNames[i], nameStringArray.Value(i))
 	}
 }
@@ -233,7 +234,7 @@ func TestIntegrationArithmeticOperations(t *testing.T) {
 	// etc.
 	expectedTotalComp := []float64{75000, 90000, 105000, 83000, 97000}
 
-	for i := 0; i < result.Len(); i++ {
+	for i := range result.Len() {
 		assert.InDelta(t, expectedTotalComp[i], totalCompFloat64Array.Value(i), 0.01)
 	}
 }
@@ -263,7 +264,7 @@ func TestIntegrationSelectAfterWithColumn(t *testing.T) {
 	doubleAgeInt64Array := doubleAgeArray.(*array.Int64)
 
 	expectedDoubleAges := []int64{50, 60, 70, 56, 64}
-	for i := 0; i < result.Len(); i++ {
+	for i := range result.Len() {
 		assert.Equal(t, expectedDoubleAges[i], doubleAgeInt64Array.Value(i))
 	}
 }

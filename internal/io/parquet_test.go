@@ -1,10 +1,11 @@
-package io
+package io_test
 
 import (
 	"bytes"
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/paveg/gorilla/internal/io"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,7 +18,7 @@ func TestParquetReader_Read(t *testing.T) {
 		buf := new(bytes.Buffer)
 
 		// Write test data using Parquet writer (will be implemented)
-		writer := NewParquetWriter(buf, DefaultParquetOptions())
+		writer := io.NewParquetWriter(buf, io.DefaultParquetOptions())
 
 		// Create test DataFrame
 		df := createParquetTestDataFrame(t, mem)
@@ -27,31 +28,31 @@ func TestParquetReader_Read(t *testing.T) {
 		require.NoError(t, err)
 
 		// Read the Parquet data
-		reader := NewParquetReader(bytes.NewReader(buf.Bytes()), DefaultParquetOptions(), mem)
+		reader := io.NewParquetReader(bytes.NewReader(buf.Bytes()), io.DefaultParquetOptions(), mem)
 		result, err := reader.Read()
 		require.NoError(t, err)
 		defer result.Release()
 
 		// Verify the data
 		assert.Equal(t, df.Len(), result.Len())
-		assert.Equal(t, len(df.Columns()), len(result.Columns()))
+		assert.Len(t, result.Columns(), len(df.Columns()))
 		assert.Equal(t, df.Columns(), result.Columns())
 	})
 
 	t.Run("empty file", func(t *testing.T) {
-		reader := NewParquetReader(bytes.NewReader([]byte{}), DefaultParquetOptions(), mem)
+		reader := io.NewParquetReader(bytes.NewReader([]byte{}), io.DefaultParquetOptions(), mem)
 		_, err := reader.Read()
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("with custom options", func(t *testing.T) {
-		options := ParquetOptions{
+		options := io.ParquetOptions{
 			Compression: "gzip",
 			BatchSize:   500,
 		}
 
 		buf := new(bytes.Buffer)
-		writer := NewParquetWriter(buf, options)
+		writer := io.NewParquetWriter(buf, options)
 
 		df := createParquetTestDataFrame(t, mem)
 		defer df.Release()
@@ -59,7 +60,7 @@ func TestParquetReader_Read(t *testing.T) {
 		err := writer.Write(df)
 		require.NoError(t, err)
 
-		reader := NewParquetReader(bytes.NewReader(buf.Bytes()), options, mem)
+		reader := io.NewParquetReader(bytes.NewReader(buf.Bytes()), options, mem)
 		result, err := reader.Read()
 		require.NoError(t, err)
 		defer result.Release()
@@ -70,7 +71,7 @@ func TestParquetReader_Read(t *testing.T) {
 	t.Run("multiple data types", func(t *testing.T) {
 		// Test with various data types
 		buf := new(bytes.Buffer)
-		writer := NewParquetWriter(buf, DefaultParquetOptions())
+		writer := io.NewParquetWriter(buf, io.DefaultParquetOptions())
 
 		df := createMixedTypeDataFrame(t, mem)
 		defer df.Release()
@@ -78,7 +79,7 @@ func TestParquetReader_Read(t *testing.T) {
 		err := writer.Write(df)
 		require.NoError(t, err)
 
-		reader := NewParquetReader(bytes.NewReader(buf.Bytes()), DefaultParquetOptions(), mem)
+		reader := io.NewParquetReader(bytes.NewReader(buf.Bytes()), io.DefaultParquetOptions(), mem)
 		result, err := reader.Read()
 		require.NoError(t, err)
 		defer result.Release()
@@ -98,25 +99,25 @@ func TestParquetWriter_Write(t *testing.T) {
 
 	t.Run("basic write", func(t *testing.T) {
 		buf := new(bytes.Buffer)
-		writer := NewParquetWriter(buf, DefaultParquetOptions())
+		writer := io.NewParquetWriter(buf, io.DefaultParquetOptions())
 
 		df := createParquetTestDataFrame(t, mem)
 		defer df.Release()
 
 		err := writer.Write(df)
-		assert.NoError(t, err)
-		assert.Greater(t, buf.Len(), 0, "buffer should contain data")
+		require.NoError(t, err)
+		assert.Positive(t, buf.Len(), "buffer should contain data")
 	})
 
 	t.Run("empty DataFrame", func(t *testing.T) {
 		buf := new(bytes.Buffer)
-		writer := NewParquetWriter(buf, DefaultParquetOptions())
+		writer := io.NewParquetWriter(buf, io.DefaultParquetOptions())
 
 		df := createEmptyDataFrame(t, mem)
 		defer df.Release()
 
 		err := writer.Write(df)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("compression options", func(t *testing.T) {
@@ -125,32 +126,32 @@ func TestParquetWriter_Write(t *testing.T) {
 		for _, comp := range compressions {
 			t.Run(comp, func(t *testing.T) {
 				buf := new(bytes.Buffer)
-				options := ParquetOptions{
+				options := io.ParquetOptions{
 					Compression: comp,
-					BatchSize:   DefaultBatchSize,
+					BatchSize:   io.DefaultBatchSize,
 				}
-				writer := NewParquetWriter(buf, options)
+				writer := io.NewParquetWriter(buf, options)
 
 				df := createParquetTestDataFrame(t, mem)
 				defer df.Release()
 
 				err := writer.Write(df)
-				assert.NoError(t, err)
-				assert.Greater(t, buf.Len(), 0)
+				require.NoError(t, err)
+				assert.Positive(t, buf.Len())
 			})
 		}
 	})
 
 	t.Run("large DataFrame", func(t *testing.T) {
 		buf := new(bytes.Buffer)
-		writer := NewParquetWriter(buf, DefaultParquetOptions())
+		writer := io.NewParquetWriter(buf, io.DefaultParquetOptions())
 
 		df := createLargeDataFrame(t, mem, 10000)
 		defer df.Release()
 
 		err := writer.Write(df)
-		assert.NoError(t, err)
-		assert.Greater(t, buf.Len(), 0)
+		require.NoError(t, err)
+		assert.Positive(t, buf.Len())
 	})
 }
 
@@ -165,12 +166,12 @@ func TestParquetRoundTrip(t *testing.T) {
 		defer original.Release()
 
 		// Write to Parquet
-		writer := NewParquetWriter(buf, DefaultParquetOptions())
+		writer := io.NewParquetWriter(buf, io.DefaultParquetOptions())
 		err := writer.Write(original)
 		require.NoError(t, err)
 
 		// Read back from Parquet
-		reader := NewParquetReader(bytes.NewReader(buf.Bytes()), DefaultParquetOptions(), mem)
+		reader := io.NewParquetReader(bytes.NewReader(buf.Bytes()), io.DefaultParquetOptions(), mem)
 		result, err := reader.Read()
 		require.NoError(t, err)
 		defer result.Release()
@@ -187,11 +188,11 @@ func TestParquetRoundTrip(t *testing.T) {
 		defer original.Release()
 
 		// Write and read back
-		writer := NewParquetWriter(buf, DefaultParquetOptions())
+		writer := io.NewParquetWriter(buf, io.DefaultParquetOptions())
 		err := writer.Write(original)
 		require.NoError(t, err)
 
-		reader := NewParquetReader(bytes.NewReader(buf.Bytes()), DefaultParquetOptions(), mem)
+		reader := io.NewParquetReader(bytes.NewReader(buf.Bytes()), io.DefaultParquetOptions(), mem)
 		result, err := reader.Read()
 		require.NoError(t, err)
 		defer result.Release()

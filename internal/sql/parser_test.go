@@ -1,3 +1,4 @@
+//nolint:testpackage // requires internal access to unexported types and functions
 package sql
 
 import (
@@ -176,10 +177,10 @@ func TestParseSQL(t *testing.T) {
 			stmt, err := ParseSQL(tt.input)
 
 			if tt.expectErr {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Nil(t, stmt)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				if assert.NotNil(t, stmt) {
 					assert.Equal(t, SelectStatementType, stmt.StatementType())
 				}
@@ -281,10 +282,10 @@ func TestExpressionParsing(t *testing.T) {
 			stmt, err := ParseSQL(tt.input)
 
 			if tt.valid {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.NotNil(t, stmt)
 			} else {
-				assert.Error(t, err)
+				require.Error(t, err)
 			}
 		})
 	}
@@ -354,7 +355,7 @@ func TestParseErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			stmt, err := ParseSQL(tt.input)
-			assert.Error(t, err)
+			require.Error(t, err)
 			assert.Nil(t, stmt)
 			assert.Contains(t, err.Error(), tt.expectedError)
 		})
@@ -384,7 +385,7 @@ func TestComplexQueries(t *testing.T) {
 				t.Logf("Query: %s", query)
 				t.Logf("Error: %v", err)
 			}
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.NotNil(t, stmt)
 		})
 	}

@@ -1,3 +1,4 @@
+//nolint:testpackage // requires internal access to unexported types and functions
 package dataframe
 
 import (
@@ -12,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// BenchmarkHavingMemoryOptimization compares memory overhead before and after optimizations
+// BenchmarkHavingMemoryOptimization compares memory overhead before and after optimizations.
 func BenchmarkHavingMemoryOptimization(b *testing.B) {
 	mem := memory.NewGoAllocator()
 
@@ -22,7 +23,7 @@ func BenchmarkHavingMemoryOptimization(b *testing.B) {
 	salaries := make([]float64, size)
 
 	deptNames := []string{"Engineering", "Sales", "HR", "Marketing", "Support", "Finance"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(40000 + (i * 5))
 	}
@@ -45,7 +46,7 @@ func BenchmarkHavingMemoryOptimization(b *testing.B) {
 		var totalBytes uint64
 
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			var beforeStats runtime.MemStats
 			runtime.ReadMemStats(&beforeStats)
 
@@ -115,7 +116,7 @@ func BenchmarkHavingMemoryOptimization(b *testing.B) {
 	})
 }
 
-// TestHavingMemoryOptimizationCorrectness verifies that optimizations don't affect correctness
+// TestHavingMemoryOptimizationCorrectness verifies that optimizations don't affect correctness.
 func TestHavingMemoryOptimizationCorrectness(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
@@ -125,7 +126,7 @@ func TestHavingMemoryOptimizationCorrectness(t *testing.T) {
 	salaries := make([]float64, size)
 
 	deptNames := []string{"Engineering", "Sales", "HR"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(40000 + (i * 50))
 	}
@@ -148,8 +149,8 @@ func TestHavingMemoryOptimizationCorrectness(t *testing.T) {
 	require.NotNil(t, result)
 
 	// Verify the result has the expected structure
-	assert.True(t, result.Len() >= 0, "Result should have non-negative length")
-	assert.True(t, result.Width() > 0, "Result should have columns")
+	assert.GreaterOrEqual(t, result.Len(), 0, "Result should have non-negative length")
+	assert.Positive(t, result.Width(), "Result should have columns")
 
 	// Verify department column exists
 	deptCol, exists := result.Column("department")
@@ -161,7 +162,7 @@ func TestHavingMemoryOptimizationCorrectness(t *testing.T) {
 	groupByOp.Release()
 }
 
-// BenchmarkHavingMemoryScaling tests memory scaling with different dataset sizes
+// BenchmarkHavingMemoryScaling tests memory scaling with different dataset sizes.
 func BenchmarkHavingMemoryScaling(b *testing.B) {
 	mem := memory.NewGoAllocator()
 	sizes := []int{1000, 5000, 10000, 25000}
@@ -172,7 +173,7 @@ func BenchmarkHavingMemoryScaling(b *testing.B) {
 			salaries := make([]float64, size)
 
 			deptNames := []string{"Eng", "Sales", "HR", "Marketing"}
-			for i := 0; i < size; i++ {
+			for i := range size {
 				departments[i] = deptNames[i%len(deptNames)]
 				salaries[i] = float64(35000 + (i * 3))
 			}
@@ -187,7 +188,7 @@ func BenchmarkHavingMemoryScaling(b *testing.B) {
 
 			var totalOverheadBytes uint64
 
-			for i := 0; i < b.N; i++ {
+			for i := range b.N {
 				var beforeStats runtime.MemStats
 				runtime.ReadMemStats(&beforeStats)
 
@@ -234,7 +235,7 @@ func BenchmarkHavingMemoryScaling(b *testing.B) {
 	}
 }
 
-// TestHavingCachedAllocatorReuse verifies that allocator caching works correctly
+// TestHavingCachedAllocatorReuse verifies that allocator caching works correctly.
 func TestHavingCachedAllocatorReuse(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
@@ -244,7 +245,7 @@ func TestHavingCachedAllocatorReuse(t *testing.T) {
 	salaries := make([]float64, size)
 
 	deptNames := []string{"Engineering", "Sales"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(40000 + (i * 100))
 	}
@@ -292,86 +293,130 @@ func TestHavingCachedAllocatorReuse(t *testing.T) {
 	groupByOp.Release()
 }
 
-// BenchmarkHavingMemoryPoolEfficiency tests the efficiency of the memory pool
+// BenchmarkHavingMemoryPoolEfficiency tests the efficiency of the memory pool.
 func BenchmarkHavingMemoryPoolEfficiency(b *testing.B) {
-	mem := memory.NewGoAllocator()
+	df := createMemoryPoolTestDataFrame()
+	defer df.Release()
 
+	b.Run("With memory pool", func(b *testing.B) {
+		runMemoryPoolEfficiencyBenchmark(b, df)
+	})
+}
+
+// createMemoryPoolTestDataFrame creates test data for memory pool benchmarks.
+func createMemoryPoolTestDataFrame() *DataFrame {
+	mem := memory.NewGoAllocator()
 	size := 5000
 	departments := make([]string, size)
 	salaries := make([]float64, size)
 
 	deptNames := []string{"A", "B", "C", "D"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(40000 + (i * 10))
 	}
 
 	deptSeries := series.New("department", departments, mem)
 	salarySeries := series.New("salary", salaries, mem)
-	df := New(deptSeries, salarySeries)
-	defer df.Release()
+	return New(deptSeries, salarySeries)
+}
 
-	b.Run("With memory pool", func(b *testing.B) {
-		b.ReportAllocs()
-		b.ResetTimer()
+// runMemoryPoolEfficiencyBenchmark runs the memory pool efficiency benchmark.
+func runMemoryPoolEfficiencyBenchmark(b *testing.B, df *DataFrame) {
+	b.ReportAllocs()
+	b.ResetTimer()
 
-		var totalPoolStats []runtime.MemStats
+	poolStats := collectMemoryPoolStats(b, df)
+	calculateAndReportPoolEfficiency(b, poolStats)
+}
 
-		for i := 0; i < b.N; i++ {
-			var beforeStats runtime.MemStats
-			runtime.ReadMemStats(&beforeStats)
+// collectMemoryPoolStats collects memory statistics during benchmark iterations.
+func collectMemoryPoolStats(b *testing.B, df *DataFrame) []runtime.MemStats {
+	var totalPoolStats []runtime.MemStats
 
-			groupByOp := &GroupByHavingOperation{
-				groupByCols: []string{"department"},
-				predicate:   expr.Mean(expr.Col("salary")).As("avg_salary").Gt(expr.Lit(55000.0)),
-			}
+	for i := range b.N {
+		var beforeStats runtime.MemStats
+		runtime.ReadMemStats(&beforeStats)
 
-			lazy := df.Lazy()
-			lazy.operations = append(lazy.operations, groupByOp)
-			result, err := lazy.Collect()
-
-			if err != nil {
-				b.Fatal(err)
-			}
-
-			var afterStats runtime.MemStats
-			runtime.ReadMemStats(&afterStats)
-			totalPoolStats = append(totalPoolStats, afterStats)
-
-			result.Release()
-			groupByOp.Release() // Return allocator to pool
-
-			if i%10 == 0 {
-				runtime.GC()
-			}
+		result, err := executeMemoryPoolOperation(df)
+		if err != nil {
+			b.Fatal(err)
 		}
 
-		b.StopTimer()
+		var afterStats runtime.MemStats
+		runtime.ReadMemStats(&afterStats)
+		totalPoolStats = append(totalPoolStats, afterStats)
 
-		// Calculate pool efficiency metrics
-		if len(totalPoolStats) > 1 {
-			firstHalf := len(totalPoolStats) / 2
-			secondHalf := len(totalPoolStats) - firstHalf
+		result.Release()
+		triggerPeriodicGC(i)
+	}
 
-			var firstHalfAvg, secondHalfAvg uint64
-			for i := 0; i < firstHalf; i++ {
-				firstHalfAvg += totalPoolStats[i].TotalAlloc
-			}
-			for i := firstHalf; i < len(totalPoolStats); i++ {
-				secondHalfAvg += totalPoolStats[i].TotalAlloc
-			}
+	return totalPoolStats
+}
 
-			if firstHalf > 0 {
-				firstHalfAvg /= uint64(firstHalf)
-			}
-			if secondHalf > 0 {
-				secondHalfAvg /= uint64(secondHalf)
-			}
+// executeMemoryPoolOperation executes a single memory pool operation.
+func executeMemoryPoolOperation(df *DataFrame) (*DataFrame, error) {
+	groupByOp := &GroupByHavingOperation{
+		groupByCols: []string{"department"},
+		predicate:   expr.Mean(expr.Col("salary")).As("avg_salary").Gt(expr.Lit(55000.0)),
+	}
+	defer groupByOp.Release() // Return allocator to pool
 
-			poolEfficiency := float64(firstHalfAvg) / float64(secondHalfAvg) * 100.0
-			b.ReportMetric(poolEfficiency, "pool_efficiency_%")
+	lazy := df.Lazy()
+	lazy.operations = append(lazy.operations, groupByOp)
+	return lazy.Collect()
+}
 
-			b.Logf("Pool efficiency: %.2f%% (should be close to 100%%)", poolEfficiency)
-		}
-	})
+// calculateAndReportPoolEfficiency calculates and reports memory pool efficiency.
+func calculateAndReportPoolEfficiency(b *testing.B, totalPoolStats []runtime.MemStats) {
+	b.StopTimer()
+
+	if len(totalPoolStats) <= 1 {
+		return
+	}
+
+	firstHalfAvg, secondHalfAvg := calculateHalfAverages(totalPoolStats)
+	poolEfficiency := calculatePoolEfficiency(firstHalfAvg, secondHalfAvg)
+
+	b.ReportMetric(poolEfficiency, "pool_efficiency_%")
+	b.Logf("Pool efficiency: %.2f%% (should be close to 100%%)", poolEfficiency)
+}
+
+// calculateHalfAverages calculates average memory usage for first and second half of iterations.
+func calculateHalfAverages(totalPoolStats []runtime.MemStats) (uint64, uint64) {
+	firstHalf := len(totalPoolStats) / 2
+	secondHalf := len(totalPoolStats) - firstHalf
+
+	var firstHalfAvg, secondHalfAvg uint64
+
+	for i := range firstHalf {
+		firstHalfAvg += totalPoolStats[i].TotalAlloc
+	}
+	for i := firstHalf; i < len(totalPoolStats); i++ {
+		secondHalfAvg += totalPoolStats[i].TotalAlloc
+	}
+
+	if firstHalf > 0 {
+		firstHalfAvg /= uint64(firstHalf)
+	}
+	if secondHalf > 0 {
+		secondHalfAvg /= uint64(secondHalf)
+	}
+
+	return firstHalfAvg, secondHalfAvg
+}
+
+// calculatePoolEfficiency calculates pool efficiency percentage.
+func calculatePoolEfficiency(firstHalfAvg, secondHalfAvg uint64) float64 {
+	if secondHalfAvg == 0 {
+		return 100.0
+	}
+	return float64(firstHalfAvg) / float64(secondHalfAvg) * 100.0
+}
+
+// triggerPeriodicGC triggers garbage collection every 10 iterations.
+func triggerPeriodicGC(iteration int) {
+	if iteration%10 == 0 {
+		runtime.GC()
+	}
 }

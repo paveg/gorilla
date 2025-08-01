@@ -11,11 +11,11 @@ import (
 )
 
 const (
-	// DefaultCheckInterval is the default interval for memory monitoring
+	// DefaultCheckInterval is the default interval for memory monitoring.
 	DefaultCheckInterval = 5 * time.Second
-	// HighMemoryPressureThreshold is the threshold for triggering cleanup
+	// HighMemoryPressureThreshold is the threshold for triggering cleanup.
 	HighMemoryPressureThreshold = 0.8
-	// DefaultMemoryThreshold is the default memory threshold (1GB)
+	// DefaultMemoryThreshold is the default memory threshold (1GB).
 	DefaultMemoryThreshold = 1024 * 1024 * 1024
 )
 
@@ -62,7 +62,7 @@ type MemoryManager struct {
 	mu        sync.Mutex // Mutex to synchronize access to resources
 }
 
-// NewMemoryManager creates a new memory manager with the given allocator
+// NewMemoryManager creates a new memory manager with the given allocator.
 func NewMemoryManager(allocator memory.Allocator) *MemoryManager {
 	return &MemoryManager{
 		allocator: allocator,
@@ -70,7 +70,7 @@ func NewMemoryManager(allocator memory.Allocator) *MemoryManager {
 	}
 }
 
-// Track adds a resource to be managed and automatically released
+// Track adds a resource to be managed and automatically released.
 func (m *MemoryManager) Track(resource Releasable) {
 	if resource != nil {
 		m.mu.Lock()
@@ -79,14 +79,14 @@ func (m *MemoryManager) Track(resource Releasable) {
 	}
 }
 
-// Count returns the number of tracked resources
+// Count returns the number of tracked resources.
 func (m *MemoryManager) Count() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return len(m.resources)
 }
 
-// ReleaseAll releases all tracked resources and clears the tracking list
+// ReleaseAll releases all tracked resources and clears the tracking list.
 func (m *MemoryManager) ReleaseAll() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -132,21 +132,21 @@ func WithDataFrame(factory func() *DataFrame, fn func(*DataFrame) error) error {
 	return fn(df)
 }
 
-// WithSeries creates a Series, executes a function with it, and automatically releases it
+// WithSeries creates a Series, executes a function with it, and automatically releases it.
 func WithSeries(factory func() ISeries, fn func(ISeries) error) error {
 	s := factory()
 	defer s.Release()
 	return fn(s)
 }
 
-// WithMemoryManager creates a memory manager, executes a function with it, and releases all tracked resources
+// WithMemoryManager creates a memory manager, executes a function with it, and releases all tracked resources.
 func WithMemoryManager(allocator memory.Allocator, fn func(*MemoryManager) error) error {
 	manager := NewMemoryManager(allocator)
 	defer manager.ReleaseAll()
 	return fn(manager)
 }
 
-// MemoryStats provides detailed memory usage statistics
+// MemoryStats provides detailed memory usage statistics.
 type MemoryStats struct {
 	// Total allocated memory in bytes
 	AllocatedBytes int64
@@ -162,7 +162,7 @@ type MemoryStats struct {
 	MemoryPressure float64
 }
 
-// MemoryUsageMonitor provides real-time memory usage monitoring and automatic spilling
+// MemoryUsageMonitor provides real-time memory usage monitoring and automatic spilling.
 type MemoryUsageMonitor struct {
 	// Memory threshold in bytes for triggering spilling
 	spillThreshold int64
@@ -190,7 +190,7 @@ type MemoryUsageMonitor struct {
 	gcPressureThreshold float64
 }
 
-// NewMemoryUsageMonitor creates a new memory usage monitor with the specified spill threshold
+// NewMemoryUsageMonitor creates a new memory usage monitor with the specified spill threshold.
 func NewMemoryUsageMonitor(spillThreshold int64) *MemoryUsageMonitor {
 	return &MemoryUsageMonitor{
 		spillThreshold:      spillThreshold,
@@ -200,7 +200,7 @@ func NewMemoryUsageMonitor(spillThreshold int64) *MemoryUsageMonitor {
 	}
 }
 
-// NewMemoryUsageMonitorFromConfig creates a new memory usage monitor using configuration values
+// NewMemoryUsageMonitorFromConfig creates a new memory usage monitor using configuration values.
 func NewMemoryUsageMonitorFromConfig(cfg config.Config) *MemoryUsageMonitor {
 	spillThreshold := cfg.MemoryThreshold
 	if spillThreshold == 0 {
@@ -222,21 +222,21 @@ func NewMemoryUsageMonitorFromConfig(cfg config.Config) *MemoryUsageMonitor {
 	}
 }
 
-// SetSpillCallback sets the callback function to be called when memory usage exceeds threshold
+// SetSpillCallback sets the callback function to be called when memory usage exceeds threshold.
 func (m *MemoryUsageMonitor) SetSpillCallback(callback func() error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.spillCallback = callback
 }
 
-// SetCleanupCallback sets the callback function to be called for cleanup operations
+// SetCleanupCallback sets the callback function to be called for cleanup operations.
 func (m *MemoryUsageMonitor) SetCleanupCallback(callback func() error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.cleanupCallback = callback
 }
 
-// RecordAllocation records a new memory allocation
+// RecordAllocation records a new memory allocation.
 func (m *MemoryUsageMonitor) RecordAllocation(bytes int64) {
 	newUsage := atomic.AddInt64(&m.currentUsage, bytes)
 	atomic.AddInt64(&m.activeResources, 1)
@@ -255,13 +255,13 @@ func (m *MemoryUsageMonitor) RecordAllocation(bytes int64) {
 	}
 }
 
-// RecordDeallocation records a memory deallocation
+// RecordDeallocation records a memory deallocation.
 func (m *MemoryUsageMonitor) RecordDeallocation(bytes int64) {
 	atomic.AddInt64(&m.currentUsage, -bytes)
 	atomic.AddInt64(&m.activeResources, -1)
 }
 
-// triggerSpill triggers the spilling callback if memory usage exceeds threshold
+// triggerSpill triggers the spilling callback if memory usage exceeds threshold.
 func (m *MemoryUsageMonitor) triggerSpill() {
 	m.mu.RLock()
 	callback := m.spillCallback
@@ -279,7 +279,7 @@ func (m *MemoryUsageMonitor) triggerSpill() {
 	}
 }
 
-// StartMonitoring starts the background memory monitoring goroutine
+// StartMonitoring starts the background memory monitoring goroutine.
 func (m *MemoryUsageMonitor) StartMonitoring() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -292,7 +292,7 @@ func (m *MemoryUsageMonitor) StartMonitoring() {
 	go m.monitorLoop()
 }
 
-// StopMonitoring stops the background memory monitoring goroutine
+// StopMonitoring stops the background memory monitoring goroutine.
 func (m *MemoryUsageMonitor) StopMonitoring() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -305,7 +305,7 @@ func (m *MemoryUsageMonitor) StopMonitoring() {
 	close(m.stopChan)
 }
 
-// monitorLoop is the main monitoring loop that runs in a separate goroutine
+// monitorLoop is the main monitoring loop that runs in a separate goroutine.
 func (m *MemoryUsageMonitor) monitorLoop() {
 	ticker := time.NewTicker(m.checkInterval)
 	defer ticker.Stop()
@@ -320,7 +320,7 @@ func (m *MemoryUsageMonitor) monitorLoop() {
 	}
 }
 
-// checkMemoryPressure checks system memory pressure and triggers cleanup if needed
+// checkMemoryPressure checks system memory pressure and triggers cleanup if needed.
 func (m *MemoryUsageMonitor) checkMemoryPressure() {
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
@@ -346,7 +346,7 @@ func (m *MemoryUsageMonitor) checkMemoryPressure() {
 	}
 }
 
-// GetStats returns current memory usage statistics
+// GetStats returns current memory usage statistics.
 func (m *MemoryUsageMonitor) GetStats() MemoryStats {
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
@@ -367,17 +367,17 @@ func (m *MemoryUsageMonitor) GetStats() MemoryStats {
 	}
 }
 
-// CurrentUsage returns the current memory usage in bytes
+// CurrentUsage returns the current memory usage in bytes.
 func (m *MemoryUsageMonitor) CurrentUsage() int64 {
 	return atomic.LoadInt64(&m.currentUsage)
 }
 
-// PeakUsage returns the peak memory usage in bytes
+// PeakUsage returns the peak memory usage in bytes.
 func (m *MemoryUsageMonitor) PeakUsage() int64 {
 	return atomic.LoadInt64(&m.peakUsage)
 }
 
-// SpillCount returns the number of times spilling was triggered
+// SpillCount returns the number of times spilling was triggered.
 func (m *MemoryUsageMonitor) SpillCount() int64 {
 	return atomic.LoadInt64(&m.spillCount)
 }

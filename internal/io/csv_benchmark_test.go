@@ -1,4 +1,4 @@
-package io
+package io_test
 
 import (
 	"bytes"
@@ -8,10 +8,11 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/paveg/gorilla/internal/dataframe"
+	"github.com/paveg/gorilla/internal/io"
 	"github.com/paveg/gorilla/internal/series"
 )
 
-// BenchmarkCSVReader benchmarks CSV reading performance
+// BenchmarkCSVReader benchmarks CSV reading performance.
 func BenchmarkCSVReader(b *testing.B) {
 	sizes := []int{100, 1000, 10000}
 
@@ -22,8 +23,8 @@ func BenchmarkCSVReader(b *testing.B) {
 			mem := memory.NewGoAllocator()
 
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				reader := NewCSVReader(strings.NewReader(csvData), DefaultCSVOptions(), mem)
+			for range b.N {
+				reader := io.NewCSVReader(strings.NewReader(csvData), io.DefaultCSVOptions(), mem)
 				df, err := reader.Read()
 				if err != nil {
 					b.Fatal(err)
@@ -34,7 +35,7 @@ func BenchmarkCSVReader(b *testing.B) {
 	}
 }
 
-// BenchmarkCSVWriter benchmarks CSV writing performance
+// BenchmarkCSVWriter benchmarks CSV writing performance.
 func BenchmarkCSVWriter(b *testing.B) {
 	sizes := []int{100, 1000, 10000}
 
@@ -45,9 +46,9 @@ func BenchmarkCSVWriter(b *testing.B) {
 			defer df.Release()
 
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				var buf bytes.Buffer
-				writer := NewCSVWriter(&buf, DefaultCSVOptions())
+				writer := io.NewCSVWriter(&buf, io.DefaultCSVOptions())
 				err := writer.Write(df)
 				if err != nil {
 					b.Fatal(err)
@@ -57,7 +58,7 @@ func BenchmarkCSVWriter(b *testing.B) {
 	}
 }
 
-// BenchmarkCSVRoundTrip benchmarks full read-write cycle
+// BenchmarkCSVRoundTrip benchmarks full read-write cycle.
 func BenchmarkCSVRoundTrip(b *testing.B) {
 	sizes := []int{100, 1000, 10000}
 
@@ -68,9 +69,9 @@ func BenchmarkCSVRoundTrip(b *testing.B) {
 			mem := memory.NewGoAllocator()
 
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				// Read CSV
-				reader := NewCSVReader(strings.NewReader(csvData), DefaultCSVOptions(), mem)
+				reader := io.NewCSVReader(strings.NewReader(csvData), io.DefaultCSVOptions(), mem)
 				df, err := reader.Read()
 				if err != nil {
 					b.Fatal(err)
@@ -78,7 +79,7 @@ func BenchmarkCSVRoundTrip(b *testing.B) {
 
 				// Write CSV
 				var buf bytes.Buffer
-				writer := NewCSVWriter(&buf, DefaultCSVOptions())
+				writer := io.NewCSVWriter(&buf, io.DefaultCSVOptions())
 				err = writer.Write(df)
 				if err != nil {
 					b.Fatal(err)
@@ -90,12 +91,12 @@ func BenchmarkCSVRoundTrip(b *testing.B) {
 	}
 }
 
-// generateCSVData creates test CSV data with the specified number of rows
+// generateCSVData creates test CSV data with the specified number of rows.
 func generateCSVData(rows int) string {
 	var sb strings.Builder
 	sb.WriteString("id,name,age,salary,active\n")
 
-	for i := 0; i < rows; i++ {
+	for i := range rows {
 		sb.WriteString(fmt.Sprintf("%d,Person_%d,%d,%.2f,%t\n",
 			i, i, 25+(i%40), 30000.0+(float64(i)*100.0), i%2 == 0))
 	}
@@ -103,7 +104,7 @@ func generateCSVData(rows int) string {
 	return sb.String()
 }
 
-// generateDataFrame creates a test DataFrame with the specified number of rows
+// generateDataFrame creates a test DataFrame with the specified number of rows.
 func generateDataFrame(rows int) *dataframe.DataFrame {
 	mem := memory.NewGoAllocator()
 
@@ -113,7 +114,7 @@ func generateDataFrame(rows int) *dataframe.DataFrame {
 	salaries := make([]float64, rows)
 	active := make([]bool, rows)
 
-	for i := 0; i < rows; i++ {
+	for i := range rows {
 		ids[i] = int64(i)
 		names[i] = fmt.Sprintf("Person_%d", i)
 		ages[i] = int64(25 + (i % 40))
@@ -130,39 +131,38 @@ func generateDataFrame(rows int) *dataframe.DataFrame {
 	return dataframe.New(idSeries, nameSeries, ageSeries, salarySeries, activeSeries)
 }
 
-// BenchmarkCSVTypeInference benchmarks type inference performance
+// BenchmarkCSVTypeInference benchmarks type inference performance.
 func BenchmarkCSVTypeInference(b *testing.B) {
 	mem := memory.NewGoAllocator()
 
 	// Test different data types
 	testCases := []struct {
-		name string
-		data []string
+		name    string
+		csvData string
 	}{
-		{"int_data", []string{"1", "2", "3", "4", "5"}},
-		{"float_data", []string{"1.5", "2.5", "3.5", "4.5", "5.5"}},
-		{"bool_data", []string{"true", "false", "true", "false", "true"}},
-		{"string_data", []string{"hello", "world", "foo", "bar", "baz"}},
-		{"mixed_data", []string{"1", "hello", "3.5", "true", "world"}},
+		{"int_data", "values\n1\n2\n3\n4\n5"},
+		{"float_data", "values\n1.5\n2.5\n3.5\n4.5\n5.5"},
+		{"bool_data", "values\ntrue\nfalse\ntrue\nfalse\ntrue"},
+		{"string_data", "values\nhello\nworld\nfoo\nbar\nbaz"},
+		{"mixed_data", "values\n1\nhello\n3.5\ntrue\nworld"},
 	}
 
 	for _, tc := range testCases {
 		b.Run(tc.name, func(b *testing.B) {
-			reader := NewCSVReader(strings.NewReader(""), DefaultCSVOptions(), mem)
-
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				series, err := reader.createSeriesFromStrings("test", tc.data)
+			for range b.N {
+				reader := io.NewCSVReader(strings.NewReader(tc.csvData), io.DefaultCSVOptions(), mem)
+				df, err := reader.Read()
 				if err != nil {
 					b.Fatal(err)
 				}
-				series.Release()
+				df.Release()
 			}
 		})
 	}
 }
 
-// BenchmarkCSVMemoryUsage benchmarks memory usage patterns
+// BenchmarkCSVMemoryUsage benchmarks memory usage patterns.
 func BenchmarkCSVMemoryUsage(b *testing.B) {
 	sizes := []int{1000, 10000}
 
@@ -171,9 +171,9 @@ func BenchmarkCSVMemoryUsage(b *testing.B) {
 			csvData := generateCSVData(size)
 
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				mem := memory.NewGoAllocator()
-				reader := NewCSVReader(strings.NewReader(csvData), DefaultCSVOptions(), mem)
+				reader := io.NewCSVReader(strings.NewReader(csvData), io.DefaultCSVOptions(), mem)
 				df, err := reader.Read()
 				if err != nil {
 					b.Fatal(err)

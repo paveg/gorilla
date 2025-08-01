@@ -1,4 +1,4 @@
-package parallel
+package parallel_test
 
 import (
 	"runtime"
@@ -7,13 +7,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/paveg/gorilla/internal/parallel"
 	"github.com/stretchr/testify/assert"
 )
 
-// TestAdvancedWorkerPool tests the enhanced worker pool with dynamic scaling
+// TestAdvancedWorkerPool tests the enhanced worker pool with dynamic scaling.
 func TestAdvancedWorkerPool(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping advanced worker pool stress tests in short mode")
+	}
 	t.Run("dynamic scaling based on workload", func(t *testing.T) {
-		pool := NewAdvancedWorkerPool(AdvancedWorkerPoolConfig{
+		pool := parallel.NewAdvancedWorkerPool(parallel.AdvancedWorkerPoolConfig{
 			MinWorkers:     2,
 			MaxWorkers:     8,
 			WorkQueueSize:  10,  // Small queue to trigger scaling
@@ -27,7 +31,7 @@ func TestAdvancedWorkerPool(t *testing.T) {
 			smallWorkload[i] = i
 		}
 
-		results := ProcessGeneric(pool, smallWorkload, func(x int) int {
+		results := parallel.ProcessGeneric(pool, smallWorkload, func(x int) int {
 			time.Sleep(10 * time.Millisecond)
 			return x * 2
 		})
@@ -42,7 +46,7 @@ func TestAdvancedWorkerPool(t *testing.T) {
 		}
 
 		// Submit work that will fill the queue
-		results = ProcessGeneric(pool, largeWorkload, func(x int) int {
+		results = parallel.ProcessGeneric(pool, largeWorkload, func(x int) int {
 			time.Sleep(50 * time.Millisecond) // Longer work to fill queue
 			return x * 3
 		})
@@ -53,7 +57,7 @@ func TestAdvancedWorkerPool(t *testing.T) {
 	})
 
 	t.Run("work stealing between workers", func(t *testing.T) {
-		pool := NewAdvancedWorkerPool(AdvancedWorkerPoolConfig{
+		pool := parallel.NewAdvancedWorkerPool(parallel.AdvancedWorkerPoolConfig{
 			MinWorkers:         4,
 			MaxWorkers:         4,
 			WorkQueueSize:      100,
@@ -68,7 +72,7 @@ func TestAdvancedWorkerPool(t *testing.T) {
 		}
 
 		start := time.Now()
-		results := ProcessGeneric(pool, workload, func(x int) int {
+		results := parallel.ProcessGeneric(pool, workload, func(x int) int {
 			// Every 5th task takes longer
 			if x%5 == 0 {
 				time.Sleep(50 * time.Millisecond)
@@ -86,8 +90,8 @@ func TestAdvancedWorkerPool(t *testing.T) {
 	})
 
 	t.Run("memory pressure adaptation", func(t *testing.T) {
-		memMonitor := NewMemoryMonitor(1024, 8) // 1KB threshold, 8 max workers
-		pool := NewAdvancedWorkerPool(AdvancedWorkerPoolConfig{
+		memMonitor := parallel.NewMemoryMonitor(1024, 8) // 1KB threshold, 8 max workers
+		pool := parallel.NewAdvancedWorkerPool(parallel.AdvancedWorkerPoolConfig{
 			MinWorkers:    2,
 			MaxWorkers:    8,
 			WorkQueueSize: 50,
@@ -101,7 +105,7 @@ func TestAdvancedWorkerPool(t *testing.T) {
 			workload[i] = i
 		}
 
-		results := ProcessGeneric(pool, workload, func(x int) int {
+		results := parallel.ProcessGeneric(pool, workload, func(x int) int {
 			return x * 2
 		})
 
@@ -111,7 +115,7 @@ func TestAdvancedWorkerPool(t *testing.T) {
 		// Simulate high memory pressure
 		memMonitor.RecordAllocation(900) // 90% of threshold
 
-		results = ProcessGeneric(pool, workload, func(x int) int {
+		results = parallel.ProcessGeneric(pool, workload, func(x int) int {
 			return x * 3
 		})
 
@@ -121,7 +125,7 @@ func TestAdvancedWorkerPool(t *testing.T) {
 	})
 
 	t.Run("metrics collection", func(t *testing.T) {
-		pool := NewAdvancedWorkerPool(AdvancedWorkerPoolConfig{
+		pool := parallel.NewAdvancedWorkerPool(parallel.AdvancedWorkerPoolConfig{
 			MinWorkers:    2,
 			MaxWorkers:    4,
 			WorkQueueSize: 20,
@@ -134,7 +138,7 @@ func TestAdvancedWorkerPool(t *testing.T) {
 			workload[i] = i
 		}
 
-		results := ProcessGeneric(pool, workload, func(x int) int {
+		results := parallel.ProcessGeneric(pool, workload, func(x int) int {
 			time.Sleep(5 * time.Millisecond)
 			return x * 2
 		})
@@ -142,13 +146,13 @@ func TestAdvancedWorkerPool(t *testing.T) {
 		assert.Len(t, results, 15)
 
 		metrics := pool.GetMetrics()
-		assert.Greater(t, metrics.TotalTasksProcessed, int64(0))
+		assert.Positive(t, metrics.TotalTasksProcessed)
 		// AverageTaskDuration and TotalProcessingTime are not thread-safe in current implementation
 		assert.GreaterOrEqual(t, int(metrics.MaxWorkerCount), 2)
 	})
 
 	t.Run("graceful shutdown", func(t *testing.T) {
-		pool := NewAdvancedWorkerPool(AdvancedWorkerPoolConfig{
+		pool := parallel.NewAdvancedWorkerPool(parallel.AdvancedWorkerPoolConfig{
 			MinWorkers:    2,
 			MaxWorkers:    4,
 			WorkQueueSize: 10,
@@ -161,7 +165,7 @@ func TestAdvancedWorkerPool(t *testing.T) {
 		}
 
 		// Process work synchronously
-		results := ProcessGeneric(pool, workload, func(x int) int {
+		results := parallel.ProcessGeneric(pool, workload, func(x int) int {
 			time.Sleep(20 * time.Millisecond)
 			return x * 2
 		})
@@ -177,16 +181,16 @@ func TestAdvancedWorkerPool(t *testing.T) {
 	})
 }
 
-// TestWorkerPoolPriorityQueue tests priority-based task scheduling
+// TestWorkerPoolPriorityQueue tests priority-based task scheduling.
 func TestWorkerPoolPriorityQueue(t *testing.T) {
 	// Test constants
 	const (
-		taskDelay                 = 5 * time.Millisecond // Small delay to observe priority effects
-		highPriorityTaskThreshold = 1.0 / 3.0            // At least 1/3 of high priority tasks should complete early
+		taskDelay             = 5 * time.Millisecond // Small delay to observe priority effects
+		highPriorityThreshold = 1.0 / 3.0            // At least 1/3 of high priority tasks should complete early
 	)
 
 	t.Run("priority task scheduling", func(t *testing.T) {
-		pool := NewAdvancedWorkerPool(AdvancedWorkerPoolConfig{
+		pool := parallel.NewAdvancedWorkerPool(parallel.AdvancedWorkerPoolConfig{
 			MinWorkers:     2,
 			MaxWorkers:     2,
 			WorkQueueSize:  10,
@@ -195,18 +199,18 @@ func TestWorkerPoolPriorityQueue(t *testing.T) {
 		defer pool.Close()
 
 		// Create many tasks to test priority ordering
-		var tasks []PriorityTask
+		var tasks []parallel.PriorityTask
 		expectedHighPriority := 10
 		expectedLowPriority := 50
 
 		// Add high priority tasks
-		for i := 0; i < expectedHighPriority; i++ {
-			tasks = append(tasks, PriorityTask{Priority: 10, Value: i + 1000}) // High priority
+		for i := range expectedHighPriority {
+			tasks = append(tasks, parallel.PriorityTask{Priority: 10, Value: i + 1000}) // High priority
 		}
 
 		// Add low priority tasks
-		for i := 0; i < expectedLowPriority; i++ {
-			tasks = append(tasks, PriorityTask{Priority: 1, Value: i + 2000}) // Low priority
+		for i := range expectedLowPriority {
+			tasks = append(tasks, parallel.PriorityTask{Priority: 1, Value: i + 2000}) // Low priority
 		}
 
 		// Track completion times to verify priority effect
@@ -216,7 +220,7 @@ func TestWorkerPoolPriorityQueue(t *testing.T) {
 		}
 		var timesMutex sync.Mutex
 
-		results := pool.ProcessWithPriority(tasks, func(task PriorityTask) int {
+		results := pool.ProcessWithPriority(tasks, func(task parallel.PriorityTask) int {
 			// Small delay to observe priority effects
 			time.Sleep(taskDelay)
 
@@ -255,20 +259,20 @@ func TestWorkerPoolPriorityQueue(t *testing.T) {
 
 		// With priority scheduling, we expect more high priority tasks to complete early
 		// This is a statistical test - not 100% guaranteed but very likely
-		expectedMinHighPriority := int(float64(expectedHighPriority) * highPriorityTaskThreshold)
+		expectedMinHighPriority := int(float64(expectedHighPriority) * highPriorityThreshold)
 		assert.GreaterOrEqual(t, highPriorityInFirstHalf, expectedMinHighPriority,
 			"Priority scheduling should cause more high priority tasks to complete earlier")
 	})
 }
 
-// TestResourceLimits tests configurable resource constraints
+// TestResourceLimits tests configurable resource constraints.
 func TestResourceLimits(t *testing.T) {
 	t.Run("CPU usage limits", func(t *testing.T) {
-		pool := NewAdvancedWorkerPool(AdvancedWorkerPoolConfig{
+		pool := parallel.NewAdvancedWorkerPool(parallel.AdvancedWorkerPoolConfig{
 			MinWorkers:    2,
 			MaxWorkers:    runtime.NumCPU(),
 			WorkQueueSize: 50,
-			ResourceLimits: ResourceLimits{
+			ResourceLimits: parallel.ResourceLimits{
 				MaxCPUUsage: 0.5, // Limit to 50% CPU
 			},
 		})
@@ -279,9 +283,9 @@ func TestResourceLimits(t *testing.T) {
 			workload[i] = i
 		}
 
-		results := ProcessGeneric(pool, workload, func(x int) int {
+		results := parallel.ProcessGeneric(pool, workload, func(x int) int {
 			// CPU-intensive work
-			for i := 0; i < 100000; i++ {
+			for i := range 100000 {
 				_ = i * i
 			}
 			return x * 2
@@ -293,14 +297,14 @@ func TestResourceLimits(t *testing.T) {
 	})
 }
 
-// TestBackpressureControl tests backpressure management
+// TestBackpressureControl tests backpressure management.
 func TestBackpressureControl(t *testing.T) {
 	t.Run("queue backpressure", func(t *testing.T) {
-		pool := NewAdvancedWorkerPool(AdvancedWorkerPoolConfig{
+		pool := parallel.NewAdvancedWorkerPool(parallel.AdvancedWorkerPoolConfig{
 			MinWorkers:         2,
 			MaxWorkers:         2,
 			WorkQueueSize:      5, // Small queue
-			BackpressurePolicy: BackpressureBlock,
+			BackpressurePolicy: parallel.BackpressureBlock,
 		})
 		defer pool.Close()
 
@@ -311,7 +315,7 @@ func TestBackpressureControl(t *testing.T) {
 		}
 
 		start := time.Now()
-		results := ProcessGeneric(pool, workload, func(x int) int {
+		results := parallel.ProcessGeneric(pool, workload, func(x int) int {
 			time.Sleep(50 * time.Millisecond)
 			return x * 2
 		})

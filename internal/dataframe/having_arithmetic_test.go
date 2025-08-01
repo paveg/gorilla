@@ -1,3 +1,4 @@
+//nolint:testpackage // requires internal access to unexported types and functions
 package dataframe
 
 import (
@@ -11,7 +12,7 @@ import (
 	"github.com/paveg/gorilla/internal/series"
 )
 
-// TestHavingArithmeticExpressions tests arithmetic expressions in HAVING predicates
+// TestHavingArithmeticExpressions tests arithmetic expressions in HAVING predicates.
 func TestHavingArithmeticExpressions(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
@@ -149,7 +150,7 @@ func TestHavingArithmeticExpressions(t *testing.T) {
 	})
 }
 
-// TestHavingArithmeticEdgeCases tests edge cases for arithmetic expressions in HAVING
+// TestHavingArithmeticEdgeCases tests edge cases for arithmetic expressions in HAVING.
 func TestHavingArithmeticEdgeCases(t *testing.T) {
 	mem := memory.NewGoAllocator()
 

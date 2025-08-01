@@ -2,8 +2,10 @@ package dataframe
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -17,27 +19,93 @@ import (
 	"github.com/paveg/gorilla/internal/series"
 )
 
-// Global memory pool for filter operations to reduce GC pressure
-var (
-	filterMemoryPool *parallel.AllocatorPool
-	filterPoolOnce   sync.Once
+// Data type constants for Arrow type name matching.
+const (
+	dataTypeUTF8    = "utf8"
+	dataTypeInt64   = "int64"
+	dataTypeFloat64 = "float64"
+	dataTypeBool    = "bool"
 )
 
-// getFilterMemoryPool returns the shared memory pool for filter operations
-func getFilterMemoryPool() *parallel.AllocatorPool {
-	filterPoolOnce.Do(func() {
-		filterMemoryPool = parallel.NewAllocatorPool(runtime.NumCPU() * allocatorPoolMultiplier)
-	})
-	return filterMemoryPool
+// FilterMemoryPoolManager manages the global memory pool for filter operations.
+type FilterMemoryPoolManager struct {
+	pool *parallel.AllocatorPool
+	once sync.Once
 }
 
-// LazyOperation represents a deferred operation on a DataFrame
+// globalFilterPoolManager is the singleton instance for managing filter memory pools.
+var globalFilterPoolManager = &FilterMemoryPoolManager{} //nolint:gochecknoglobals // Required for performance-critical memory pool singleton
+
+// getFilterMemoryPool returns the shared memory pool for filter operations.
+func getFilterMemoryPool() *parallel.AllocatorPool {
+	globalFilterPoolManager.once.Do(func() {
+		globalFilterPoolManager.pool = parallel.NewAllocatorPool(runtime.NumCPU() * allocatorPoolMultiplier)
+	})
+	return globalFilterPoolManager.pool
+}
+
+// LazyOperation represents a deferred operation on a DataFrame.
 type LazyOperation interface {
 	Apply(df *DataFrame) (*DataFrame, error)
 	String() string
 }
 
-// FilterOperation represents a filter operation
+// FilterMaskOperation represents an operation that can apply boolean filter masks.
+type FilterMaskOperation interface {
+	filterSeries(originalSeries ISeries, mask *array.Boolean, resultSize int, mem memory.Allocator) (ISeries, error)
+	createEmptyDataFrame(df *DataFrame) *DataFrame
+}
+
+// applyBooleanFilterMask applies a boolean mask to filter a DataFrame.
+// This shared function eliminates duplicate code across FilterOperation, GroupByOperation,
+// HavingOperation, and GroupByHavingOperation.
+func applyBooleanFilterMask(
+	op FilterMaskOperation,
+	df *DataFrame,
+	mask arrow.Array,
+	errorMsg string,
+) (*DataFrame, error) {
+	boolMask, ok := mask.(*array.Boolean)
+	if !ok {
+		return nil, errors.New(errorMsg)
+	}
+
+	// Count true values to determine result size
+	trueCount := 0
+	for i := range boolMask.Len() {
+		if !boolMask.IsNull(i) && boolMask.Value(i) {
+			trueCount++
+		}
+	}
+
+	if trueCount == 0 {
+		// Return empty DataFrame with same structure
+		return op.createEmptyDataFrame(df), nil
+	}
+
+	// Create filtered series for each column using shared allocator
+	var filteredSeries []ISeries
+	// Reuse single allocator for all series to reduce memory overhead
+	mem := memory.NewGoAllocator()
+
+	for _, colName := range df.Columns() {
+		if originalSeries, exists := df.Column(colName); exists {
+			filtered, err := op.filterSeries(originalSeries, boolMask, trueCount, mem)
+			if err != nil {
+				// Clean up any created series
+				for _, s := range filteredSeries {
+					s.Release()
+				}
+				return nil, fmt.Errorf("filtering column %s: %w", colName, err)
+			}
+			filteredSeries = append(filteredSeries, filtered)
+		}
+	}
+
+	return New(filteredSeries...), nil
+}
+
+// FilterOperation represents a filter operation.
 type FilterOperation struct {
 	predicate expr.Expr
 }
@@ -71,44 +139,7 @@ func (f *FilterOperation) Apply(df *DataFrame) (*DataFrame, error) {
 }
 
 func (f *FilterOperation) applyFilterMask(df *DataFrame, mask arrow.Array) (*DataFrame, error) {
-	boolMask, ok := mask.(*array.Boolean)
-	if !ok {
-		return nil, fmt.Errorf("filter mask must be boolean array")
-	}
-
-	// Count true values to determine result size
-	trueCount := 0
-	for i := 0; i < boolMask.Len(); i++ {
-		if !boolMask.IsNull(i) && boolMask.Value(i) {
-			trueCount++
-		}
-	}
-
-	if trueCount == 0 {
-		// Return empty DataFrame with same structure
-		return f.createEmptyDataFrame(df), nil
-	}
-
-	// Create filtered series for each column using shared allocator
-	var filteredSeries []ISeries
-	// Reuse single allocator for all series to reduce memory overhead
-	mem := memory.NewGoAllocator()
-
-	for _, colName := range df.Columns() {
-		if originalSeries, exists := df.Column(colName); exists {
-			filtered, err := f.filterSeries(originalSeries, boolMask, trueCount, mem)
-			if err != nil {
-				// Clean up any created series
-				for _, s := range filteredSeries {
-					s.Release()
-				}
-				return nil, fmt.Errorf("filtering column %s: %w", colName, err)
-			}
-			filteredSeries = append(filteredSeries, filtered)
-		}
-	}
-
-	return New(filteredSeries...), nil
+	return applyBooleanFilterMask(f, df, mask, "filter mask must be boolean array")
 }
 
 func (f *FilterOperation) createEmptyDataFrame(df *DataFrame) *DataFrame {
@@ -119,13 +150,13 @@ func (f *FilterOperation) createEmptyDataFrame(df *DataFrame) *DataFrame {
 		if originalSeries, exists := df.Column(colName); exists {
 			// Create empty series with same type
 			switch originalSeries.DataType().Name() {
-			case "utf8":
+			case dataTypeUTF8:
 				emptySeries = append(emptySeries, series.New(colName, []string{}, mem))
-			case "int64":
+			case dataTypeInt64:
 				emptySeries = append(emptySeries, series.New(colName, []int64{}, mem))
-			case "float64":
+			case dataTypeFloat64:
 				emptySeries = append(emptySeries, series.New(colName, []float64{}, mem))
-			case "bool":
+			case dataTypeBool:
 				emptySeries = append(emptySeries, series.New(colName, []bool{}, mem))
 			}
 		}
@@ -134,34 +165,45 @@ func (f *FilterOperation) createEmptyDataFrame(df *DataFrame) *DataFrame {
 	return New(emptySeries...)
 }
 
-func (f *FilterOperation) filterSeries(originalSeries ISeries, mask *array.Boolean, resultSize int, mem memory.Allocator) (ISeries, error) {
+func (f *FilterOperation) filterSeries(
+	originalSeries ISeries,
+	mask *array.Boolean,
+	resultSize int,
+	mem memory.Allocator,
+) (ISeries, error) {
 	name := originalSeries.Name()
 
 	switch originalSeries.DataType().Name() {
-	case "utf8":
+	case dataTypeUTF8:
 		return f.filterStringSeries(originalSeries, mask, resultSize, name, mem)
-	case "int64":
+	case dataTypeInt64:
 		return f.filterInt64Series(originalSeries, mask, resultSize, name, mem)
-	case "float64":
+	case dataTypeFloat64:
 		return f.filterFloat64Series(originalSeries, mask, resultSize, name, mem)
-	case "bool":
+	case dataTypeBool:
 		return f.filterBoolSeries(originalSeries, mask, resultSize, name, mem)
 	default:
 		return nil, fmt.Errorf("unsupported series type for filtering: %s", originalSeries.DataType().Name())
 	}
 }
 
-func (f *FilterOperation) filterStringSeries(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, mem memory.Allocator) (ISeries, error) {
+func (f *FilterOperation) filterStringSeries(
+	originalSeries ISeries,
+	mask *array.Boolean,
+	resultSize int,
+	name string,
+	mem memory.Allocator,
+) (ISeries, error) {
 	originalArray := originalSeries.Array()
 	defer originalArray.Release()
 
 	stringArray, ok := originalArray.(*array.String)
 	if !ok {
-		return nil, fmt.Errorf("expected string array")
+		return nil, errors.New("expected string array")
 	}
 
 	filteredValues := make([]string, 0, resultSize)
-	for i := 0; i < mask.Len(); i++ {
+	for i := range mask.Len() {
 		if !mask.IsNull(i) && mask.Value(i) {
 			if !stringArray.IsNull(i) {
 				filteredValues = append(filteredValues, stringArray.Value(i))
@@ -172,17 +214,23 @@ func (f *FilterOperation) filterStringSeries(originalSeries ISeries, mask *array
 	return series.New(name, filteredValues, mem), nil
 }
 
-func (f *FilterOperation) filterInt64Series(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, mem memory.Allocator) (ISeries, error) {
+func (f *FilterOperation) filterInt64Series(
+	originalSeries ISeries,
+	mask *array.Boolean,
+	resultSize int,
+	name string,
+	mem memory.Allocator,
+) (ISeries, error) {
 	originalArray := originalSeries.Array()
 	defer originalArray.Release()
 
 	intArray, ok := originalArray.(*array.Int64)
 	if !ok {
-		return nil, fmt.Errorf("expected int64 array")
+		return nil, errors.New("expected int64 array")
 	}
 
 	filteredValues := make([]int64, 0, resultSize)
-	for i := 0; i < mask.Len(); i++ {
+	for i := range mask.Len() {
 		if !mask.IsNull(i) && mask.Value(i) {
 			if !intArray.IsNull(i) {
 				filteredValues = append(filteredValues, intArray.Value(i))
@@ -193,17 +241,23 @@ func (f *FilterOperation) filterInt64Series(originalSeries ISeries, mask *array.
 	return series.New(name, filteredValues, mem), nil
 }
 
-func (f *FilterOperation) filterFloat64Series(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, mem memory.Allocator) (ISeries, error) {
+func (f *FilterOperation) filterFloat64Series(
+	originalSeries ISeries,
+	mask *array.Boolean,
+	resultSize int,
+	name string,
+	mem memory.Allocator,
+) (ISeries, error) {
 	originalArray := originalSeries.Array()
 	defer originalArray.Release()
 
 	floatArray, ok := originalArray.(*array.Float64)
 	if !ok {
-		return nil, fmt.Errorf("expected float64 array")
+		return nil, errors.New("expected float64 array")
 	}
 
 	filteredValues := make([]float64, 0, resultSize)
-	for i := 0; i < mask.Len(); i++ {
+	for i := range mask.Len() {
 		if !mask.IsNull(i) && mask.Value(i) {
 			if !floatArray.IsNull(i) {
 				filteredValues = append(filteredValues, floatArray.Value(i))
@@ -214,17 +268,23 @@ func (f *FilterOperation) filterFloat64Series(originalSeries ISeries, mask *arra
 	return series.New(name, filteredValues, mem), nil
 }
 
-func (f *FilterOperation) filterBoolSeries(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, mem memory.Allocator) (ISeries, error) {
+func (f *FilterOperation) filterBoolSeries(
+	originalSeries ISeries,
+	mask *array.Boolean,
+	resultSize int,
+	name string,
+	mem memory.Allocator,
+) (ISeries, error) {
 	originalArray := originalSeries.Array()
 	defer originalArray.Release()
 
 	boolArray, ok := originalArray.(*array.Boolean)
 	if !ok {
-		return nil, fmt.Errorf("expected boolean array")
+		return nil, errors.New("expected boolean array")
 	}
 
 	filteredValues := make([]bool, 0, resultSize)
-	for i := 0; i < mask.Len(); i++ {
+	for i := range mask.Len() {
 		if !mask.IsNull(i) && mask.Value(i) {
 			if !boolArray.IsNull(i) {
 				filteredValues = append(filteredValues, boolArray.Value(i))
@@ -239,7 +299,7 @@ func (f *FilterOperation) String() string {
 	return fmt.Sprintf("filter(%s)", f.predicate.String())
 }
 
-// SelectOperation represents a column selection operation
+// SelectOperation represents a column selection operation.
 type SelectOperation struct {
 	columns []string
 }
@@ -252,7 +312,7 @@ func (s *SelectOperation) String() string {
 	return fmt.Sprintf("select(%v)", s.columns)
 }
 
-// WithColumnOperation represents adding/modifying a column
+// WithColumnOperation represents adding/modifying a column.
 type WithColumnOperation struct {
 	name string
 	expr expr.Expr
@@ -299,14 +359,14 @@ func (w *WithColumnOperation) Apply(df *DataFrame) (*DataFrame, error) {
 			continue
 		}
 		if originalSeries, exists := df.Column(colName); exists {
-			copied, err := w.copySeries(originalSeries, mem)
-			if err != nil {
+			copied, copyErr := w.copySeries(originalSeries, mem)
+			if copyErr != nil {
 				// Clean up
 				newSeries.Release()
 				for _, s := range allSeries {
 					s.Release()
 				}
-				return nil, fmt.Errorf("copying series %s: %w", colName, err)
+				return nil, fmt.Errorf("copying series %s: %w", colName, copyErr)
 			}
 			allSeries = append(allSeries, copied)
 		}
@@ -320,45 +380,16 @@ func (w *WithColumnOperation) Apply(df *DataFrame) (*DataFrame, error) {
 
 func (w *WithColumnOperation) createSeriesFromArray(name string, arr arrow.Array) (ISeries, error) {
 	mem := memory.NewGoAllocator()
-	_ = mem // TODO: Used in series creation but flagged as unused due to build issues
 
 	switch typedArr := arr.(type) {
 	case *array.String:
-		values := make([]string, typedArr.Len())
-		for i := 0; i < typedArr.Len(); i++ {
-			if !typedArr.IsNull(i) {
-				values[i] = typedArr.Value(i)
-			}
-		}
-		return series.New(name, values, mem), nil
-
+		return w.createStringSeriesFromArray(name, typedArr, mem)
 	case *array.Int64:
-		values := make([]int64, typedArr.Len())
-		for i := 0; i < typedArr.Len(); i++ {
-			if !typedArr.IsNull(i) {
-				values[i] = typedArr.Value(i)
-			}
-		}
-		return series.New(name, values, mem), nil
-
+		return w.createInt64SeriesFromArray(name, typedArr, mem)
 	case *array.Float64:
-		values := make([]float64, typedArr.Len())
-		for i := 0; i < typedArr.Len(); i++ {
-			if !typedArr.IsNull(i) {
-				values[i] = typedArr.Value(i)
-			}
-		}
-		return series.New(name, values, mem), nil
-
+		return w.createFloat64SeriesFromArray(name, typedArr, mem)
 	case *array.Boolean:
-		values := make([]bool, typedArr.Len())
-		for i := 0; i < typedArr.Len(); i++ {
-			if !typedArr.IsNull(i) {
-				values[i] = typedArr.Value(i)
-			}
-		}
-		return series.New(name, values, mem), nil
-
+		return w.createBoolSeriesFromArray(name, typedArr, mem)
 	default:
 		return nil, fmt.Errorf("unsupported array type for series creation: %T", arr)
 	}
@@ -370,56 +401,152 @@ func (w *WithColumnOperation) copySeries(originalSeries ISeries, mem memory.Allo
 	defer originalArray.Release()
 
 	switch originalSeries.DataType().Name() {
-	case "utf8":
-		stringArray := originalArray.(*array.String)
-		values := make([]string, stringArray.Len())
-		for i := 0; i < stringArray.Len(); i++ {
-			if !stringArray.IsNull(i) {
-				values[i] = stringArray.Value(i)
-			}
-		}
-		return series.New(name, values, mem), nil
-
-	case "int64":
-		intArray := originalArray.(*array.Int64)
-		values := make([]int64, intArray.Len())
-		for i := 0; i < intArray.Len(); i++ {
-			if !intArray.IsNull(i) {
-				values[i] = intArray.Value(i)
-			}
-		}
-		return series.New(name, values, mem), nil
-
-	case "float64":
-		floatArray := originalArray.(*array.Float64)
-		values := make([]float64, floatArray.Len())
-		for i := 0; i < floatArray.Len(); i++ {
-			if !floatArray.IsNull(i) {
-				values[i] = floatArray.Value(i)
-			}
-		}
-		return series.New(name, values, mem), nil
-
-	case "bool":
-		boolArray := originalArray.(*array.Boolean)
-		values := make([]bool, boolArray.Len())
-		for i := 0; i < boolArray.Len(); i++ {
-			if !boolArray.IsNull(i) {
-				values[i] = boolArray.Value(i)
-			}
-		}
-		return series.New(name, values, mem), nil
-
+	case dataTypeUTF8:
+		return w.copyStringArray(name, originalArray, mem)
+	case dataTypeInt64:
+		return w.copyInt64Array(name, originalArray, mem)
+	case dataTypeFloat64:
+		return w.copyFloat64Array(name, originalArray, mem)
+	case dataTypeBool:
+		return w.copyBoolArray(name, originalArray, mem)
 	default:
 		return nil, fmt.Errorf("unsupported series type for copying: %s", originalSeries.DataType().Name())
 	}
+}
+
+func (w *WithColumnOperation) copyStringArray(
+	name string,
+	originalArray arrow.Array,
+	mem memory.Allocator,
+) (ISeries, error) {
+	stringArray, ok := originalArray.(*array.String)
+	if !ok {
+		return nil, fmt.Errorf("expected string array, got %T", originalArray)
+	}
+	values := make([]string, stringArray.Len())
+	for i := range stringArray.Len() {
+		if !stringArray.IsNull(i) {
+			values[i] = stringArray.Value(i)
+		}
+	}
+	return series.New(name, values, mem), nil
+}
+
+func (w *WithColumnOperation) copyInt64Array(
+	name string,
+	originalArray arrow.Array,
+	mem memory.Allocator,
+) (ISeries, error) {
+	intArray, ok := originalArray.(*array.Int64)
+	if !ok {
+		return nil, fmt.Errorf("expected int64 array, got %T", originalArray)
+	}
+	values := make([]int64, intArray.Len())
+	for i := range intArray.Len() {
+		if !intArray.IsNull(i) {
+			values[i] = intArray.Value(i)
+		}
+	}
+	return series.New(name, values, mem), nil
+}
+
+func (w *WithColumnOperation) copyFloat64Array(
+	name string,
+	originalArray arrow.Array,
+	mem memory.Allocator,
+) (ISeries, error) {
+	floatArray, ok := originalArray.(*array.Float64)
+	if !ok {
+		return nil, fmt.Errorf("expected float64 array, got %T", originalArray)
+	}
+	values := make([]float64, floatArray.Len())
+	for i := range floatArray.Len() {
+		if !floatArray.IsNull(i) {
+			values[i] = floatArray.Value(i)
+		}
+	}
+	return series.New(name, values, mem), nil
+}
+
+func (w *WithColumnOperation) copyBoolArray(
+	name string,
+	originalArray arrow.Array,
+	mem memory.Allocator,
+) (ISeries, error) {
+	boolArray, ok := originalArray.(*array.Boolean)
+	if !ok {
+		return nil, fmt.Errorf("expected boolean array, got %T", originalArray)
+	}
+	values := make([]bool, boolArray.Len())
+	for i := range boolArray.Len() {
+		if !boolArray.IsNull(i) {
+			values[i] = boolArray.Value(i)
+		}
+	}
+	return series.New(name, values, mem), nil
+}
+
+func (w *WithColumnOperation) createStringSeriesFromArray(
+	name string,
+	arr *array.String,
+	mem memory.Allocator,
+) (ISeries, error) {
+	values := make([]string, arr.Len())
+	for i := range arr.Len() {
+		if !arr.IsNull(i) {
+			values[i] = arr.Value(i)
+		}
+	}
+	return series.New(name, values, mem), nil
+}
+
+func (w *WithColumnOperation) createInt64SeriesFromArray(
+	name string,
+	arr *array.Int64,
+	mem memory.Allocator,
+) (ISeries, error) {
+	values := make([]int64, arr.Len())
+	for i := range arr.Len() {
+		if !arr.IsNull(i) {
+			values[i] = arr.Value(i)
+		}
+	}
+	return series.New(name, values, mem), nil
+}
+
+func (w *WithColumnOperation) createFloat64SeriesFromArray(
+	name string,
+	arr *array.Float64,
+	mem memory.Allocator,
+) (ISeries, error) {
+	values := make([]float64, arr.Len())
+	for i := range arr.Len() {
+		if !arr.IsNull(i) {
+			values[i] = arr.Value(i)
+		}
+	}
+	return series.New(name, values, mem), nil
+}
+
+func (w *WithColumnOperation) createBoolSeriesFromArray(
+	name string,
+	arr *array.Boolean,
+	mem memory.Allocator,
+) (ISeries, error) {
+	values := make([]bool, arr.Len())
+	for i := range arr.Len() {
+		if !arr.IsNull(i) {
+			values[i] = arr.Value(i)
+		}
+	}
+	return series.New(name, values, mem), nil
 }
 
 func (w *WithColumnOperation) String() string {
 	return fmt.Sprintf("with_column(%s, %s)", w.name, w.expr.String())
 }
 
-// SortOperation represents a sort operation
+// SortOperation represents a sort operation.
 type SortOperation struct {
 	columns   []string
 	ascending []bool
@@ -441,14 +568,14 @@ func (s *SortOperation) String() string {
 	return fmt.Sprintf("sort_by(%s)", strings.Join(directions, ", "))
 }
 
-// GroupByOperation represents a group by and aggregation operation
+// GroupByOperation represents a group by and aggregation operation.
 type GroupByOperation struct {
 	groupByCols     []string
 	aggregations    []*expr.AggregationExpr
 	havingPredicate expr.Expr // optional HAVING predicate (can be nil)
 }
 
-// NewGroupByOperation creates a new GroupByOperation without HAVING predicate (for backward compatibility)
+// NewGroupByOperation creates a new GroupByOperation without HAVING predicate (for backward compatibility).
 func NewGroupByOperation(groupByCols []string, aggregations []*expr.AggregationExpr) *GroupByOperation {
 	return &GroupByOperation{
 		groupByCols:     groupByCols,
@@ -457,8 +584,12 @@ func NewGroupByOperation(groupByCols []string, aggregations []*expr.AggregationE
 	}
 }
 
-// NewGroupByOperationWithHaving creates a new GroupByOperation with optional HAVING predicate
-func NewGroupByOperationWithHaving(groupByCols []string, aggregations []*expr.AggregationExpr, havingPredicate expr.Expr) *GroupByOperation {
+// NewGroupByOperationWithHaving creates a new GroupByOperation with optional HAVING predicate.
+func NewGroupByOperationWithHaving(
+	groupByCols []string,
+	aggregations []*expr.AggregationExpr,
+	havingPredicate expr.Expr,
+) *GroupByOperation {
 	return &GroupByOperation{
 		groupByCols:     groupByCols,
 		aggregations:    aggregations,
@@ -513,7 +644,7 @@ func (g *GroupByOperation) Apply(df *DataFrame) (*DataFrame, error) {
 	return g.applyHavingFilterMask(aggregatedResult, mask)
 }
 
-// validateHavingPredicate ensures the predicate is appropriate for GroupContext
+// validateHavingPredicate ensures the predicate is appropriate for GroupContext.
 func (g *GroupByOperation) validateHavingPredicate() error {
 	if g.havingPredicate == nil {
 		return nil
@@ -526,51 +657,12 @@ func (g *GroupByOperation) validateHavingPredicate() error {
 	return nil
 }
 
-// applyHavingFilterMask filters the aggregated DataFrame based on the boolean mask
+// applyHavingFilterMask filters the aggregated DataFrame based on the boolean mask.
 func (g *GroupByOperation) applyHavingFilterMask(df *DataFrame, mask arrow.Array) (*DataFrame, error) {
-	boolMask, ok := mask.(*array.Boolean)
-	if !ok {
-		return nil, fmt.Errorf("HAVING filter mask must be boolean array")
-	}
-
-	// Count true values to determine result size
-	trueCount := 0
-	for i := 0; i < boolMask.Len(); i++ {
-		if !boolMask.IsNull(i) && boolMask.Value(i) {
-			trueCount++
-		}
-	}
-
-	if trueCount == 0 {
-		// Return empty DataFrame with same structure
-		return g.createEmptyDataFrame(df), nil
-	}
-
-	// Create filtered series for each column using shared allocator
-	var filteredSeries []ISeries
-	// Reuse allocator to reduce memory overhead
-	mem := memory.NewGoAllocator()
-	// Note: Arrow's Go allocator doesn't require explicit cleanup,
-	// but keeping this pattern for consistency with other resource management
-
-	for _, colName := range df.Columns() {
-		if originalSeries, exists := df.Column(colName); exists {
-			filtered, err := g.filterSeries(originalSeries, boolMask, trueCount, mem)
-			if err != nil {
-				// Clean up any created series
-				for _, s := range filteredSeries {
-					s.Release()
-				}
-				return nil, fmt.Errorf("filtering column %s: %w", colName, err)
-			}
-			filteredSeries = append(filteredSeries, filtered)
-		}
-	}
-
-	return New(filteredSeries...), nil
+	return applyBooleanFilterMask(g, df, mask, "HAVING filter mask must be boolean array")
 }
 
-// createEmptyDataFrame creates an empty DataFrame with the same schema
+// createEmptyDataFrame creates an empty DataFrame with the same schema.
 func (g *GroupByOperation) createEmptyDataFrame(df *DataFrame) *DataFrame {
 	mem := memory.NewGoAllocator()
 	var emptySeries []ISeries
@@ -579,13 +671,13 @@ func (g *GroupByOperation) createEmptyDataFrame(df *DataFrame) *DataFrame {
 		if originalSeries, exists := df.Column(colName); exists {
 			// Create empty series with same type
 			switch originalSeries.DataType().Name() {
-			case "utf8":
+			case dataTypeUTF8:
 				emptySeries = append(emptySeries, series.New(colName, []string{}, mem))
-			case "int64":
+			case dataTypeInt64:
 				emptySeries = append(emptySeries, series.New(colName, []int64{}, mem))
-			case "float64":
+			case dataTypeFloat64:
 				emptySeries = append(emptySeries, series.New(colName, []float64{}, mem))
-			case "bool":
+			case dataTypeBool:
 				emptySeries = append(emptySeries, series.New(colName, []bool{}, mem))
 			default:
 				// For unsupported types, create an empty string series as fallback
@@ -598,36 +690,47 @@ func (g *GroupByOperation) createEmptyDataFrame(df *DataFrame) *DataFrame {
 	return New(emptySeries...)
 }
 
-// filterSeries filters a single series based on the boolean mask
-func (g *GroupByOperation) filterSeries(originalSeries ISeries, mask *array.Boolean, resultSize int, mem memory.Allocator) (ISeries, error) {
+// filterSeries filters a single series based on the boolean mask.
+func (g *GroupByOperation) filterSeries(
+	originalSeries ISeries,
+	mask *array.Boolean,
+	resultSize int,
+	mem memory.Allocator,
+) (ISeries, error) {
 	name := originalSeries.Name()
 
 	switch originalSeries.DataType().Name() {
-	case "utf8":
+	case dataTypeUTF8:
 		return g.filterStringSeries(originalSeries, mask, resultSize, name, mem)
-	case "int64":
+	case dataTypeInt64:
 		return g.filterInt64Series(originalSeries, mask, resultSize, name, mem)
-	case "float64":
+	case dataTypeFloat64:
 		return g.filterFloat64Series(originalSeries, mask, resultSize, name, mem)
-	case "bool":
+	case dataTypeBool:
 		return g.filterBoolSeries(originalSeries, mask, resultSize, name, mem)
 	default:
 		return nil, fmt.Errorf("unsupported series type for HAVING filtering: %s", originalSeries.DataType().Name())
 	}
 }
 
-// filterStringSeries filters a string series
-func (g *GroupByOperation) filterStringSeries(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, mem memory.Allocator) (ISeries, error) {
+// filterStringSeries filters a string series.
+func (g *GroupByOperation) filterStringSeries(
+	originalSeries ISeries,
+	mask *array.Boolean,
+	resultSize int,
+	name string,
+	mem memory.Allocator,
+) (ISeries, error) {
 	originalArray := originalSeries.Array()
 	// Note: Array from series.Array() is managed by the parent series
 
 	stringArray, ok := originalArray.(*array.String)
 	if !ok {
-		return nil, fmt.Errorf("expected string array")
+		return nil, errors.New("expected string array")
 	}
 
 	filteredValues := make([]string, 0, resultSize)
-	for i := 0; i < mask.Len(); i++ {
+	for i := range mask.Len() {
 		if !mask.IsNull(i) && mask.Value(i) {
 			if !stringArray.IsNull(i) {
 				filteredValues = append(filteredValues, stringArray.Value(i))
@@ -641,18 +744,24 @@ func (g *GroupByOperation) filterStringSeries(originalSeries ISeries, mask *arra
 	return series.New(name, filteredValues, mem), nil
 }
 
-// filterInt64Series filters an int64 series
-func (g *GroupByOperation) filterInt64Series(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, mem memory.Allocator) (ISeries, error) {
+// filterInt64Series filters an int64 series.
+func (g *GroupByOperation) filterInt64Series(
+	originalSeries ISeries,
+	mask *array.Boolean,
+	resultSize int,
+	name string,
+	mem memory.Allocator,
+) (ISeries, error) {
 	originalArray := originalSeries.Array()
 	// Note: Array from series.Array() is managed by the parent series
 
 	intArray, ok := originalArray.(*array.Int64)
 	if !ok {
-		return nil, fmt.Errorf("expected int64 array")
+		return nil, errors.New("expected int64 array")
 	}
 
 	filteredValues := make([]int64, 0, resultSize)
-	for i := 0; i < mask.Len(); i++ {
+	for i := range mask.Len() {
 		if !mask.IsNull(i) && mask.Value(i) {
 			if !intArray.IsNull(i) {
 				filteredValues = append(filteredValues, intArray.Value(i))
@@ -666,18 +775,24 @@ func (g *GroupByOperation) filterInt64Series(originalSeries ISeries, mask *array
 	return series.New(name, filteredValues, mem), nil
 }
 
-// filterFloat64Series filters a float64 series
-func (g *GroupByOperation) filterFloat64Series(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, mem memory.Allocator) (ISeries, error) {
+// filterFloat64Series filters a float64 series.
+func (g *GroupByOperation) filterFloat64Series(
+	originalSeries ISeries,
+	mask *array.Boolean,
+	resultSize int,
+	name string,
+	mem memory.Allocator,
+) (ISeries, error) {
 	originalArray := originalSeries.Array()
 	// Note: Array from series.Array() is managed by the parent series
 
 	floatArray, ok := originalArray.(*array.Float64)
 	if !ok {
-		return nil, fmt.Errorf("expected float64 array")
+		return nil, errors.New("expected float64 array")
 	}
 
 	filteredValues := make([]float64, 0, resultSize)
-	for i := 0; i < mask.Len(); i++ {
+	for i := range mask.Len() {
 		if !mask.IsNull(i) && mask.Value(i) {
 			if !floatArray.IsNull(i) {
 				filteredValues = append(filteredValues, floatArray.Value(i))
@@ -691,18 +806,24 @@ func (g *GroupByOperation) filterFloat64Series(originalSeries ISeries, mask *arr
 	return series.New(name, filteredValues, mem), nil
 }
 
-// filterBoolSeries filters a boolean series
-func (g *GroupByOperation) filterBoolSeries(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, mem memory.Allocator) (ISeries, error) {
+// filterBoolSeries filters a boolean series.
+func (g *GroupByOperation) filterBoolSeries(
+	originalSeries ISeries,
+	mask *array.Boolean,
+	resultSize int,
+	name string,
+	mem memory.Allocator,
+) (ISeries, error) {
 	originalArray := originalSeries.Array()
 	// Note: Array from series.Array() is managed by the parent series
 
 	boolArray, ok := originalArray.(*array.Boolean)
 	if !ok {
-		return nil, fmt.Errorf("expected boolean array")
+		return nil, errors.New("expected boolean array")
 	}
 
 	filteredValues := make([]bool, 0, resultSize)
-	for i := 0; i < mask.Len(); i++ {
+	for i := range mask.Len() {
 		if !mask.IsNull(i) && mask.Value(i) {
 			if !boolArray.IsNull(i) {
 				filteredValues = append(filteredValues, boolArray.Value(i))
@@ -728,17 +849,17 @@ func (g *GroupByOperation) String() string {
 	return result
 }
 
-// HavingOperation represents a HAVING clause that filters grouped data based on aggregation predicates
+// HavingOperation represents a HAVING clause that filters grouped data based on aggregation predicates.
 type HavingOperation struct {
 	predicate expr.Expr
 }
 
-// NewHavingOperation creates a new HavingOperation with the given predicate
+// NewHavingOperation creates a new HavingOperation with the given predicate.
 func NewHavingOperation(predicate expr.Expr) *HavingOperation {
 	return &HavingOperation{predicate: predicate}
 }
 
-// Apply filters grouped DataFrame based on the aggregation predicate
+// Apply filters grouped DataFrame based on the aggregation predicate.
 func (h *HavingOperation) Apply(df *DataFrame) (*DataFrame, error) {
 	// The HAVING operation expects to receive aggregated grouped data
 	// It evaluates the predicate against each group's aggregated values
@@ -775,7 +896,7 @@ func (h *HavingOperation) Apply(df *DataFrame) (*DataFrame, error) {
 	return h.applyFilterMask(df, mask)
 }
 
-// validatePredicate ensures the predicate contains aggregation functions
+// validatePredicate ensures the predicate contains aggregation functions.
 func (h *HavingOperation) validatePredicate() error {
 	// Validate that the expression is appropriate for GroupContext
 	if err := expr.ValidateExpressionContext(h.predicate, expr.GroupContext); err != nil {
@@ -784,48 +905,12 @@ func (h *HavingOperation) validatePredicate() error {
 	return nil
 }
 
-// applyFilterMask filters the DataFrame based on the boolean mask
+// applyFilterMask filters the DataFrame based on the boolean mask.
 func (h *HavingOperation) applyFilterMask(df *DataFrame, mask arrow.Array) (*DataFrame, error) {
-	boolMask, ok := mask.(*array.Boolean)
-	if !ok {
-		return nil, fmt.Errorf("HAVING filter mask must be boolean array")
-	}
-
-	// Count true values to determine result size
-	trueCount := 0
-	for i := 0; i < boolMask.Len(); i++ {
-		if !boolMask.IsNull(i) && boolMask.Value(i) {
-			trueCount++
-		}
-	}
-
-	if trueCount == 0 {
-		// Return empty DataFrame with same structure
-		return h.createEmptyDataFrame(df), nil
-	}
-
-	// Create filtered series for each column
-	var filteredSeries []ISeries
-	mem := memory.NewGoAllocator()
-
-	for _, colName := range df.Columns() {
-		if originalSeries, exists := df.Column(colName); exists {
-			filtered, err := h.filterSeries(originalSeries, boolMask, trueCount, mem)
-			if err != nil {
-				// Clean up any created series
-				for _, s := range filteredSeries {
-					s.Release()
-				}
-				return nil, fmt.Errorf("filtering column %s: %w", colName, err)
-			}
-			filteredSeries = append(filteredSeries, filtered)
-		}
-	}
-
-	return New(filteredSeries...), nil
+	return applyBooleanFilterMask(h, df, mask, "HAVING filter mask must be boolean array")
 }
 
-// createEmptyDataFrame creates an empty DataFrame with the same schema
+// createEmptyDataFrame creates an empty DataFrame with the same schema.
 func (h *HavingOperation) createEmptyDataFrame(df *DataFrame) *DataFrame {
 	mem := memory.NewGoAllocator()
 	var emptySeries []ISeries
@@ -834,13 +919,13 @@ func (h *HavingOperation) createEmptyDataFrame(df *DataFrame) *DataFrame {
 		if originalSeries, exists := df.Column(colName); exists {
 			// Create empty series with same type
 			switch originalSeries.DataType().Name() {
-			case "utf8":
+			case dataTypeUTF8:
 				emptySeries = append(emptySeries, series.New(colName, []string{}, mem))
-			case "int64":
+			case dataTypeInt64:
 				emptySeries = append(emptySeries, series.New(colName, []int64{}, mem))
-			case "float64":
+			case dataTypeFloat64:
 				emptySeries = append(emptySeries, series.New(colName, []float64{}, mem))
-			case "bool":
+			case dataTypeBool:
 				emptySeries = append(emptySeries, series.New(colName, []bool{}, mem))
 			}
 		}
@@ -849,36 +934,47 @@ func (h *HavingOperation) createEmptyDataFrame(df *DataFrame) *DataFrame {
 	return New(emptySeries...)
 }
 
-// filterSeries filters a single series based on the boolean mask
-func (h *HavingOperation) filterSeries(originalSeries ISeries, mask *array.Boolean, resultSize int, mem memory.Allocator) (ISeries, error) {
+// filterSeries filters a single series based on the boolean mask.
+func (h *HavingOperation) filterSeries(
+	originalSeries ISeries,
+	mask *array.Boolean,
+	resultSize int,
+	mem memory.Allocator,
+) (ISeries, error) {
 	name := originalSeries.Name()
 
 	switch originalSeries.DataType().Name() {
-	case "utf8":
+	case dataTypeUTF8:
 		return h.filterStringSeries(originalSeries, mask, resultSize, name, mem)
-	case "int64":
+	case dataTypeInt64:
 		return h.filterInt64Series(originalSeries, mask, resultSize, name, mem)
-	case "float64":
+	case dataTypeFloat64:
 		return h.filterFloat64Series(originalSeries, mask, resultSize, name, mem)
-	case "bool":
+	case dataTypeBool:
 		return h.filterBoolSeries(originalSeries, mask, resultSize, name, mem)
 	default:
 		return nil, fmt.Errorf("unsupported series type for HAVING filtering: %s", originalSeries.DataType().Name())
 	}
 }
 
-// filterStringSeries filters a string series
-func (h *HavingOperation) filterStringSeries(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, mem memory.Allocator) (ISeries, error) {
+// filterStringSeries filters a string series.
+func (h *HavingOperation) filterStringSeries(
+	originalSeries ISeries,
+	mask *array.Boolean,
+	resultSize int,
+	name string,
+	mem memory.Allocator,
+) (ISeries, error) {
 	originalArray := originalSeries.Array()
 	defer originalArray.Release()
 
 	stringArray, ok := originalArray.(*array.String)
 	if !ok {
-		return nil, fmt.Errorf("expected string array")
+		return nil, errors.New("expected string array")
 	}
 
 	filteredValues := make([]string, 0, resultSize)
-	for i := 0; i < mask.Len(); i++ {
+	for i := range mask.Len() {
 		if !mask.IsNull(i) && mask.Value(i) {
 			if !stringArray.IsNull(i) {
 				filteredValues = append(filteredValues, stringArray.Value(i))
@@ -889,18 +985,24 @@ func (h *HavingOperation) filterStringSeries(originalSeries ISeries, mask *array
 	return series.New(name, filteredValues, mem), nil
 }
 
-// filterInt64Series filters an int64 series
-func (h *HavingOperation) filterInt64Series(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, mem memory.Allocator) (ISeries, error) {
+// filterInt64Series filters an int64 series.
+func (h *HavingOperation) filterInt64Series(
+	originalSeries ISeries,
+	mask *array.Boolean,
+	resultSize int,
+	name string,
+	mem memory.Allocator,
+) (ISeries, error) {
 	originalArray := originalSeries.Array()
 	defer originalArray.Release()
 
 	intArray, ok := originalArray.(*array.Int64)
 	if !ok {
-		return nil, fmt.Errorf("expected int64 array")
+		return nil, errors.New("expected int64 array")
 	}
 
 	filteredValues := make([]int64, 0, resultSize)
-	for i := 0; i < mask.Len(); i++ {
+	for i := range mask.Len() {
 		if !mask.IsNull(i) && mask.Value(i) {
 			if !intArray.IsNull(i) {
 				filteredValues = append(filteredValues, intArray.Value(i))
@@ -911,18 +1013,24 @@ func (h *HavingOperation) filterInt64Series(originalSeries ISeries, mask *array.
 	return series.New(name, filteredValues, mem), nil
 }
 
-// filterFloat64Series filters a float64 series
-func (h *HavingOperation) filterFloat64Series(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, mem memory.Allocator) (ISeries, error) {
+// filterFloat64Series filters a float64 series.
+func (h *HavingOperation) filterFloat64Series(
+	originalSeries ISeries,
+	mask *array.Boolean,
+	resultSize int,
+	name string,
+	mem memory.Allocator,
+) (ISeries, error) {
 	originalArray := originalSeries.Array()
 	defer originalArray.Release()
 
 	floatArray, ok := originalArray.(*array.Float64)
 	if !ok {
-		return nil, fmt.Errorf("expected float64 array")
+		return nil, errors.New("expected float64 array")
 	}
 
 	filteredValues := make([]float64, 0, resultSize)
-	for i := 0; i < mask.Len(); i++ {
+	for i := range mask.Len() {
 		if !mask.IsNull(i) && mask.Value(i) {
 			if !floatArray.IsNull(i) {
 				filteredValues = append(filteredValues, floatArray.Value(i))
@@ -933,18 +1041,24 @@ func (h *HavingOperation) filterFloat64Series(originalSeries ISeries, mask *arra
 	return series.New(name, filteredValues, mem), nil
 }
 
-// filterBoolSeries filters a boolean series
-func (h *HavingOperation) filterBoolSeries(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, mem memory.Allocator) (ISeries, error) {
+// filterBoolSeries filters a boolean series.
+func (h *HavingOperation) filterBoolSeries(
+	originalSeries ISeries,
+	mask *array.Boolean,
+	resultSize int,
+	name string,
+	mem memory.Allocator,
+) (ISeries, error) {
 	originalArray := originalSeries.Array()
 	defer originalArray.Release()
 
 	boolArray, ok := originalArray.(*array.Boolean)
 	if !ok {
-		return nil, fmt.Errorf("expected boolean array")
+		return nil, errors.New("expected boolean array")
 	}
 
 	filteredValues := make([]bool, 0, resultSize)
-	for i := 0; i < mask.Len(); i++ {
+	for i := range mask.Len() {
 		if !mask.IsNull(i) && mask.Value(i) {
 			if !boolArray.IsNull(i) {
 				filteredValues = append(filteredValues, boolArray.Value(i))
@@ -955,17 +1069,17 @@ func (h *HavingOperation) filterBoolSeries(originalSeries ISeries, mask *array.B
 	return series.New(name, filteredValues, mem), nil
 }
 
-// String returns a string representation of the HAVING operation
+// String returns a string representation of the HAVING operation.
 func (h *HavingOperation) String() string {
 	return fmt.Sprintf("Having(%s)", h.predicate.String())
 }
 
-// Name returns the operation name for debugging
+// Name returns the operation name for debugging.
 func (h *HavingOperation) Name() string {
 	return "Having"
 }
 
-// GroupByHavingOperation combines GroupBy, aggregation, and Having filtering
+// GroupByHavingOperation combines GroupBy, aggregation, and Having filtering.
 type GroupByHavingOperation struct {
 	groupByCols []string
 	predicate   expr.Expr
@@ -979,7 +1093,7 @@ type GroupByHavingOperation struct {
 	mu sync.Mutex
 }
 
-// Apply performs groupby, extracts aggregations from predicate, performs them, and filters
+// Apply performs groupby, extracts aggregations from predicate, performs them, and filters.
 func (gh *GroupByHavingOperation) Apply(df *DataFrame) (*DataFrame, error) {
 	if len(gh.groupByCols) == 0 {
 		return New(), nil
@@ -1001,7 +1115,7 @@ func (gh *GroupByHavingOperation) Apply(df *DataFrame) (*DataFrame, error) {
 		gh.cachedAggregations = gh.extractAggregations(gh.predicate)
 		if len(gh.cachedAggregations) == 0 {
 			gh.mu.Unlock()
-			return nil, fmt.Errorf("HAVING clause must contain aggregation functions")
+			return nil, errors.New("HAVING clause must contain aggregation functions")
 		}
 	}
 
@@ -1018,14 +1132,14 @@ func (gh *GroupByHavingOperation) Apply(df *DataFrame) (*DataFrame, error) {
 	return gh.applyHavingFilterOptimized(aggregatedDF)
 }
 
-// extractAggregations extracts all aggregation expressions from the predicate
+// extractAggregations extracts all aggregation expressions from the predicate.
 func (gh *GroupByHavingOperation) extractAggregations(ex expr.Expr) []*expr.AggregationExpr {
 	var aggregations []*expr.AggregationExpr
 	gh.findAggregations(ex, &aggregations)
 	return aggregations
 }
 
-// findAggregations recursively finds all aggregation expressions
+// findAggregations recursively finds all aggregation expressions.
 func (gh *GroupByHavingOperation) findAggregations(ex expr.Expr, aggregations *[]*expr.AggregationExpr) {
 	switch e := ex.(type) {
 	case *expr.AggregationExpr:
@@ -1042,7 +1156,7 @@ func (gh *GroupByHavingOperation) findAggregations(ex expr.Expr, aggregations *[
 	}
 }
 
-// applyHavingFilterOptimized applies the having predicate with memory optimizations
+// applyHavingFilterOptimized applies the having predicate with memory optimizations.
 func (gh *GroupByHavingOperation) applyHavingFilterOptimized(df *DataFrame) (*DataFrame, error) {
 	// Reuse cached evaluator and allocator to avoid re-initialization overhead
 	gh.mu.Lock()
@@ -1086,55 +1200,23 @@ func (gh *GroupByHavingOperation) applyHavingFilterOptimized(df *DataFrame) (*Da
 //
 //nolint:unused // Used by optimized filter methods, but linter can't detect interface usage
 func (gh *GroupByHavingOperation) applyFilterMask(df *DataFrame, mask arrow.Array) (*DataFrame, error) {
-	boolMask, ok := mask.(*array.Boolean)
-	if !ok {
-		return nil, fmt.Errorf("HAVING filter mask must be boolean array")
-	}
-
-	// Count true values to determine result size
-	trueCount := 0
-	for i := 0; i < boolMask.Len(); i++ {
-		if !boolMask.IsNull(i) && boolMask.Value(i) {
-			trueCount++
-		}
-	}
-
-	if trueCount == 0 {
-		// Return empty DataFrame with same structure
-		return gh.createEmptyDataFrame(df), nil
-	}
-
-	// Create filtered series for each column
-	var filteredSeries []ISeries
-	mem := memory.NewGoAllocator()
-
-	for _, colName := range df.Columns() {
-		if originalSeries, exists := df.Column(colName); exists {
-			filtered, err := gh.filterSeries(originalSeries, boolMask, trueCount, mem)
-			if err != nil {
-				// Clean up any created series
-				for _, s := range filteredSeries {
-					s.Release()
-				}
-				return nil, fmt.Errorf("filtering column %s: %w", colName, err)
-			}
-			filteredSeries = append(filteredSeries, filtered)
-		}
-	}
-
-	return New(filteredSeries...), nil
+	return applyBooleanFilterMask(gh, df, mask, "HAVING filter mask must be boolean array")
 }
 
-// applyFilterMaskOptimizedWithAllocator applies the boolean mask with memory optimizations using provided allocator
-func (gh *GroupByHavingOperation) applyFilterMaskOptimizedWithAllocator(df *DataFrame, mask arrow.Array, allocator memory.Allocator) (*DataFrame, error) {
+// applyFilterMaskOptimizedWithAllocator applies the boolean mask with memory optimizations using provided allocator.
+func (gh *GroupByHavingOperation) applyFilterMaskOptimizedWithAllocator(
+	df *DataFrame,
+	mask arrow.Array,
+	allocator memory.Allocator,
+) (*DataFrame, error) {
 	boolMask, ok := mask.(*array.Boolean)
 	if !ok {
-		return nil, fmt.Errorf("HAVING filter mask must be boolean array")
+		return nil, errors.New("HAVING filter mask must be boolean array")
 	}
 
 	// Count true values to determine result size
 	trueCount := 0
-	for i := 0; i < boolMask.Len(); i++ {
+	for i := range boolMask.Len() {
 		if !boolMask.IsNull(i) && boolMask.Value(i) {
 			trueCount++
 		}
@@ -1167,7 +1249,7 @@ func (gh *GroupByHavingOperation) applyFilterMaskOptimizedWithAllocator(df *Data
 
 // createEmptyDataFrame creates an empty DataFrame with the same schema
 //
-//nolint:unused // Used by optimized filter methods, but linter can't detect interface usage
+
 func (gh *GroupByHavingOperation) createEmptyDataFrame(df *DataFrame) *DataFrame {
 	mem := memory.NewGoAllocator()
 	var emptySeries []ISeries
@@ -1176,13 +1258,13 @@ func (gh *GroupByHavingOperation) createEmptyDataFrame(df *DataFrame) *DataFrame
 		if originalSeries, exists := df.Column(colName); exists {
 			// Create empty series with same type
 			switch originalSeries.DataType().Name() {
-			case "utf8":
+			case dataTypeUTF8:
 				emptySeries = append(emptySeries, series.New(colName, []string{}, mem))
-			case "int64":
+			case dataTypeInt64:
 				emptySeries = append(emptySeries, series.New(colName, []int64{}, mem))
-			case "float64":
+			case dataTypeFloat64:
 				emptySeries = append(emptySeries, series.New(colName, []float64{}, mem))
-			case "bool":
+			case dataTypeBool:
 				emptySeries = append(emptySeries, series.New(colName, []bool{}, mem))
 			}
 		}
@@ -1191,21 +1273,24 @@ func (gh *GroupByHavingOperation) createEmptyDataFrame(df *DataFrame) *DataFrame
 	return New(emptySeries...)
 }
 
-// createEmptyDataFrameWithAllocator creates an empty DataFrame using provided allocator
-func (gh *GroupByHavingOperation) createEmptyDataFrameWithAllocator(df *DataFrame, allocator memory.Allocator) *DataFrame {
+// createEmptyDataFrameWithAllocator creates an empty DataFrame using provided allocator.
+func (gh *GroupByHavingOperation) createEmptyDataFrameWithAllocator(
+	df *DataFrame,
+	allocator memory.Allocator,
+) *DataFrame {
 	var emptySeries []ISeries
 
 	for _, colName := range df.Columns() {
 		if originalSeries, exists := df.Column(colName); exists {
 			// Create empty series with same type using provided allocator
 			switch originalSeries.DataType().Name() {
-			case "utf8":
+			case dataTypeUTF8:
 				emptySeries = append(emptySeries, series.New(colName, []string{}, allocator))
-			case "int64":
+			case dataTypeInt64:
 				emptySeries = append(emptySeries, series.New(colName, []int64{}, allocator))
-			case "float64":
+			case dataTypeFloat64:
 				emptySeries = append(emptySeries, series.New(colName, []float64{}, allocator))
-			case "bool":
+			case dataTypeBool:
 				emptySeries = append(emptySeries, series.New(colName, []bool{}, allocator))
 			}
 		}
@@ -1216,36 +1301,46 @@ func (gh *GroupByHavingOperation) createEmptyDataFrameWithAllocator(df *DataFram
 
 // filterSeries filters a single series based on the boolean mask
 //
-//nolint:unused // Used by optimized filter methods, but linter can't detect interface usage
-func (gh *GroupByHavingOperation) filterSeries(originalSeries ISeries, mask *array.Boolean, resultSize int, mem memory.Allocator) (ISeries, error) {
+
+func (gh *GroupByHavingOperation) filterSeries(
+	originalSeries ISeries,
+	mask *array.Boolean,
+	resultSize int,
+	mem memory.Allocator,
+) (ISeries, error) {
 	name := originalSeries.Name()
 
 	switch originalSeries.DataType().Name() {
-	case "utf8":
+	case dataTypeUTF8:
 		return gh.filterStringSeries(originalSeries, mask, resultSize, name, mem)
-	case "int64":
+	case dataTypeInt64:
 		return gh.filterInt64Series(originalSeries, mask, resultSize, name, mem)
-	case "float64":
+	case dataTypeFloat64:
 		return gh.filterFloat64Series(originalSeries, mask, resultSize, name, mem)
-	case "bool":
+	case dataTypeBool:
 		return gh.filterBoolSeries(originalSeries, mask, resultSize, name, mem)
 	default:
 		return nil, fmt.Errorf("unsupported series type for HAVING filtering: %s", originalSeries.DataType().Name())
 	}
 }
 
-// filterSeriesOptimizedWithAllocator uses type-specific methods for performance with provided allocator
-func (gh *GroupByHavingOperation) filterSeriesOptimizedWithAllocator(originalSeries ISeries, mask *array.Boolean, resultSize int, allocator memory.Allocator) (ISeries, error) {
+// filterSeriesOptimizedWithAllocator uses type-specific methods for performance with provided allocator.
+func (gh *GroupByHavingOperation) filterSeriesOptimizedWithAllocator(
+	originalSeries ISeries,
+	mask *array.Boolean,
+	resultSize int,
+	allocator memory.Allocator,
+) (ISeries, error) {
 	name := originalSeries.Name()
 
 	switch originalSeries.DataType().Name() {
-	case "utf8":
+	case dataTypeUTF8:
 		return gh.filterStringSeriesOptimizedWithAllocator(originalSeries, mask, resultSize, name, allocator)
-	case "int64":
+	case dataTypeInt64:
 		return gh.filterInt64SeriesOptimizedWithAllocator(originalSeries, mask, resultSize, name, allocator)
-	case "float64":
+	case dataTypeFloat64:
 		return gh.filterFloat64SeriesOptimizedWithAllocator(originalSeries, mask, resultSize, name, allocator)
-	case "bool":
+	case dataTypeBool:
 		return gh.filterBoolSeriesOptimizedWithAllocator(originalSeries, mask, resultSize, name, allocator)
 	default:
 		return nil, fmt.Errorf("unsupported series type for HAVING filtering: %s", originalSeries.DataType().Name())
@@ -1254,18 +1349,24 @@ func (gh *GroupByHavingOperation) filterSeriesOptimizedWithAllocator(originalSer
 
 // filterStringSeries filters a string series
 //
-//nolint:unused // Used by optimized filter methods, but linter can't detect interface usage
-func (gh *GroupByHavingOperation) filterStringSeries(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, mem memory.Allocator) (ISeries, error) {
+
+func (gh *GroupByHavingOperation) filterStringSeries(
+	originalSeries ISeries,
+	mask *array.Boolean,
+	resultSize int,
+	name string,
+	mem memory.Allocator,
+) (ISeries, error) {
 	originalArray := originalSeries.Array()
 	defer originalArray.Release()
 
 	stringArray, ok := originalArray.(*array.String)
 	if !ok {
-		return nil, fmt.Errorf("expected string array")
+		return nil, errors.New("expected string array")
 	}
 
 	filteredValues := make([]string, 0, resultSize)
-	for i := 0; i < mask.Len(); i++ {
+	for i := range mask.Len() {
 		if !mask.IsNull(i) && mask.Value(i) {
 			if !stringArray.IsNull(i) {
 				filteredValues = append(filteredValues, stringArray.Value(i))
@@ -1278,18 +1379,24 @@ func (gh *GroupByHavingOperation) filterStringSeries(originalSeries ISeries, mas
 
 // filterInt64Series filters an int64 series
 //
-//nolint:unused // Used by optimized filter methods, but linter can't detect interface usage
-func (gh *GroupByHavingOperation) filterInt64Series(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, mem memory.Allocator) (ISeries, error) {
+
+func (gh *GroupByHavingOperation) filterInt64Series(
+	originalSeries ISeries,
+	mask *array.Boolean,
+	resultSize int,
+	name string,
+	mem memory.Allocator,
+) (ISeries, error) {
 	originalArray := originalSeries.Array()
 	defer originalArray.Release()
 
 	intArray, ok := originalArray.(*array.Int64)
 	if !ok {
-		return nil, fmt.Errorf("expected int64 array")
+		return nil, errors.New("expected int64 array")
 	}
 
 	filteredValues := make([]int64, 0, resultSize)
-	for i := 0; i < mask.Len(); i++ {
+	for i := range mask.Len() {
 		if !mask.IsNull(i) && mask.Value(i) {
 			if !intArray.IsNull(i) {
 				filteredValues = append(filteredValues, intArray.Value(i))
@@ -1302,18 +1409,24 @@ func (gh *GroupByHavingOperation) filterInt64Series(originalSeries ISeries, mask
 
 // filterFloat64Series filters a float64 series
 //
-//nolint:unused // Used by optimized filter methods, but linter can't detect interface usage
-func (gh *GroupByHavingOperation) filterFloat64Series(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, mem memory.Allocator) (ISeries, error) {
+
+func (gh *GroupByHavingOperation) filterFloat64Series(
+	originalSeries ISeries,
+	mask *array.Boolean,
+	resultSize int,
+	name string,
+	mem memory.Allocator,
+) (ISeries, error) {
 	originalArray := originalSeries.Array()
 	defer originalArray.Release()
 
 	floatArray, ok := originalArray.(*array.Float64)
 	if !ok {
-		return nil, fmt.Errorf("expected float64 array")
+		return nil, errors.New("expected float64 array")
 	}
 
 	filteredValues := make([]float64, 0, resultSize)
-	for i := 0; i < mask.Len(); i++ {
+	for i := range mask.Len() {
 		if !mask.IsNull(i) && mask.Value(i) {
 			if !floatArray.IsNull(i) {
 				filteredValues = append(filteredValues, floatArray.Value(i))
@@ -1326,18 +1439,24 @@ func (gh *GroupByHavingOperation) filterFloat64Series(originalSeries ISeries, ma
 
 // filterBoolSeries filters a boolean series
 //
-//nolint:unused // Used by optimized filter methods, but linter can't detect interface usage
-func (gh *GroupByHavingOperation) filterBoolSeries(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, mem memory.Allocator) (ISeries, error) {
+
+func (gh *GroupByHavingOperation) filterBoolSeries(
+	originalSeries ISeries,
+	mask *array.Boolean,
+	resultSize int,
+	name string,
+	mem memory.Allocator,
+) (ISeries, error) {
 	originalArray := originalSeries.Array()
 	defer originalArray.Release()
 
 	boolArray, ok := originalArray.(*array.Boolean)
 	if !ok {
-		return nil, fmt.Errorf("expected boolean array")
+		return nil, errors.New("expected boolean array")
 	}
 
 	filteredValues := make([]bool, 0, resultSize)
-	for i := 0; i < mask.Len(); i++ {
+	for i := range mask.Len() {
 		if !mask.IsNull(i) && mask.Value(i) {
 			if !boolArray.IsNull(i) {
 				filteredValues = append(filteredValues, boolArray.Value(i))
@@ -1348,19 +1467,25 @@ func (gh *GroupByHavingOperation) filterBoolSeries(originalSeries ISeries, mask 
 	return series.New(name, filteredValues, mem), nil
 }
 
-// filterStringSeriesOptimizedWithAllocator filters a string series using provided allocator
-func (gh *GroupByHavingOperation) filterStringSeriesOptimizedWithAllocator(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, allocator memory.Allocator) (ISeries, error) {
+// filterStringSeriesOptimizedWithAllocator filters a string series using provided allocator.
+func (gh *GroupByHavingOperation) filterStringSeriesOptimizedWithAllocator(
+	originalSeries ISeries,
+	mask *array.Boolean,
+	resultSize int,
+	name string,
+	allocator memory.Allocator,
+) (ISeries, error) {
 	originalArray := originalSeries.Array()
 	// Note: Array from series.Array() is managed by the parent series
 
 	stringArray, ok := originalArray.(*array.String)
 	if !ok {
-		return nil, fmt.Errorf("expected string array")
+		return nil, errors.New("expected string array")
 	}
 
 	// Pre-allocate with exact size to reduce memory reallocations
 	filteredValues := make([]string, 0, resultSize)
-	for i := 0; i < mask.Len(); i++ {
+	for i := range mask.Len() {
 		if !mask.IsNull(i) && mask.Value(i) {
 			if !stringArray.IsNull(i) {
 				filteredValues = append(filteredValues, stringArray.Value(i))
@@ -1374,19 +1499,25 @@ func (gh *GroupByHavingOperation) filterStringSeriesOptimizedWithAllocator(origi
 	return series.New(name, filteredValues, allocator), nil
 }
 
-// filterInt64SeriesOptimizedWithAllocator filters an int64 series using provided allocator
-func (gh *GroupByHavingOperation) filterInt64SeriesOptimizedWithAllocator(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, allocator memory.Allocator) (ISeries, error) {
+// filterInt64SeriesOptimizedWithAllocator filters an int64 series using provided allocator.
+func (gh *GroupByHavingOperation) filterInt64SeriesOptimizedWithAllocator(
+	originalSeries ISeries,
+	mask *array.Boolean,
+	resultSize int,
+	name string,
+	allocator memory.Allocator,
+) (ISeries, error) {
 	originalArray := originalSeries.Array()
 	// Note: Array from series.Array() is managed by the parent series
 
 	intArray, ok := originalArray.(*array.Int64)
 	if !ok {
-		return nil, fmt.Errorf("expected int64 array")
+		return nil, errors.New("expected int64 array")
 	}
 
 	// Pre-allocate with exact size to reduce memory reallocations
 	filteredValues := make([]int64, 0, resultSize)
-	for i := 0; i < mask.Len(); i++ {
+	for i := range mask.Len() {
 		if !mask.IsNull(i) && mask.Value(i) {
 			if !intArray.IsNull(i) {
 				filteredValues = append(filteredValues, intArray.Value(i))
@@ -1400,19 +1531,25 @@ func (gh *GroupByHavingOperation) filterInt64SeriesOptimizedWithAllocator(origin
 	return series.New(name, filteredValues, allocator), nil
 }
 
-// filterFloat64SeriesOptimizedWithAllocator filters a float64 series using provided allocator
-func (gh *GroupByHavingOperation) filterFloat64SeriesOptimizedWithAllocator(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, allocator memory.Allocator) (ISeries, error) {
+// filterFloat64SeriesOptimizedWithAllocator filters a float64 series using provided allocator.
+func (gh *GroupByHavingOperation) filterFloat64SeriesOptimizedWithAllocator(
+	originalSeries ISeries,
+	mask *array.Boolean,
+	resultSize int,
+	name string,
+	allocator memory.Allocator,
+) (ISeries, error) {
 	originalArray := originalSeries.Array()
 	// Note: Array from series.Array() is managed by the parent series
 
 	floatArray, ok := originalArray.(*array.Float64)
 	if !ok {
-		return nil, fmt.Errorf("expected float64 array")
+		return nil, errors.New("expected float64 array")
 	}
 
 	// Pre-allocate with exact size to reduce memory reallocations
 	filteredValues := make([]float64, 0, resultSize)
-	for i := 0; i < mask.Len(); i++ {
+	for i := range mask.Len() {
 		if !mask.IsNull(i) && mask.Value(i) {
 			if !floatArray.IsNull(i) {
 				filteredValues = append(filteredValues, floatArray.Value(i))
@@ -1426,19 +1563,25 @@ func (gh *GroupByHavingOperation) filterFloat64SeriesOptimizedWithAllocator(orig
 	return series.New(name, filteredValues, allocator), nil
 }
 
-// filterBoolSeriesOptimizedWithAllocator filters a boolean series using provided allocator
-func (gh *GroupByHavingOperation) filterBoolSeriesOptimizedWithAllocator(originalSeries ISeries, mask *array.Boolean, resultSize int, name string, allocator memory.Allocator) (ISeries, error) {
+// filterBoolSeriesOptimizedWithAllocator filters a boolean series using provided allocator.
+func (gh *GroupByHavingOperation) filterBoolSeriesOptimizedWithAllocator(
+	originalSeries ISeries,
+	mask *array.Boolean,
+	resultSize int,
+	name string,
+	allocator memory.Allocator,
+) (ISeries, error) {
 	originalArray := originalSeries.Array()
 	// Note: Array from series.Array() is managed by the parent series
 
 	boolArray, ok := originalArray.(*array.Boolean)
 	if !ok {
-		return nil, fmt.Errorf("expected boolean array")
+		return nil, errors.New("expected boolean array")
 	}
 
 	// Pre-allocate with exact size to reduce memory reallocations
 	filteredValues := make([]bool, 0, resultSize)
-	for i := 0; i < mask.Len(); i++ {
+	for i := range mask.Len() {
 		if !mask.IsNull(i) && mask.Value(i) {
 			if !boolArray.IsNull(i) {
 				filteredValues = append(filteredValues, boolArray.Value(i))
@@ -1452,7 +1595,7 @@ func (gh *GroupByHavingOperation) filterBoolSeriesOptimizedWithAllocator(origina
 	return series.New(name, filteredValues, allocator), nil
 }
 
-// Release returns the cached allocator to the pool for reuse
+// Release returns the cached allocator to the pool for reuse.
 func (gh *GroupByHavingOperation) Release() {
 	gh.mu.Lock()
 	defer gh.mu.Unlock()
@@ -1464,7 +1607,7 @@ func (gh *GroupByHavingOperation) Release() {
 	}
 }
 
-// String returns a string representation of the operation
+// String returns a string representation of the operation.
 func (gh *GroupByHavingOperation) String() string {
 	return fmt.Sprintf("group_by(%v).having(%s)", gh.groupByCols, gh.predicate.String())
 }
@@ -1542,52 +1685,60 @@ func (df *DataFrame) Lazy() *LazyFrame {
 	}
 }
 
-// Filter adds a filter operation to the lazy frame
+// Filter adds a filter operation to the lazy frame.
 func (lf *LazyFrame) Filter(predicate expr.Expr) *LazyFrame {
-	newOps := append(lf.operations, &FilterOperation{predicate: predicate})
+	operations := make([]LazyOperation, len(lf.operations), len(lf.operations)+1)
+	copy(operations, lf.operations)
+	operations = append(operations, &FilterOperation{predicate: predicate})
 	return &LazyFrame{
 		source:     lf.source,
-		operations: newOps,
+		operations: operations,
 		pool:       lf.pool,
 	}
 }
 
-// Select adds a column selection operation to the lazy frame
+// Select adds a column selection operation to the lazy frame.
 func (lf *LazyFrame) Select(columns ...string) *LazyFrame {
-	newOps := append(lf.operations, &SelectOperation{columns: columns})
+	operations := make([]LazyOperation, len(lf.operations), len(lf.operations)+1)
+	copy(operations, lf.operations)
+	operations = append(operations, &SelectOperation{columns: columns})
 	return &LazyFrame{
 		source:     lf.source,
-		operations: newOps,
+		operations: operations,
 		pool:       lf.pool,
 	}
 }
 
-// WithColumn adds a column creation/modification operation to the lazy frame
+// WithColumn adds a column creation/modification operation to the lazy frame.
 func (lf *LazyFrame) WithColumn(name string, expr expr.Expr) *LazyFrame {
-	newOps := append(lf.operations, &WithColumnOperation{name: name, expr: expr})
+	operations := make([]LazyOperation, len(lf.operations), len(lf.operations)+1)
+	copy(operations, lf.operations)
+	operations = append(operations, &WithColumnOperation{name: name, expr: expr})
 	return &LazyFrame{
 		source:     lf.source,
-		operations: newOps,
+		operations: operations,
 		pool:       lf.pool,
 	}
 }
 
-// Sort adds a sort operation to the lazy frame
+// Sort adds a sort operation to the lazy frame.
 func (lf *LazyFrame) Sort(column string, ascending bool) *LazyFrame {
 	return lf.SortBy([]string{column}, []bool{ascending})
 }
 
-// SortBy adds a multi-column sort operation to the lazy frame
+// SortBy adds a multi-column sort operation to the lazy frame.
 func (lf *LazyFrame) SortBy(columns []string, ascending []bool) *LazyFrame {
-	newOps := append(lf.operations, &SortOperation{columns: columns, ascending: ascending})
+	operations := make([]LazyOperation, len(lf.operations), len(lf.operations)+1)
+	copy(operations, lf.operations)
+	operations = append(operations, &SortOperation{columns: columns, ascending: ascending})
 	return &LazyFrame{
 		source:     lf.source,
-		operations: newOps,
+		operations: operations,
 		pool:       lf.pool,
 	}
 }
 
-// GroupBy adds a group by and aggregation operation to the lazy frame
+// GroupBy adds a group by and aggregation operation to the lazy frame.
 func (lf *LazyFrame) GroupBy(columns ...string) *LazyGroupBy {
 	return &LazyGroupBy{
 		lazyFrame:   lf,
@@ -1595,72 +1746,78 @@ func (lf *LazyFrame) GroupBy(columns ...string) *LazyGroupBy {
 	}
 }
 
-// LazyGroupBy represents a lazy groupby operation that can be followed by aggregations
+// LazyGroupBy represents a lazy groupby operation that can be followed by aggregations.
 type LazyGroupBy struct {
 	lazyFrame   *LazyFrame
 	groupByCols []string
 }
 
-// Agg performs aggregation operations and returns a new LazyFrame
+// Agg performs aggregation operations and returns a new LazyFrame.
 func (lgb *LazyGroupBy) Agg(aggregations ...*expr.AggregationExpr) *LazyFrame {
-	newOps := append(lgb.lazyFrame.operations, NewGroupByOperation(lgb.groupByCols, aggregations))
+	operations := make([]LazyOperation, len(lgb.lazyFrame.operations), len(lgb.lazyFrame.operations)+1)
+	copy(operations, lgb.lazyFrame.operations)
+	operations = append(operations, NewGroupByOperation(lgb.groupByCols, aggregations))
 	return &LazyFrame{
 		source:     lgb.lazyFrame.source,
-		operations: newOps,
+		operations: operations,
 		pool:       lgb.lazyFrame.pool,
 	}
 }
 
-// AggWithHaving performs aggregation operations with an optional HAVING predicate and returns a new LazyFrame
+// AggWithHaving performs aggregation operations with an optional HAVING predicate and returns a new LazyFrame.
 func (lgb *LazyGroupBy) AggWithHaving(havingPredicate expr.Expr, aggregations ...*expr.AggregationExpr) *LazyFrame {
-	newOps := append(lgb.lazyFrame.operations, NewGroupByOperationWithHaving(lgb.groupByCols, aggregations, havingPredicate))
+	operations := make([]LazyOperation, len(lgb.lazyFrame.operations), len(lgb.lazyFrame.operations)+1)
+	copy(operations, lgb.lazyFrame.operations)
+	operations = append(operations, NewGroupByOperationWithHaving(lgb.groupByCols, aggregations, havingPredicate))
 	return &LazyFrame{
 		source:     lgb.lazyFrame.source,
-		operations: newOps,
+		operations: operations,
 		pool:       lgb.lazyFrame.pool,
 	}
 }
 
-// Sum creates a sum aggregation for the specified column
+// Sum creates a sum aggregation for the specified column.
 func (lgb *LazyGroupBy) Sum(column string) *LazyFrame {
 	return lgb.Agg(expr.Sum(expr.Col(column)))
 }
 
-// Count creates a count aggregation for the specified column
+// Count creates a count aggregation for the specified column.
 func (lgb *LazyGroupBy) Count(column string) *LazyFrame {
 	return lgb.Agg(expr.Count(expr.Col(column)))
 }
 
-// Mean creates a mean aggregation for the specified column
+// Mean creates a mean aggregation for the specified column.
 func (lgb *LazyGroupBy) Mean(column string) *LazyFrame {
 	return lgb.Agg(expr.Mean(expr.Col(column)))
 }
 
-// Min creates a min aggregation for the specified column
+// Min creates a min aggregation for the specified column.
 func (lgb *LazyGroupBy) Min(column string) *LazyFrame {
 	return lgb.Agg(expr.Min(expr.Col(column)))
 }
 
-// Max creates a max aggregation for the specified column
+// Max creates a max aggregation for the specified column.
 func (lgb *LazyGroupBy) Max(column string) *LazyFrame {
 	return lgb.Agg(expr.Max(expr.Col(column)))
 }
 
-// Having adds a HAVING clause to filter grouped data based on aggregation predicates
+// Having adds a HAVING clause to filter grouped data based on aggregation predicates.
 func (lgb *LazyGroupBy) Having(predicate expr.Expr) *LazyFrame {
 	// For HAVING to work, we need to first perform the GroupBy aggregation
 	// and then apply the having filter. We'll create a specialized operation
 	// that combines GroupBy + Aggregation + Having
 
 	// Create a GroupByHavingOperation that performs groupby, aggregation, and having together
-	newOps := append(lgb.lazyFrame.operations, &GroupByHavingOperation{
+	operations := make([]LazyOperation, len(lgb.lazyFrame.operations), len(lgb.lazyFrame.operations)+1)
+	copy(operations, lgb.lazyFrame.operations)
+	operations = append(operations, &GroupByHavingOperation{
 		groupByCols: lgb.groupByCols,
 		predicate:   predicate,
 	})
 
 	return &LazyFrame{
 		source:     lgb.lazyFrame.source,
-		operations: newOps,
+		operations: operations,
 		pool:       lgb.lazyFrame.pool,
 	}
 }
@@ -1748,12 +1905,12 @@ func (lf *LazyFrame) Collect(ctx ...context.Context) (*DataFrame, error) {
 	return lf.collectSequentialWithOps(optimizedOperations)
 }
 
-// collectSequential applies operations sequentially (original implementation)
+// collectSequential applies operations sequentially (original implementation).
 func (lf *LazyFrame) collectSequential() (*DataFrame, error) {
 	return lf.collectSequentialWithOps(lf.operations)
 }
 
-// collectSequentialWithOps applies operations sequentially with provided operations
+// collectSequentialWithOps applies operations sequentially with provided operations.
 func (lf *LazyFrame) collectSequentialWithOps(operations []LazyOperation) (*DataFrame, error) {
 	current := lf.source
 
@@ -1768,7 +1925,7 @@ func (lf *LazyFrame) collectSequentialWithOps(operations []LazyOperation) (*Data
 	return current, nil
 }
 
-// calculateChunkSize determines optimal chunk size for parallel processing
+// calculateChunkSize determines optimal chunk size for parallel processing.
 func (lf *LazyFrame) calculateChunkSize() int {
 	totalRows := lf.source.Len()
 	workerCount := runtime.NumCPU()
@@ -1793,7 +1950,7 @@ func (lf *LazyFrame) calculateChunkSize() int {
 }
 
 // createIndependentChunk creates a chunk with completely independent data copies
-// to ensure thread-safety during parallel processing
+// to ensure thread-safety during parallel processing.
 func (lf *LazyFrame) createIndependentChunk(start, end int) *DataFrame {
 	if start < 0 || end <= start || start >= lf.source.Len() {
 		return New() // Return empty DataFrame for invalid range
@@ -1820,7 +1977,7 @@ func (lf *LazyFrame) createIndependentChunk(start, end int) *DataFrame {
 }
 
 // createIndependentSeries creates a completely independent series copy with no shared memory references
-// FIXED: This method was previously unsafe due to defer originalArray.Release() in parallel contexts
+// FIXED: This method was previously unsafe due to defer originalArray.Release() in parallel contexts.
 func (lf *LazyFrame) createIndependentSeries(s ISeries, start, end int, mem memory.Allocator) ISeries {
 	// Use the safe implementation that properly handles Arrow memory management
 	return lf.createSafeIndependentSeries(s, start, end, mem)
@@ -1828,18 +1985,23 @@ func (lf *LazyFrame) createIndependentSeries(s ISeries, start, end int, mem memo
 
 // collectParallel implements parallel execution with proper memory management
 // Key insight: Arrow arrays are thread-safe for reads, but we need independent chunks
-// and must avoid aggressive Release() calls that invalidate shared references
+// and must avoid aggressive Release() calls that invalidate shared references.
 func (lf *LazyFrame) collectParallel() (*DataFrame, error) {
 	return lf.collectParallelWithOps(lf.operations)
 }
 
-// collectParallelWithOps implements parallel execution with provided operations
+// collectParallelWithOps implements parallel execution with provided operations.
 func (lf *LazyFrame) collectParallelWithOps(operations []LazyOperation) (*DataFrame, error) {
-	// Calculate optimal chunk size based on data size and worker count
+	chunks := lf.createDataChunks()
+	processedChunks := lf.processChunksInParallel(chunks, operations)
+	return lf.consolidateProcessedChunks(processedChunks)
+}
+
+// createDataChunks creates independent data chunks for parallel processing.
+func (lf *LazyFrame) createDataChunks() []*DataFrame {
 	chunkSize := lf.getChunkSize()
 	totalRows := lf.source.Len()
 
-	// Create independent chunks sequentially to avoid concurrent memory access
 	var chunks []*DataFrame
 	for start := 0; start < totalRows; start += chunkSize {
 		end := start + chunkSize
@@ -1847,45 +2009,43 @@ func (lf *LazyFrame) collectParallelWithOps(operations []LazyOperation) (*DataFr
 			end = totalRows
 		}
 
-		// Create chunk with independent data copies
 		chunk := lf.createIndependentChunk(start, end)
 		chunks = append(chunks, chunk)
 	}
+	return chunks
+}
 
-	// Process chunks in parallel - each chunk now has independent memory
-	processedChunks := parallel.Process(lf.pool, chunks, func(chunk *DataFrame) *DataFrame {
-		if chunk == nil || chunk.Width() == 0 {
+// processChunksInParallel processes data chunks in parallel with operations.
+func (lf *LazyFrame) processChunksInParallel(chunks []*DataFrame, operations []LazyOperation) []*DataFrame {
+	return parallel.Process(lf.pool, chunks, func(chunk *DataFrame) *DataFrame {
+		return lf.applyOperationsToChunk(chunk, operations)
+	})
+}
+
+// applyOperationsToChunk applies all operations to a single chunk.
+func (lf *LazyFrame) applyOperationsToChunk(chunk *DataFrame, operations []LazyOperation) *DataFrame {
+	if chunk == nil || chunk.Width() == 0 {
+		return New()
+	}
+
+	result := chunk
+	for _, op := range operations {
+		nextResult, err := op.Apply(result)
+		if err != nil {
 			return New()
 		}
 
-		result := chunk
-		// Apply all operations to this chunk
-		for _, op := range operations {
-			nextResult, err := op.Apply(result)
-			if err != nil {
-				// Return empty DataFrame on error
-				return New()
-			}
-
-			// Don't aggressively release - this was causing the memory corruption
-			// Let Go's garbage collector handle cleanup
-			result = nextResult
-
-			// Verify result has valid structure
-			if result == nil || result.Width() == 0 {
-				return New()
-			}
-		}
-		return result
-	})
-
-	// Filter out empty chunks before concatenation
-	var nonEmptyChunks []*DataFrame
-	for _, chunk := range processedChunks {
-		if chunk != nil && chunk.Width() > 0 && chunk.Len() > 0 {
-			nonEmptyChunks = append(nonEmptyChunks, chunk)
+		result = nextResult
+		if result == nil || result.Width() == 0 {
+			return New()
 		}
 	}
+	return result
+}
+
+// consolidateProcessedChunks consolidates processed chunks into final result.
+func (lf *LazyFrame) consolidateProcessedChunks(processedChunks []*DataFrame) (*DataFrame, error) {
+	nonEmptyChunks := lf.filterNonEmptyChunks(processedChunks)
 
 	if len(nonEmptyChunks) == 0 {
 		return New(), nil
@@ -1895,14 +2055,28 @@ func (lf *LazyFrame) collectParallelWithOps(operations []LazyOperation) (*DataFr
 		return nonEmptyChunks[0], nil
 	}
 
-	// Concatenate all non-empty chunks
-	result := nonEmptyChunks[0]
-	others := nonEmptyChunks[1:]
-
-	return result.Concat(others...), nil
+	return lf.concatenateChunks(nonEmptyChunks), nil
 }
 
-// String returns a string representation of the lazy frame and its operations
+// filterNonEmptyChunks filters out empty chunks before concatenation.
+func (lf *LazyFrame) filterNonEmptyChunks(processedChunks []*DataFrame) []*DataFrame {
+	var nonEmptyChunks []*DataFrame
+	for _, chunk := range processedChunks {
+		if chunk != nil && chunk.Width() > 0 && chunk.Len() > 0 {
+			nonEmptyChunks = append(nonEmptyChunks, chunk)
+		}
+	}
+	return nonEmptyChunks
+}
+
+// concatenateChunks concatenates multiple chunks into a single DataFrame.
+func (lf *LazyFrame) concatenateChunks(nonEmptyChunks []*DataFrame) *DataFrame {
+	result := nonEmptyChunks[0]
+	others := nonEmptyChunks[1:]
+	return result.Concat(others...)
+}
+
+// String returns a string representation of the lazy frame and its operations.
 func (lf *LazyFrame) String() string {
 	result := "LazyFrame:\n"
 	result += fmt.Sprintf("  source: %s\n", lf.source.String())
@@ -1913,7 +2087,7 @@ func (lf *LazyFrame) String() string {
 	return result
 }
 
-// getParallelThreshold returns the parallel threshold based on configuration
+// getParallelThreshold returns the parallel threshold based on configuration.
 func (lf *LazyFrame) getParallelThreshold() int {
 	// Check operation-specific configuration first
 	if lf.source.operationConfig != nil {
@@ -1932,7 +2106,7 @@ func (lf *LazyFrame) getParallelThreshold() int {
 	return globalConfig.ParallelThreshold
 }
 
-// shouldUseParallelExecution determines if parallel execution should be used
+// shouldUseParallelExecution determines if parallel execution should be used.
 func (lf *LazyFrame) shouldUseParallelExecution(threshold int) bool {
 	if lf.pool == nil {
 		return false
@@ -1941,7 +2115,7 @@ func (lf *LazyFrame) shouldUseParallelExecution(threshold int) bool {
 	return lf.source.Len() >= threshold
 }
 
-// getChunkSize returns the chunk size based on configuration
+// getChunkSize returns the chunk size based on configuration.
 func (lf *LazyFrame) getChunkSize() int {
 	// Check operation-specific configuration first
 	if lf.source.operationConfig != nil && lf.source.operationConfig.CustomChunkSize > 0 {
@@ -1958,7 +2132,7 @@ func (lf *LazyFrame) getChunkSize() int {
 	return lf.calculateChunkSize()
 }
 
-// Join adds a join operation to the lazy frame
+// Join adds a join operation to the lazy frame.
 func (lf *LazyFrame) Join(right *LazyFrame, options *JoinOptions) *LazyFrame {
 	op := &JoinOperation{
 		right:   right,
@@ -1976,7 +2150,7 @@ func (lf *LazyFrame) Join(right *LazyFrame, options *JoinOptions) *LazyFrame {
 	}
 }
 
-// JoinOperation represents a join operation
+// JoinOperation represents a join operation.
 type JoinOperation struct {
 	right   *LazyFrame
 	options *JoinOptions
@@ -2014,7 +2188,7 @@ func (j *JoinOperation) String() string {
 	return fmt.Sprintf("%s JOIN ON %v = %v", joinTypeName, j.options.LeftKeys, j.options.RightKeys)
 }
 
-// SafeCollectParallel executes all deferred operations using memory-safe parallel processing
+// SafeCollectParallel executes all deferred operations using memory-safe parallel processing.
 func (lf *LazyFrame) SafeCollectParallel() (*DataFrame, error) {
 	if lf.source == nil {
 		return New(), nil
@@ -2036,7 +2210,7 @@ func (lf *LazyFrame) SafeCollectParallel() (*DataFrame, error) {
 	return lf.safeCollectParallelWithOps(optimizedPlan.operations)
 }
 
-// SafeCollectParallelWithMonitoring executes operations with memory monitoring and adaptive parallelism
+// SafeCollectParallelWithMonitoring executes operations with memory monitoring and adaptive parallelism.
 func (lf *LazyFrame) SafeCollectParallelWithMonitoring() (*DataFrame, error) {
 	if lf.source == nil {
 		return New(), nil
@@ -2058,7 +2232,7 @@ func (lf *LazyFrame) SafeCollectParallelWithMonitoring() (*DataFrame, error) {
 	return lf.safeCollectParallelWithMonitoring(optimizedPlan.operations)
 }
 
-// safeCollectParallelWithOps implements memory-safe parallel execution
+// safeCollectParallelWithOps implements memory-safe parallel execution.
 func (lf *LazyFrame) safeCollectParallelWithOps(operations []LazyOperation) (*DataFrame, error) {
 	// Create allocator pool for memory safety
 	pool := parallel.NewAllocatorPool(runtime.NumCPU())
@@ -2113,93 +2287,120 @@ func (lf *LazyFrame) safeCollectParallelWithOps(operations []LazyOperation) (*Da
 	return lf.concatenateChunks(processedChunks), nil
 }
 
-// safeCollectParallelWithMonitoring implements memory-safe parallel execution with monitoring
+// safeCollectParallelWithMonitoring implements memory-safe parallel execution with monitoring.
 func (lf *LazyFrame) safeCollectParallelWithMonitoring(operations []LazyOperation) (*DataFrame, error) {
-	const memoryThresholdMB = 100
-	const bytesPerMB = 1024 * 1024
-
-	// Create memory monitor for adaptive parallelism
-	monitor := parallel.NewMemoryMonitor(memoryThresholdMB*bytesPerMB, runtime.NumCPU()) // 100MB threshold
-
-	// Create allocator pool for memory safety
-	pool := parallel.NewAllocatorPool(monitor.AdjustParallelism())
+	monitor, pool := lf.initializeMonitoringComponents()
 	defer pool.Close()
 
-	// Calculate optimal chunk size based on memory pressure
-	baseChunkSize := lf.calculateChunkSize()
-	totalRows := lf.source.Len()
+	chunks := lf.createMonitoredChunks(monitor, pool)
+	processedChunks := lf.processChunksWithMonitoring(chunks, operations, monitor)
 
-	// Adjust chunk size based on memory pressure
-	parallelism := monitor.AdjustParallelism()
-	adjustedChunkSize := (totalRows + parallelism - 1) / parallelism
-
-	if adjustedChunkSize > baseChunkSize {
-		adjustedChunkSize = baseChunkSize
-	}
-
-	// Create safe chunks with memory monitoring
-	var chunks []*DataFrame
-	for start := 0; start < totalRows; start += adjustedChunkSize {
-		end := start + adjustedChunkSize
-		if end > totalRows {
-			end = totalRows
-		}
-
-		// Check memory pressure before creating chunk
-		const bytesPerValue = 8 // Rough estimate for average value size
-		const chunkSizeReducer = 2
-
-		estimatedChunkSize := int64((end - start) * lf.source.Width() * bytesPerValue)
-		if !monitor.CanAllocate(estimatedChunkSize) {
-			// Memory pressure too high, reduce chunk size
-			adjustedEnd := start + adjustedChunkSize/chunkSizeReducer
-			if adjustedEnd <= start {
-				adjustedEnd = start + 1
-			}
-			end = adjustedEnd
-		}
-
-		// Create chunk with safe memory allocation
-		chunk := lf.createSafeIndependentChunk(start, end, pool)
-		chunks = append(chunks, chunk)
-
-		// Record memory allocation
-		monitor.RecordAllocation(estimatedChunkSize)
-	}
-
-	// Process chunks with adaptive parallelism
-	adaptivePool := parallel.NewWorkerPool(monitor.AdjustParallelism())
-	defer adaptivePool.Close()
-
-	// Process chunks in parallel using safe infrastructure
-	processedChunks := parallel.Process(adaptivePool, chunks, func(chunk *DataFrame) *DataFrame {
-		if chunk == nil || chunk.Width() == 0 {
-			return New()
-		}
-
-		result := chunk
-		// Apply all operations to this chunk
-		for _, op := range operations {
-			nextResult, err := op.Apply(result)
-			if err != nil {
-				// Return empty DataFrame on error
-				return New()
-			}
-			result = nextResult
-
-			// Verify result has valid structure
-			if result == nil || result.Width() == 0 {
-				return New()
-			}
-		}
-		return result
-	})
-
-	// Filter out empty chunks and concatenate
 	return lf.concatenateChunks(processedChunks), nil
 }
 
-// createSafeIndependentChunk creates a chunk with completely independent data copies using safe allocator pool
+// initializeMonitoringComponents creates memory monitor and allocator pool.
+func (lf *LazyFrame) initializeMonitoringComponents() (*parallel.MemoryMonitor, *parallel.AllocatorPool) {
+	const memoryThresholdMB = 100
+	const bytesPerMB = 1024 * 1024
+
+	monitor := parallel.NewMemoryMonitor(memoryThresholdMB*bytesPerMB, runtime.NumCPU())
+	pool := parallel.NewAllocatorPool(monitor.AdjustParallelism())
+	return monitor, pool
+}
+
+// createMonitoredChunks creates chunks with memory monitoring and pressure adjustment.
+func (lf *LazyFrame) createMonitoredChunks(monitor *parallel.MemoryMonitor, pool *parallel.AllocatorPool) []*DataFrame {
+	chunkSize := lf.calculateAdaptiveChunkSize(monitor)
+	totalRows := lf.source.Len()
+
+	var chunks []*DataFrame
+	for start := 0; start < totalRows; start += chunkSize {
+		end := lf.calculateChunkEnd(start, chunkSize, totalRows, monitor)
+		chunk := lf.createSafeIndependentChunk(start, end, pool)
+		chunks = append(chunks, chunk)
+
+		// Record memory allocation for monitoring.
+		estimatedSize := lf.estimateChunkMemorySize(start, end)
+		monitor.RecordAllocation(estimatedSize)
+	}
+	return chunks
+}
+
+// calculateAdaptiveChunkSize determines optimal chunk size based on memory pressure.
+func (lf *LazyFrame) calculateAdaptiveChunkSize(monitor *parallel.MemoryMonitor) int {
+	baseChunkSize := lf.calculateChunkSize()
+	parallelism := monitor.AdjustParallelism()
+	adjustedChunkSize := (lf.source.Len() + parallelism - 1) / parallelism
+
+	if adjustedChunkSize > baseChunkSize {
+		return baseChunkSize
+	}
+	return adjustedChunkSize
+}
+
+// calculateChunkEnd calculates the end index for a chunk, adjusting for memory pressure.
+func (lf *LazyFrame) calculateChunkEnd(start, chunkSize, totalRows int, monitor *parallel.MemoryMonitor) int {
+	end := start + chunkSize
+	if end > totalRows {
+		end = totalRows
+	}
+
+	// Check memory pressure and adjust if needed.
+	estimatedSize := lf.estimateChunkMemorySize(start, end)
+	if !monitor.CanAllocate(estimatedSize) {
+		return lf.reduceChunkSizeForMemoryPressure(start, chunkSize)
+	}
+	return end
+}
+
+// reduceChunkSizeForMemoryPressure reduces chunk size when memory pressure is high.
+func (lf *LazyFrame) reduceChunkSizeForMemoryPressure(start, chunkSize int) int {
+	const chunkSizeReducer = 2
+	adjustedEnd := start + chunkSize/chunkSizeReducer
+	if adjustedEnd <= start {
+		adjustedEnd = start + 1
+	}
+	return adjustedEnd
+}
+
+// estimateChunkMemorySize estimates memory usage for a chunk.
+func (lf *LazyFrame) estimateChunkMemorySize(start, end int) int64 {
+	const bytesPerValue = 8 // Rough estimate for average value size.
+	return int64((end - start) * lf.source.Width() * bytesPerValue)
+}
+
+// processChunksWithMonitoring processes chunks in parallel with adaptive worker pool.
+func (lf *LazyFrame) processChunksWithMonitoring(
+	chunks []*DataFrame,
+	operations []LazyOperation,
+	monitor *parallel.MemoryMonitor,
+) []*DataFrame {
+	adaptivePool := parallel.NewWorkerPool(monitor.AdjustParallelism())
+	defer adaptivePool.Close()
+
+	return parallel.Process(adaptivePool, chunks, func(chunk *DataFrame) *DataFrame {
+		return lf.processChunkOperations(chunk, operations)
+	})
+}
+
+// processChunkOperations applies all operations to a single chunk.
+func (lf *LazyFrame) processChunkOperations(chunk *DataFrame, operations []LazyOperation) *DataFrame {
+	if chunk == nil || chunk.Width() == 0 {
+		return New()
+	}
+
+	result := chunk
+	for _, op := range operations {
+		nextResult, err := op.Apply(result)
+		if err != nil || nextResult == nil || nextResult.Width() == 0 {
+			return New()
+		}
+		result = nextResult
+	}
+	return result
+}
+
+// createSafeIndependentChunk creates a chunk with completely independent data copies using safe allocator pool.
 func (lf *LazyFrame) createSafeIndependentChunk(start, end int, pool *parallel.AllocatorPool) *DataFrame {
 	if start < 0 || end <= start || start >= lf.source.Len() {
 		return New() // Return empty DataFrame for invalid range
@@ -2219,14 +2420,17 @@ func (lf *LazyFrame) createSafeIndependentChunk(start, end int, pool *parallel.A
 	for _, colName := range lf.source.Columns() {
 		if originalSeries, exists := lf.source.Column(colName); exists {
 			// Create independent copy of series data for this chunk using safe allocator
-			independentSeries = append(independentSeries, lf.createSafeIndependentSeries(originalSeries, start, end, processor.GetAllocator()))
+			independentSeries = append(
+				independentSeries,
+				lf.createSafeIndependentSeries(originalSeries, start, end, processor.GetAllocator()),
+			)
 		}
 	}
 
 	return New(independentSeries...)
 }
 
-// createSafeIndependentSeries creates a completely independent series copy using safe memory allocation
+// createSafeIndependentSeries creates a completely independent series copy using safe memory allocation.
 func (lf *LazyFrame) createSafeIndependentSeries(s ISeries, start, end int, mem memory.Allocator) ISeries {
 	// Get array once and ensure we release it after copying all data
 	originalArray := s.Array()
@@ -2246,44 +2450,19 @@ func (lf *LazyFrame) createSafeIndependentSeries(s ISeries, start, end int, mem 
 	return result
 }
 
-// concatenateChunks safely concatenates processed chunks
-func (lf *LazyFrame) concatenateChunks(processedChunks []*DataFrame) *DataFrame {
-	// Filter out empty chunks before concatenation
-	var nonEmptyChunks []*DataFrame
-	for _, chunk := range processedChunks {
-		if chunk != nil && chunk.Width() > 0 && chunk.Len() > 0 {
-			nonEmptyChunks = append(nonEmptyChunks, chunk)
-		}
-	}
-
-	if len(nonEmptyChunks) == 0 {
-		return New()
-	}
-
-	if len(nonEmptyChunks) == 1 {
-		return nonEmptyChunks[0]
-	}
-
-	// Concatenate all non-empty chunks
-	result := nonEmptyChunks[0]
-	others := nonEmptyChunks[1:]
-
-	return result.Concat(others...)
-}
-
-// Release releases resources
+// Release releases resources.
 func (lf *LazyFrame) Release() {
 	if lf.pool != nil {
 		lf.pool.Close()
 	}
 }
 
-// Explain generates an execution plan without executing the operations
+// Explain generates an execution plan without executing the operations.
 func (lf *LazyFrame) Explain() DebugExecutionPlan {
 	return lf.buildExecutionPlan(false)
 }
 
-// ExplainAnalyze generates an execution plan and executes it with profiling
+// ExplainAnalyze generates an execution plan and executes it with profiling.
 func (lf *LazyFrame) ExplainAnalyze() (DebugExecutionPlan, error) {
 	plan := lf.buildExecutionPlan(true)
 
@@ -2300,7 +2479,7 @@ func (lf *LazyFrame) ExplainAnalyze() (DebugExecutionPlan, error) {
 	return plan, nil
 }
 
-// buildExecutionPlan builds an execution plan from the operations
+// buildExecutionPlan builds an execution plan from the operations.
 func (lf *LazyFrame) buildExecutionPlan(enableProfiling bool) DebugExecutionPlan {
 	plan := DebugExecutionPlan{
 		RootNode: &PlanNode{
@@ -2333,7 +2512,7 @@ func (lf *LazyFrame) buildExecutionPlan(enableProfiling bool) DebugExecutionPlan
 	// Check if operations warrant parallel execution
 	if lf.source.Len() >= ParallelThreshold {
 		plan.RootNode.Properties["parallel"] = "true"
-		plan.RootNode.Properties["worker_count"] = fmt.Sprintf("%d", runtime.NumCPU())
+		plan.RootNode.Properties["worker_count"] = strconv.Itoa(runtime.NumCPU())
 		plan.Estimated.ParallelOps = 1
 	}
 
@@ -2382,7 +2561,7 @@ func (lf *LazyFrame) buildExecutionPlan(enableProfiling bool) DebugExecutionPlan
 	return plan
 }
 
-// getOperationType returns the type string for an operation
+// getOperationType returns the type string for an operation.
 func (lf *LazyFrame) getOperationType(op LazyOperation) string {
 	switch op.(type) {
 	case *FilterOperation:
@@ -2404,7 +2583,7 @@ func (lf *LazyFrame) getOperationType(op LazyOperation) string {
 	}
 }
 
-// collectWithProfiling executes the operations with profiling enabled
+// collectWithProfiling executes the operations with profiling enabled.
 func (lf *LazyFrame) collectWithProfiling(plan *DebugExecutionPlan) (*DataFrame, error) {
 	// Execute the operations normally and populate actual stats
 	result, err := lf.Collect()

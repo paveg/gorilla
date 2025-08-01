@@ -1,3 +1,4 @@
+//nolint:testpackage // requires internal access to unexported types and functions
 package dataframe
 
 import (
@@ -13,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func createTestDataFrameForLazy(t *testing.T) *DataFrame {
+func createTestDataFrameForLazy(_ *testing.T) *DataFrame {
 	mem := memory.NewGoAllocator()
 
 	names := series.New("name", []string{"Alice", "Bob", "Charlie", "Diana"}, mem)
@@ -247,7 +248,7 @@ func TestLazyFrameComplexChaining(t *testing.T) {
 	assert.Greater(t, len(lines), 7) // At least LazyFrame: + source lines + operations: + 5 operations
 }
 
-// Test parallel execution for large datasets
+// Test parallel execution for large datasets.
 func TestLazyFrameParallelExecution(t *testing.T) {
 	// Create a large dataset to trigger parallel execution
 	mem := memory.NewGoAllocator()
@@ -259,7 +260,7 @@ func TestLazyFrameParallelExecution(t *testing.T) {
 	salaries := make([]float64, size)
 	active := make([]bool, size)
 
-	for i := 0; i < size; i++ {
+	for i := range size {
 		names[i] = fmt.Sprintf("Employee_%d", i)
 		ages[i] = int64(25 + (i % 40))       // Ages 25-64
 		salaries[i] = float64(40000 + i*100) // Increasing salaries
@@ -294,7 +295,7 @@ func TestLazyFrameParallelExecution(t *testing.T) {
 	defer result.Release()
 
 	// Verify results
-	assert.Greater(t, result.Len(), 0, "Should have filtered results")
+	assert.Positive(t, result.Len(), "Should have filtered results")
 	assert.Equal(t, 5, result.Width(), "Should have 5 columns after operations")
 
 	// Verify all required columns exist

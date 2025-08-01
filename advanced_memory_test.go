@@ -1,15 +1,16 @@
-package gorilla
+package gorilla_test
 
 import (
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/paveg/gorilla"
 	"github.com/paveg/gorilla/internal/parallel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// TestAdvancedMemoryPool tests the advanced memory pool functionality
+// TestAdvancedMemoryPool tests the advanced memory pool functionality.
 func TestAdvancedMemoryPool(t *testing.T) {
 	t.Run("creates and manages allocators", func(t *testing.T) {
 		pool := parallel.NewAdvancedMemoryPool(4, 1024*1024, true)
@@ -22,7 +23,7 @@ func TestAdvancedMemoryPool(t *testing.T) {
 		// Use allocator
 		buf := alloc.Allocate(100)
 		assert.NotNil(t, buf)
-		assert.Equal(t, 100, len(buf))
+		assert.Len(t, buf, 100)
 
 		// Return allocator to pool
 		pool.PutAllocator(alloc)
@@ -31,7 +32,7 @@ func TestAdvancedMemoryPool(t *testing.T) {
 		poolStats, memMonitor := pool.GetStats()
 		assert.NotNil(t, poolStats)
 		assert.NotNil(t, memMonitor)
-		assert.True(t, poolStats.TotalAllocated > 0)
+		assert.Positive(t, poolStats.TotalAllocated)
 	})
 
 	t.Run("respects memory pressure with adaptive sizing", func(t *testing.T) {
@@ -82,7 +83,7 @@ func TestAdvancedMemoryPool(t *testing.T) {
 	})
 }
 
-// TestMonitoredAllocator tests the monitored allocator functionality
+// TestMonitoredAllocator tests the monitored allocator functionality.
 func TestMonitoredAllocator(t *testing.T) {
 	t.Run("tracks allocations and deallocations", func(t *testing.T) {
 		basePool := parallel.NewAllocatorPool(4)
@@ -97,7 +98,7 @@ func TestMonitoredAllocator(t *testing.T) {
 		// Allocate memory
 		buf := monitored.Allocate(100)
 		assert.NotNil(t, buf)
-		assert.Equal(t, 100, len(buf))
+		assert.Len(t, buf, 100)
 
 		// Check allocation was recorded
 		assert.Equal(t, initialAllocated+100, basePool.TotalAllocated())
@@ -124,7 +125,7 @@ func TestMonitoredAllocator(t *testing.T) {
 		// Reallocate to larger size
 		newBuf := monitored.Reallocate(200, buf)
 		assert.NotNil(t, newBuf)
-		assert.Equal(t, 200, len(newBuf))
+		assert.Len(t, newBuf, 200)
 
 		// Check allocation was updated (freed old, allocated new)
 		expectedAllocated := initialAllocated - 100 + 200
@@ -154,7 +155,7 @@ func TestMonitoredAllocator(t *testing.T) {
 	})
 }
 
-// TestAllocatorPoolEnhancements tests the enhanced allocator pool functionality
+// TestAllocatorPoolEnhancements tests the enhanced allocator pool functionality.
 func TestAllocatorPoolEnhancements(t *testing.T) {
 	t.Run("tracks total and peak allocation", func(t *testing.T) {
 		pool := parallel.NewAllocatorPool(4)
@@ -212,17 +213,17 @@ func TestAllocatorPoolEnhancements(t *testing.T) {
 		numGoroutines := 10
 		allocationsPerGoroutine := 100
 
-		for i := 0; i < numGoroutines; i++ {
+		for range numGoroutines {
 			go func() {
 				defer func() { done <- struct{}{} }()
-				for j := 0; j < allocationsPerGoroutine; j++ {
+				for range allocationsPerGoroutine {
 					pool.RecordAllocation(100)
 				}
 			}()
 		}
 
 		// Wait for all goroutines to complete
-		for i := 0; i < numGoroutines; i++ {
+		for range numGoroutines {
 			<-done
 		}
 
@@ -233,7 +234,7 @@ func TestAllocatorPoolEnhancements(t *testing.T) {
 	})
 }
 
-// TestMemoryMonitorIntegration tests integration between memory monitoring and pool management
+// TestMemoryMonitorIntegration tests integration between memory monitoring and pool management.
 func TestMemoryMonitorIntegration(t *testing.T) {
 	t.Run("adjusts parallelism based on memory pressure", func(t *testing.T) {
 		// Create memory monitor with low threshold to trigger pressure
@@ -276,10 +277,10 @@ func TestMemoryMonitorIntegration(t *testing.T) {
 	})
 }
 
-// BenchmarkMemoryMonitoring benchmarks memory monitoring performance
+// BenchmarkMemoryMonitoring benchmarks memory monitoring performance.
 func BenchmarkMemoryMonitoring(b *testing.B) {
 	b.Run("memory usage monitoring", func(b *testing.B) {
-		monitor := NewMemoryUsageMonitor(1024 * 1024 * 1024) // 1GB threshold
+		monitor := gorilla.NewMemoryUsageMonitor(1024 * 1024 * 1024) // 1GB threshold
 		defer monitor.StopMonitoring()
 
 		b.ResetTimer()
@@ -314,14 +315,14 @@ func BenchmarkMemoryMonitoring(b *testing.B) {
 		monitored := parallel.NewMonitoredAllocator(underlying, basePool)
 
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			buf := monitored.Allocate(1024)
 			monitored.Free(buf)
 		}
 	})
 }
 
-// TestMemoryPressureHandling tests how the system handles memory pressure
+// TestMemoryPressureHandling tests how the system handles memory pressure.
 func TestMemoryPressureHandling(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping memory pressure test in short mode")
@@ -351,23 +352,23 @@ func TestMemoryPressureHandling(t *testing.T) {
 	})
 }
 
-// TestIntegrationWithExistingMemoryManager tests integration with existing memory management
+// TestIntegrationWithExistingMemoryManager tests integration with existing memory management.
 func TestIntegrationWithExistingMemoryManager(t *testing.T) {
 	t.Run("works with existing memory manager", func(t *testing.T) {
 		mem := memory.NewGoAllocator()
 
 		// Create memory usage monitor
-		monitor := NewMemoryUsageMonitor(1024 * 1024)
+		monitor := gorilla.NewMemoryUsageMonitor(1024 * 1024)
 		defer monitor.StopMonitoring()
 
 		// Create memory manager
-		manager := NewMemoryManager(mem)
+		manager := gorilla.NewMemoryManager(mem)
 		defer manager.ReleaseAll()
 
 		// Create some resources and track them
-		s1 := NewSeries("test1", []int64{1, 2, 3}, mem)
-		s2 := NewSeries("test2", []string{"a", "b", "c"}, mem)
-		df := NewDataFrame(s1, s2)
+		s1 := gorilla.NewSeries("test1", []int64{1, 2, 3}, mem)
+		s2 := gorilla.NewSeries("test2", []string{"a", "b", "c"}, mem)
+		df := gorilla.NewDataFrame(s1, s2)
 
 		manager.Track(s1)
 		manager.Track(s2)
@@ -379,7 +380,7 @@ func TestIntegrationWithExistingMemoryManager(t *testing.T) {
 
 		// Verify integration
 		assert.Equal(t, 3, manager.Count())
-		assert.True(t, monitor.CurrentUsage() > 0)
+		assert.Positive(t, monitor.CurrentUsage())
 
 		// Clean up
 		manager.ReleaseAll()

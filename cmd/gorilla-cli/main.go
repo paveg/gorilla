@@ -12,6 +12,16 @@ import (
 	"github.com/paveg/gorilla/internal/version"
 )
 
+func customUsage() {
+	fmt.Fprintf(os.Stderr, "Gorilla DataFrame Library CLI (version %s)\n\n", version.Version)
+	fmt.Fprintf(os.Stderr, "Usage: gorilla-cli [options]\n\n")
+	fmt.Fprintf(os.Stderr, "Options:\n")
+	fmt.Fprintf(os.Stderr, "  --demo\n\t\tRun basic demo\n")
+	fmt.Fprintf(os.Stderr, "  --benchmark\n\t\tRun benchmark tests\n")
+	fmt.Fprintf(os.Stderr, "  -v, --version\n\t\tPrint version information and exit\n")
+	fmt.Fprintf(os.Stderr, "  -h, --help\n\t\tShow this help message and exit\n")
+}
+
 // Remove hardcoded version - use version package instead
 
 func main() {
@@ -22,15 +32,8 @@ func main() {
 	benchmarkFlag := flag.Bool("benchmark", false, "Run benchmark tests")
 
 	// Customize usage message for -h, --help
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Gorilla DataFrame Library CLI (version %s)\n\n", version.Version)
-		fmt.Fprintf(os.Stderr, "Usage: gorilla-cli [options]\n\n")
-		fmt.Fprintf(os.Stderr, "Options:\n")
-		fmt.Fprintf(os.Stderr, "  --demo\n\t\tRun basic demo\n")
-		fmt.Fprintf(os.Stderr, "  --benchmark\n\t\tRun benchmark tests\n")
-		fmt.Fprintf(os.Stderr, "  -v, --version\n\t\tPrint version information and exit\n")
-		fmt.Fprintf(os.Stderr, "  -h, --help\n\t\tShow this help message and exit\n")
-	}
+	//nolint:reassign // Standard Go pattern for customizing flag usage message
+	flag.Usage = customUsage
 
 	flag.Parse()
 
@@ -62,17 +65,27 @@ func runDemo() {
 	// Create larger sample dataset
 	fmt.Println("Creating sample dataset...")
 
-	names := make([]string, 1000)
-	ages := make([]int64, 1000)
-	salaries := make([]float64, 1000)
-	departments := make([]string, 1000)
+	const (
+		sampleSize         = 1000
+		baseAge            = 25
+		ageRange           = 40
+		baseSalary         = 40000
+		salaryIncrement    = 1000
+		salaryRange        = 60
+		ageFilterThreshold = 35  // filter for employees older than this age
+		bonusPercentage    = 0.1 // bonus as 10% of salary
+	)
+	names := make([]string, sampleSize)
+	ages := make([]int64, sampleSize)
+	salaries := make([]float64, sampleSize)
+	departments := make([]string, sampleSize)
 
 	depts := []string{"Engineering", "Sales", "Marketing", "HR", "Finance"}
 
-	for i := 0; i < 1000; i++ {
+	for i := range sampleSize {
 		names[i] = fmt.Sprintf("Employee_%d", i+1)
-		ages[i] = int64(25 + (i % 40))             // Ages 25-64
-		salaries[i] = float64(40000 + (i%60)*1000) // Salaries 40k-99k
+		ages[i] = int64(baseAge + (i % ageRange))                           // Ages 25-64
+		salaries[i] = float64(baseSalary + (i%salaryRange)*salaryIncrement) // Salaries 40k-99k
 		departments[i] = depts[i%len(depts)]
 	}
 
@@ -102,8 +115,8 @@ func runDemo() {
 	fmt.Println("3. Select specific columns")
 
 	lazyDf := df.Lazy().
-		Filter(gorilla.Col("age").Gt(gorilla.Lit(int64(35)))).
-		WithColumn("bonus", gorilla.Col("salary").Mul(gorilla.Lit(0.1))).
+		Filter(gorilla.Col("age").Gt(gorilla.Lit(int64(ageFilterThreshold)))).
+		WithColumn("bonus", gorilla.Col("salary").Mul(gorilla.Lit(bonusPercentage))).
 		Select("name", "age", "salary", "bonus", "department")
 
 	fmt.Println("\nLazy operations defined:")
@@ -127,7 +140,16 @@ func runBenchmark() {
 	fmt.Println("🚀 Gorilla DataFrame Library Benchmark")
 	fmt.Println("=====================================")
 
-	const numRows = 1_000_000 // 1 million rows for benchmarking
+	const (
+		numRows            = 1_000_000 // 1 million rows for benchmarking
+		baseAge            = 25
+		ageRange           = 40
+		baseSalary         = 40000
+		salaryIncrement    = 1000
+		salaryRange        = 60
+		ageFilterThreshold = 35  // filter for employees older than this age
+		bonusPercentage    = 0.1 // bonus as 10% of salary
+	)
 	mem := memory.NewGoAllocator()
 
 	// --- Benchmark: Series Creation ---
@@ -139,10 +161,10 @@ func runBenchmark() {
 	departments := make([]string, numRows)
 	depts := []string{"Engineering", "Sales", "Marketing", "HR", "Finance"}
 
-	for i := 0; i < numRows; i++ {
+	for i := range numRows {
 		names[i] = fmt.Sprintf("Employee_%d", i+1)
-		ages[i] = int64(25 + (i % 40))
-		salaries[i] = float64(40000 + (i%60)*1000)
+		ages[i] = int64(baseAge + (i % ageRange))
+		salaries[i] = float64(baseSalary + (i%salaryRange)*salaryIncrement)
 		departments[i] = depts[i%len(depts)]
 	}
 
@@ -160,25 +182,33 @@ func runBenchmark() {
 	dfCreationTime := time.Since(start)
 	fmt.Printf("DataFrame Creation Time: %s\n", dfCreationTime)
 
+	// --- Benchmark: Lazy Evaluation (Filter, WithColumn, Select, Collect) ---
+	fmt.Printf("\nBenchmarking Lazy Evaluation (Filter, WithColumn, Select, Collect) for %d rows...\n", numRows)
+	start = time.Now()
+	lazyDf := df.Lazy().
+		Filter(gorilla.Col("age").Gt(gorilla.Lit(int64(ageFilterThreshold)))).
+		WithColumn("bonus", gorilla.Col("salary").Mul(gorilla.Lit(bonusPercentage))).
+		Select("name", "age", "salary", "bonus", "department")
+
+	result, err := lazyDf.Collect()
+	if err != nil {
+		// Clean up all resources before exit
+		lazyDf.Release()
+		df.Release()
+		nameSeries.Release()
+		ageSeries.Release()
+		salarySeries.Release()
+		deptSeries.Release()
+		log.Printf("Error during lazy evaluation benchmark: %v", err)
+		os.Exit(1)
+	}
+
 	// Ensure Series and DataFrame are released after use
 	defer nameSeries.Release()
 	defer ageSeries.Release()
 	defer salarySeries.Release()
 	defer deptSeries.Release()
 	defer df.Release()
-
-	// --- Benchmark: Lazy Evaluation (Filter, WithColumn, Select, Collect) ---
-	fmt.Printf("\nBenchmarking Lazy Evaluation (Filter, WithColumn, Select, Collect) for %d rows...\n", numRows)
-	start = time.Now()
-	lazyDf := df.Lazy().
-		Filter(gorilla.Col("age").Gt(gorilla.Lit(int64(35)))).
-		WithColumn("bonus", gorilla.Col("salary").Mul(gorilla.Lit(0.1))).
-		Select("name", "age", "salary", "bonus", "department")
-
-	result, err := lazyDf.Collect()
-	if err != nil {
-		log.Fatalf("Error during lazy evaluation benchmark: %v", err)
-	}
 	defer result.Release()
 	defer lazyDf.Release()
 

@@ -1,32 +1,33 @@
-package expr
+package expr_test
 
 import (
 	"testing"
 
+	"github.com/paveg/gorilla/internal/expr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestNewAliasResolver(t *testing.T) {
 	t.Run("creates resolver with case-sensitive matching", func(t *testing.T) {
-		resolver := NewAliasResolver(false)
+		resolver := expr.NewAliasResolver(false)
 
 		assert.NotNil(t, resolver)
-		assert.False(t, resolver.caseInsensitive)
+		// Note: Cannot access unexported caseInsensitive field
 		assert.Empty(t, resolver.GetAllAvailableAliases())
 	})
 
 	t.Run("creates resolver with case-insensitive matching", func(t *testing.T) {
-		resolver := NewAliasResolver(true)
+		resolver := expr.NewAliasResolver(true)
 
 		assert.NotNil(t, resolver)
-		assert.True(t, resolver.caseInsensitive)
+		// Note: Cannot access unexported caseInsensitive field
 		assert.Empty(t, resolver.GetAllAvailableAliases())
 	})
 }
 
 func TestAliasResolver_AddGroupByColumn(t *testing.T) {
-	resolver := NewAliasResolver(false)
+	resolver := expr.NewAliasResolver(false)
 
 	t.Run("adds single GROUP BY column", func(t *testing.T) {
 		resolver.AddGroupByColumn("department")
@@ -42,26 +43,26 @@ func TestAliasResolver_AddGroupByColumn(t *testing.T) {
 	})
 
 	t.Run("adds multiple GROUP BY columns", func(t *testing.T) {
-		resolver := NewAliasResolver(false)
-		resolver.AddGroupByColumn("department")
-		resolver.AddGroupByColumn("region")
-		resolver.AddGroupByColumn("category")
+		multiResolver := expr.NewAliasResolver(false)
+		multiResolver.AddGroupByColumn("department")
+		multiResolver.AddGroupByColumn("region")
+		multiResolver.AddGroupByColumn("category")
 
 		// All should be resolvable
-		resolved, exists := resolver.ResolveAlias("department")
+		resolved, exists := multiResolver.ResolveAlias("department")
 		assert.True(t, exists)
 		assert.Equal(t, "department", resolved)
 
-		resolved, exists = resolver.ResolveAlias("region")
+		resolved, exists = multiResolver.ResolveAlias("region")
 		assert.True(t, exists)
 		assert.Equal(t, "region", resolved)
 
-		resolved, exists = resolver.ResolveAlias("category")
+		resolved, exists = multiResolver.ResolveAlias("category")
 		assert.True(t, exists)
 		assert.Equal(t, "category", resolved)
 
 		// All should appear in available aliases
-		aliases := resolver.GetAllAvailableAliases()
+		aliases := multiResolver.GetAllAvailableAliases()
 		assert.Contains(t, aliases, "department")
 		assert.Contains(t, aliases, "region")
 		assert.Contains(t, aliases, "category")
@@ -69,13 +70,13 @@ func TestAliasResolver_AddGroupByColumn(t *testing.T) {
 }
 
 func TestAliasResolver_AddAggregation(t *testing.T) {
-	resolver := NewAliasResolver(false)
+	resolver := expr.NewAliasResolver(false)
 
 	t.Run("adds aggregation with user-defined alias", func(t *testing.T) {
-		sumExpr := Sum(Col("salary")).As("total_salary")
+		sumExpr := expr.Sum(expr.Col("salary")).As("total_salary")
 
 		err := resolver.AddAggregation(sumExpr)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Should resolve user alias to the alias name
 		resolved, exists := resolver.ResolveAlias("total_salary")
@@ -89,54 +90,54 @@ func TestAliasResolver_AddAggregation(t *testing.T) {
 	})
 
 	t.Run("adds aggregation without user alias (default name)", func(t *testing.T) {
-		resolver := NewAliasResolver(false)
-		countExpr := Count(Col("employee_id"))
+		defaultResolver := expr.NewAliasResolver(false)
+		countExpr := expr.Count(expr.Col("employee_id"))
 
-		err := resolver.AddAggregation(countExpr)
-		assert.NoError(t, err)
+		err := defaultResolver.AddAggregation(countExpr)
+		require.NoError(t, err)
 
 		// Should resolve default name
-		resolved, exists := resolver.ResolveAlias("count_employee_id")
+		resolved, exists := defaultResolver.ResolveAlias("count_employee_id")
 		assert.True(t, exists)
 		assert.Equal(t, "count_employee_id", resolved)
 	})
 
 	t.Run("handles different aggregation types", func(t *testing.T) {
-		resolver := NewAliasResolver(false)
+		typeResolver := expr.NewAliasResolver(false)
 
 		testCases := []struct {
-			expr         *AggregationExpr
+			expr         *expr.AggregationExpr
 			expectedName string
 		}{
-			{Sum(Col("salary")), "sum_salary"},
-			{Count(Col("id")), "count_id"},
-			{Mean(Col("age")), "avg_age"},
-			{Min(Col("score")), "min_score"},
-			{Max(Col("rating")), "max_rating"},
+			{expr.Sum(expr.Col("salary")), "sum_salary"},
+			{expr.Count(expr.Col("id")), "count_id"},
+			{expr.Mean(expr.Col("age")), "avg_age"},
+			{expr.Min(expr.Col("score")), "min_score"},
+			{expr.Max(expr.Col("rating")), "max_rating"},
 		}
 
 		for _, tc := range testCases {
-			err := resolver.AddAggregation(tc.expr)
-			assert.NoError(t, err)
+			err := typeResolver.AddAggregation(tc.expr)
+			require.NoError(t, err)
 
-			resolved, exists := resolver.ResolveAlias(tc.expectedName)
+			resolved, exists := typeResolver.ResolveAlias(tc.expectedName)
 			assert.True(t, exists)
 			assert.Equal(t, tc.expectedName, resolved)
 		}
 	})
 
 	t.Run("detects alias conflicts", func(t *testing.T) {
-		resolver := NewAliasResolver(false)
+		conflictResolver := expr.NewAliasResolver(false)
 
 		// Add first aggregation with alias
-		sumExpr1 := Sum(Col("salary")).As("total")
-		err := resolver.AddAggregation(sumExpr1)
-		assert.NoError(t, err)
+		sumExpr1 := expr.Sum(expr.Col("salary")).As("total")
+		err := conflictResolver.AddAggregation(sumExpr1)
+		require.NoError(t, err)
 
 		// Try to add second aggregation with same alias
-		sumExpr2 := Sum(Col("bonus")).As("total")
-		err = resolver.AddAggregation(sumExpr2)
-		assert.Error(t, err)
+		sumExpr2 := expr.Sum(expr.Col("bonus")).As("total")
+		err = conflictResolver.AddAggregation(sumExpr2)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "alias conflict")
 		assert.Contains(t, err.Error(), "total")
 	})
@@ -144,18 +145,18 @@ func TestAliasResolver_AddAggregation(t *testing.T) {
 
 func TestAliasResolver_ResolveAlias(t *testing.T) {
 	t.Run("resolves various alias types", func(t *testing.T) {
-		resolver := NewAliasResolver(false)
+		resolver := expr.NewAliasResolver(false)
 
 		// Add GROUP BY column
 		resolver.AddGroupByColumn("department")
 
 		// Add aggregation with user alias
-		sumExpr := Sum(Col("salary")).As("total_salary")
+		sumExpr := expr.Sum(expr.Col("salary")).As("total_salary")
 		err := resolver.AddAggregation(sumExpr)
 		require.NoError(t, err)
 
 		// Add aggregation without alias
-		countExpr := Count(Col("employee_id"))
+		countExpr := expr.Count(expr.Col("employee_id"))
 		err = resolver.AddAggregation(countExpr)
 		require.NoError(t, err)
 
@@ -185,11 +186,11 @@ func TestAliasResolver_ResolveAlias(t *testing.T) {
 
 func TestAliasResolver_CaseInsensitive(t *testing.T) {
 	t.Run("case-insensitive alias resolution", func(t *testing.T) {
-		resolver := NewAliasResolver(true)
+		resolver := expr.NewAliasResolver(true)
 
 		// Add columns with mixed case
 		resolver.AddGroupByColumn("Department")
-		sumExpr := Sum(Col("salary")).As("Total_Salary")
+		sumExpr := expr.Sum(expr.Col("salary")).As("Total_Salary")
 		err := resolver.AddAggregation(sumExpr)
 		require.NoError(t, err)
 
@@ -215,10 +216,10 @@ func TestAliasResolver_CaseInsensitive(t *testing.T) {
 	})
 
 	t.Run("case-sensitive alias resolution", func(t *testing.T) {
-		resolver := NewAliasResolver(false)
+		resolver := expr.NewAliasResolver(false)
 
 		resolver.AddGroupByColumn("Department")
-		sumExpr := Sum(Col("salary")).As("Total_Salary")
+		sumExpr := expr.Sum(expr.Col("salary")).As("Total_Salary")
 		err := resolver.AddAggregation(sumExpr)
 		require.NoError(t, err)
 
@@ -241,13 +242,13 @@ func TestAliasResolver_CaseInsensitive(t *testing.T) {
 }
 
 func TestAliasResolver_GetAvailableAliases(t *testing.T) {
-	resolver := NewAliasResolver(false)
+	resolver := expr.NewAliasResolver(false)
 
 	// Add GROUP BY column
 	resolver.AddGroupByColumn("department")
 
 	// Add aggregation with user alias
-	sumExpr := Sum(Col("salary")).As("total_salary")
+	sumExpr := expr.Sum(expr.Col("salary")).As("total_salary")
 	err := resolver.AddAggregation(sumExpr)
 	require.NoError(t, err)
 
@@ -275,17 +276,17 @@ func TestAliasResolver_GetAvailableAliases(t *testing.T) {
 }
 
 func TestAliasResolver_GetAllAvailableAliases(t *testing.T) {
-	resolver := NewAliasResolver(false)
+	resolver := expr.NewAliasResolver(false)
 
 	// Add various types of columns
 	resolver.AddGroupByColumn("department")
 	resolver.AddGroupByColumn("region")
 
-	sumExpr := Sum(Col("salary")).As("total_salary")
+	sumExpr := expr.Sum(expr.Col("salary")).As("total_salary")
 	err := resolver.AddAggregation(sumExpr)
 	require.NoError(t, err)
 
-	countExpr := Count(Col("employee_id"))
+	countExpr := expr.Count(expr.Col("employee_id"))
 	err = resolver.AddAggregation(countExpr)
 	require.NoError(t, err)
 
@@ -303,18 +304,18 @@ func TestAliasResolver_GetAllAvailableAliases(t *testing.T) {
 	}
 
 	// Should be sorted
-	assert.Equal(t, len(expectedAliases), len(aliases))
+	assert.Len(t, aliases, len(expectedAliases))
 }
 
 func TestAliasResolver_GetColumnNameFromExpression(t *testing.T) {
-	resolver := NewAliasResolver(false)
+	resolver := expr.NewAliasResolver(false)
 
 	// Add aggregations
-	sumExpr := Sum(Col("salary")).As("total_salary")
+	sumExpr := expr.Sum(expr.Col("salary")).As("total_salary")
 	err := resolver.AddAggregation(sumExpr)
 	require.NoError(t, err)
 
-	countExpr := Count(Col("employee_id"))
+	countExpr := expr.Count(expr.Col("employee_id"))
 	err = resolver.AddAggregation(countExpr)
 	require.NoError(t, err)
 
@@ -337,10 +338,10 @@ func TestAliasResolver_GetColumnNameFromExpression(t *testing.T) {
 }
 
 func TestAliasResolver_ValidateAlias(t *testing.T) {
-	resolver := NewAliasResolver(false)
+	resolver := expr.NewAliasResolver(false)
 
 	resolver.AddGroupByColumn("department")
-	sumExpr := Sum(Col("salary")).As("total_salary")
+	sumExpr := expr.Sum(expr.Col("salary")).As("total_salary")
 	err := resolver.AddAggregation(sumExpr)
 	require.NoError(t, err)
 
@@ -352,47 +353,47 @@ func TestAliasResolver_ValidateAlias(t *testing.T) {
 		}
 
 		for _, alias := range testCases {
-			err := resolver.ValidateAlias(alias)
-			assert.NoError(t, err, "Should validate alias: %s", alias)
+			validateErr := resolver.ValidateAlias(alias)
+			require.NoError(t, validateErr, "Should validate alias: %s", alias)
 		}
 	})
 
 	t.Run("rejects empty alias", func(t *testing.T) {
-		err := resolver.ValidateAlias("")
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "cannot be empty")
+		emptyErr := resolver.ValidateAlias("")
+		require.Error(t, emptyErr)
+		assert.Contains(t, emptyErr.Error(), "cannot be empty")
 	})
 
 	t.Run("rejects unknown alias with helpful message", func(t *testing.T) {
-		err := resolver.ValidateAlias("unknown_column")
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "unknown_column")
-		assert.Contains(t, err.Error(), "not found")
-		assert.Contains(t, err.Error(), "Available aliases:")
-		assert.Contains(t, err.Error(), "department")
-		assert.Contains(t, err.Error(), "total_salary")
+		unknownErr := resolver.ValidateAlias("unknown_column")
+		require.Error(t, unknownErr)
+		assert.Contains(t, unknownErr.Error(), "unknown_column")
+		assert.Contains(t, unknownErr.Error(), "not found")
+		assert.Contains(t, unknownErr.Error(), "Available aliases:")
+		assert.Contains(t, unknownErr.Error(), "department")
+		assert.Contains(t, unknownErr.Error(), "total_salary")
 	})
 }
 
 func TestAliasResolver_DefaultNameGeneration(t *testing.T) {
-	resolver := NewAliasResolver(false)
+	resolver := expr.NewAliasResolver(false)
 
 	testCases := []struct {
 		name     string
-		expr     *AggregationExpr
+		expr     *expr.AggregationExpr
 		expected string
 	}{
-		{"sum aggregation", Sum(Col("salary")), "sum_salary"},
-		{"count aggregation", Count(Col("employee_id")), "count_employee_id"},
-		{"mean aggregation", Mean(Col("age")), "avg_age"},
-		{"min aggregation", Min(Col("score")), "min_score"},
-		{"max aggregation", Max(Col("rating")), "max_rating"},
+		{"sum aggregation", expr.Sum(expr.Col("salary")), "sum_salary"},
+		{"count aggregation", expr.Count(expr.Col("employee_id")), "count_employee_id"},
+		{"mean aggregation", expr.Mean(expr.Col("age")), "avg_age"},
+		{"min aggregation", expr.Min(expr.Col("score")), "min_score"},
+		{"max aggregation", expr.Max(expr.Col("rating")), "max_rating"},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			err := resolver.AddAggregation(tc.expr)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			resolved, exists := resolver.ResolveAlias(tc.expected)
 			assert.True(t, exists)
@@ -404,14 +405,14 @@ func TestAliasResolver_DefaultNameGeneration(t *testing.T) {
 func TestBuildAliasResolver(t *testing.T) {
 	t.Run("builds resolver from parameters", func(t *testing.T) {
 		groupByColumns := []string{"department", "region"}
-		aggregations := []*AggregationExpr{
-			Sum(Col("salary")).As("total_salary"),
-			Count(Col("employee_id")),
-			Mean(Col("age")).As("avg_age"),
+		aggregations := []*expr.AggregationExpr{
+			expr.Sum(expr.Col("salary")).As("total_salary"),
+			expr.Count(expr.Col("employee_id")),
+			expr.Mean(expr.Col("age")).As("avg_age"),
 		}
 
-		resolver, err := BuildAliasResolver(groupByColumns, aggregations, false)
-		assert.NoError(t, err)
+		resolver, err := expr.BuildAliasResolver(groupByColumns, aggregations, false)
+		require.NoError(t, err)
 		assert.NotNil(t, resolver)
 
 		// Test that all expected aliases are available
@@ -430,20 +431,20 @@ func TestBuildAliasResolver(t *testing.T) {
 
 	t.Run("returns error for conflicting aliases", func(t *testing.T) {
 		groupByColumns := []string{"department"}
-		aggregations := []*AggregationExpr{
-			Sum(Col("salary")).As("total"),
-			Count(Col("employee_id")).As("total"), // Conflict!
+		aggregations := []*expr.AggregationExpr{
+			expr.Sum(expr.Col("salary")).As("total"),
+			expr.Count(expr.Col("employee_id")).As("total"), // Conflict!
 		}
 
-		_, err := BuildAliasResolver(groupByColumns, aggregations, false)
-		assert.Error(t, err)
+		_, err := expr.BuildAliasResolver(groupByColumns, aggregations, false)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to add aggregation")
 		assert.Contains(t, err.Error(), "alias conflict")
 	})
 
 	t.Run("handles empty inputs", func(t *testing.T) {
-		resolver, err := BuildAliasResolver([]string{}, []*AggregationExpr{}, false)
-		assert.NoError(t, err)
+		resolver, err := expr.BuildAliasResolver([]string{}, []*expr.AggregationExpr{}, false)
+		require.NoError(t, err)
 		assert.NotNil(t, resolver)
 		assert.Empty(t, resolver.GetAllAvailableAliases())
 	})
@@ -456,17 +457,17 @@ func TestAliasResolver_Integration(t *testing.T) {
 		//          GROUP BY department
 		//          HAVING total_salary > 100000 AND emp_count >= 5
 
-		resolver := NewAliasResolver(false)
+		resolver := expr.NewAliasResolver(false)
 
 		// GROUP BY column
 		resolver.AddGroupByColumn("department")
 
 		// Aggregations with user aliases
-		sumExpr := Sum(Col("salary")).As("total_salary")
+		sumExpr := expr.Sum(expr.Col("salary")).As("total_salary")
 		err := resolver.AddAggregation(sumExpr)
 		require.NoError(t, err)
 
-		countExpr := Count(Col("*")).As("emp_count")
+		countExpr := expr.Count(expr.Col("*")).As("emp_count")
 		err = resolver.AddAggregation(countExpr)
 		require.NoError(t, err)
 
@@ -480,8 +481,8 @@ func TestAliasResolver_Integration(t *testing.T) {
 		}
 
 		for _, alias := range havingAliases {
-			err := resolver.ValidateAlias(alias)
-			assert.NoError(t, err, "HAVING should be able to reference: %s", alias)
+			havingErr := resolver.ValidateAlias(alias)
+			require.NoError(t, havingErr, "HAVING should be able to reference: %s", alias)
 		}
 
 		// Test that invalid references are rejected
@@ -491,8 +492,8 @@ func TestAliasResolver_Integration(t *testing.T) {
 		}
 
 		for _, alias := range invalidAliases {
-			err := resolver.ValidateAlias(alias)
-			assert.Error(t, err, "HAVING should reject invalid reference: %s", alias)
+			invalidErr := resolver.ValidateAlias(alias)
+			require.Error(t, invalidErr, "HAVING should reject invalid reference: %s", alias)
 		}
 	})
 }

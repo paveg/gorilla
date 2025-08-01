@@ -1,3 +1,4 @@
+//nolint:testpackage // requires internal access to unexported types and functions
 package version
 
 import (
@@ -192,7 +193,7 @@ func TestParseSemVer(t *testing.T) {
 			result, err := ParseSemVer(tt.version)
 
 			if tt.hasError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Nil(t, result)
 			} else {
 				require.NoError(t, err)

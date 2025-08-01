@@ -1,4 +1,4 @@
-package parallel
+package parallel_test
 
 import (
 	"runtime"
@@ -6,14 +6,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/paveg/gorilla/internal/parallel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// TestAllocatorPool tests the memory allocator pool for safe reuse
+// TestAllocatorPool tests the memory allocator pool for safe reuse.
 func TestAllocatorPool(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping allocator pool tests in short mode")
+	}
 	t.Run("basic pool operations", func(t *testing.T) {
-		pool := NewAllocatorPool(2) // Pool size of 2
+		pool := parallel.NewAllocatorPool(2) // Pool size of 2
 
 		// Get an allocator
 		alloc1 := pool.Get()
@@ -37,18 +41,18 @@ func TestAllocatorPool(t *testing.T) {
 	})
 
 	t.Run("concurrent access safety", func(t *testing.T) {
-		pool := NewAllocatorPool(4)
+		pool := parallel.NewAllocatorPool(4)
 		const numGoroutines = 10
 		const operationsPerGoroutine = 50
 
 		var wg sync.WaitGroup
 		errors := make(chan error, numGoroutines)
 
-		for i := 0; i < numGoroutines; i++ {
+		for range numGoroutines {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				for j := 0; j < operationsPerGoroutine; j++ {
+				for range operationsPerGoroutine {
 					alloc := pool.Get()
 					if alloc == nil {
 						errors <- assert.AnError
@@ -73,10 +77,13 @@ func TestAllocatorPool(t *testing.T) {
 	})
 }
 
-// TestMemoryMonitor tests memory pressure detection and adaptive behavior
+// TestMemoryMonitor tests memory pressure detection and adaptive behavior.
 func TestMemoryMonitor(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping memory monitor tests in short mode")
+	}
 	t.Run("memory pressure detection", func(t *testing.T) {
-		monitor := NewMemoryMonitor(1024, 4) // 1KB threshold, 4 max workers
+		monitor := parallel.NewMemoryMonitor(1024, 4) // 1KB threshold, 4 max workers
 
 		// Should allow allocation when under threshold
 		assert.True(t, monitor.CanAllocate(512))
@@ -92,7 +99,7 @@ func TestMemoryMonitor(t *testing.T) {
 	})
 
 	t.Run("adaptive parallelism", func(t *testing.T) {
-		monitor := NewMemoryMonitor(1000, 8)
+		monitor := parallel.NewMemoryMonitor(1000, 8)
 
 		// Initially should allow full parallelism
 		assert.Equal(t, 8, monitor.AdjustParallelism())
@@ -107,14 +114,17 @@ func TestMemoryMonitor(t *testing.T) {
 	})
 }
 
-// TestChunkProcessor tests isolated chunk processing
+// TestChunkProcessor tests isolated chunk processing.
 func TestChunkProcessor(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping chunk processor tests in short mode")
+	}
 	t.Run("independent memory allocation", func(t *testing.T) {
-		pool := NewAllocatorPool(2)
+		pool := parallel.NewAllocatorPool(2)
 		defer pool.Close()
 
-		processor1 := NewChunkProcessor(pool, 1)
-		processor2 := NewChunkProcessor(pool, 2)
+		processor1 := parallel.NewChunkProcessor(pool, 1)
+		processor2 := parallel.NewChunkProcessor(pool, 2)
 
 		// Each processor should have its own allocator context
 		assert.NotEqual(t, processor1.ChunkID(), processor2.ChunkID())
@@ -133,19 +143,19 @@ func TestChunkProcessor(t *testing.T) {
 	})
 
 	t.Run("concurrent chunk processing", func(t *testing.T) {
-		pool := NewAllocatorPool(4)
+		pool := parallel.NewAllocatorPool(4)
 		defer pool.Close()
 
 		const numProcessors = 10
 		var wg sync.WaitGroup
 		errors := make(chan error, numProcessors)
 
-		for i := 0; i < numProcessors; i++ {
+		for i := range numProcessors {
 			wg.Add(1)
 			go func(id int) {
 				defer wg.Done()
 
-				processor := NewChunkProcessor(pool, id)
+				processor := parallel.NewChunkProcessor(pool, id)
 				defer processor.Release()
 
 				// Simulate some work
@@ -170,18 +180,21 @@ func TestChunkProcessor(t *testing.T) {
 	})
 }
 
-// TestSafeDataFrameCopy tests thread-safe DataFrame copying
+// TestSafeDataFrameCopy tests thread-safe DataFrame copying.
 func TestSafeDataFrameCopy(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping safe dataframe copy tests in short mode")
+	}
 	t.Run("concurrent access to safe copy", func(t *testing.T) {
 		// Test with mock data until full DataFrame integration
 		mockData := "test_dataframe_data"
-		safeDF := NewSafeDataFrame(mockData)
+		safeDF := parallel.NewSafeDataFrame(mockData)
 
 		const numGoroutines = 5
 		var wg sync.WaitGroup
 		errors := make(chan error, numGoroutines)
 
-		for i := 0; i < numGoroutines; i++ {
+		for range numGoroutines {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -211,7 +224,7 @@ func TestSafeDataFrameCopy(t *testing.T) {
 
 	t.Run("safe data frame creation and basic operations", func(t *testing.T) {
 		testData := "sample_data"
-		safeDF := NewSafeDataFrame(testData)
+		safeDF := parallel.NewSafeDataFrame(testData)
 
 		// Test basic Clone operation
 		cloned, err := safeDF.Clone(nil)
@@ -220,9 +233,9 @@ func TestSafeDataFrameCopy(t *testing.T) {
 	})
 }
 
-// Benchmark allocator pool performance
+// Benchmark allocator pool performance.
 func BenchmarkAllocatorPool(b *testing.B) {
-	pool := NewAllocatorPool(runtime.NumCPU())
+	pool := parallel.NewAllocatorPool(runtime.NumCPU())
 	defer pool.Close()
 
 	b.ResetTimer()

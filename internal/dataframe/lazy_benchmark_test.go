@@ -1,3 +1,4 @@
+//nolint:testpackage // requires internal access to unexported types and functions
 package dataframe
 
 import (
@@ -9,7 +10,7 @@ import (
 	"github.com/paveg/gorilla/internal/series"
 )
 
-// BenchmarkLazyFrameSequentialVsParallel compares performance of sequential vs parallel execution
+// BenchmarkLazyFrameSequentialVsParallel compares performance of sequential vs parallel execution.
 func BenchmarkLazyFrameSequentialVsParallel(b *testing.B) {
 	// Create test data
 	sizes := []int{500, 1000, 2000, 5000, 10000}
@@ -32,7 +33,7 @@ func benchmarkLazyFrameSequential(b *testing.B, size int) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		lazyDf := df.Lazy()
 
 		// Force sequential execution by using small threshold
@@ -58,7 +59,7 @@ func benchmarkLazyFrameParallel(b *testing.B, size int) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		lazyDf := df.Lazy()
 
 		// Force parallel execution
@@ -85,7 +86,7 @@ func createBenchmarkDataFrame(size int) *DataFrame {
 	salaries := make([]float64, size)
 	active := make([]bool, size)
 
-	for i := 0; i < size; i++ {
+	for i := range size {
 		names[i] = fmt.Sprintf("Employee_%d", i)
 		ages[i] = int64(25 + (i % 40))       // Ages 25-64
 		salaries[i] = float64(40000 + i*100) // Increasing salaries
@@ -116,7 +117,7 @@ func createBenchmarkDataFrame(size int) *DataFrame {
 	return result
 }
 
-// BenchmarkMemoryManagement benchmarks memory allocation patterns
+// BenchmarkMemoryManagement benchmarks memory allocation patterns.
 func BenchmarkMemoryManagement(b *testing.B) {
 	size := 5000
 	df := createBenchmarkDataFrame(size)
@@ -126,7 +127,7 @@ func BenchmarkMemoryManagement(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			lazyDf := df.Lazy()
 			result, err := lazyDf.Collect()
 			if err != nil {

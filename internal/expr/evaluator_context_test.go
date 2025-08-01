@@ -1,4 +1,4 @@
-package expr
+package expr_test
 
 import (
 	"testing"
@@ -6,13 +6,14 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/paveg/gorilla/internal/expr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // Test helpers
 
-func createTestColumnsForContext(t *testing.T, mem memory.Allocator) map[string]arrow.Array {
+func createTestColumnsForContext(_ *testing.T, mem memory.Allocator) map[string]arrow.Array {
 	// Create comprehensive test data for context testing
 	intBuilder := array.NewInt64Builder(mem)
 	defer intBuilder.Release()
@@ -49,8 +50,8 @@ func createTestColumnsForContext(t *testing.T, mem memory.Allocator) map[string]
 	}
 }
 
-func createAggregatedTestColumns(t *testing.T, mem memory.Allocator) map[string]arrow.Array {
-	// Create aggregated data that would be present in GroupContext
+func createAggregatedTestColumns(_ *testing.T, mem memory.Allocator) map[string]arrow.Array {
+	// Create aggregated data that would be present in expr.GroupContext
 	// This simulates the result of a GROUP BY operation
 	deptBuilder := array.NewStringBuilder(mem)
 	defer deptBuilder.Release()
@@ -84,7 +85,7 @@ func createAggregatedTestColumns(t *testing.T, mem memory.Allocator) map[string]
 	}
 }
 
-func createWindowTestColumns(t *testing.T, mem memory.Allocator) map[string]arrow.Array {
+func createWindowTestColumns(_ *testing.T, mem memory.Allocator) map[string]arrow.Array {
 	// Create data with window function results
 	valueBuilder := array.NewInt64Builder(mem)
 	defer valueBuilder.Release()
@@ -112,7 +113,7 @@ func createWindowTestColumns(t *testing.T, mem memory.Allocator) map[string]arro
 
 func TestEvaluateWithContext_Column(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 
 	// Test with row context
 	rowColumns := createTestColumnsForContext(t, mem)
@@ -122,8 +123,8 @@ func TestEvaluateWithContext_Column(t *testing.T) {
 		}
 	}()
 
-	colExpr := Col("id")
-	result, err := eval.EvaluateWithContext(colExpr, rowColumns, RowContext)
+	colExpr := expr.Col("id")
+	result, err := eval.EvaluateWithContext(colExpr, rowColumns, expr.RowContext)
 	require.NoError(t, err)
 	defer result.Release()
 
@@ -141,8 +142,8 @@ func TestEvaluateWithContext_Column(t *testing.T) {
 		}
 	}()
 
-	deptExpr := Col("department")
-	result2, err := eval.EvaluateWithContext(deptExpr, groupColumns, GroupContext)
+	deptExpr := expr.Col("department")
+	result2, err := eval.EvaluateWithContext(deptExpr, groupColumns, expr.GroupContext)
 	require.NoError(t, err)
 	defer result2.Release()
 
@@ -155,7 +156,7 @@ func TestEvaluateWithContext_Column(t *testing.T) {
 
 func TestEvaluateWithContext_Literal(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 	columns := createTestColumnsForContext(t, mem)
 	defer func() {
 		for _, arr := range columns {
@@ -166,18 +167,18 @@ func TestEvaluateWithContext_Literal(t *testing.T) {
 	tests := []struct {
 		name     string
 		value    interface{}
-		context  EvaluationContext
+		context  expr.EvaluationContext
 		expected interface{}
 	}{
-		{"int64 in row context", int64(42), RowContext, int64(42)},
-		{"string in group context", "test", GroupContext, "test"},
-		{"float64 in row context", 3.14, RowContext, 3.14},
-		{"bool in group context", true, GroupContext, true},
+		{"int64 in row context", int64(42), expr.RowContext, int64(42)},
+		{"string in group context", "test", expr.GroupContext, "test"},
+		{"float64 in row context", 3.14, expr.RowContext, 3.14},
+		{"bool in group context", true, expr.GroupContext, true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			litExpr := Lit(tt.value)
+			litExpr := expr.Lit(tt.value)
 			result, err := eval.EvaluateWithContext(litExpr, columns, tt.context)
 			require.NoError(t, err)
 			defer result.Release()
@@ -191,7 +192,7 @@ func TestEvaluateWithContext_Literal(t *testing.T) {
 			case *array.String:
 				assert.Equal(t, tt.expected, arr.Value(0))
 			case *array.Float64:
-				assert.Equal(t, tt.expected, arr.Value(0))
+				assert.InDelta(t, tt.expected, arr.Value(0), 0.001)
 			case *array.Boolean:
 				assert.Equal(t, tt.expected, arr.Value(0))
 			}
@@ -201,7 +202,7 @@ func TestEvaluateWithContext_Literal(t *testing.T) {
 
 func TestEvaluateWithContext_Binary(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 	columns := createTestColumnsForContext(t, mem)
 	defer func() {
 		for _, arr := range columns {
@@ -211,20 +212,20 @@ func TestEvaluateWithContext_Binary(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		expr     Expr
-		context  EvaluationContext
+		expr     expr.Expr
+		context  expr.EvaluationContext
 		expected []int64
 	}{
 		{
 			name:     "addition in row context",
-			expr:     Col("id").Add(Lit(int64(5))),
-			context:  RowContext,
+			expr:     expr.Col("id").Add(expr.Lit(int64(5))),
+			context:  expr.RowContext,
 			expected: []int64{15, 25, 35, 45, 55},
 		},
 		{
 			name:     "multiplication in row context",
-			expr:     Col("id").Mul(Lit(int64(2))),
-			context:  RowContext,
+			expr:     expr.Col("id").Mul(expr.Lit(int64(2))),
+			context:  expr.RowContext,
 			expected: []int64{20, 40, 60, 80, 100},
 		},
 	}
@@ -248,7 +249,7 @@ func TestEvaluateWithContext_Binary(t *testing.T) {
 
 func TestEvaluateBooleanWithContext_Comparison(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 	columns := createTestColumnsForContext(t, mem)
 	defer func() {
 		for _, arr := range columns {
@@ -258,26 +259,26 @@ func TestEvaluateBooleanWithContext_Comparison(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		expr     Expr
-		context  EvaluationContext
+		expr     expr.Expr
+		context  expr.EvaluationContext
 		expected []bool
 	}{
 		{
 			name:     "greater than in row context",
-			expr:     Col("id").Gt(Lit(int64(25))),
-			context:  RowContext,
+			expr:     expr.Col("id").Gt(expr.Lit(int64(25))),
+			context:  expr.RowContext,
 			expected: []bool{false, false, true, true, true},
 		},
 		{
 			name:     "equality in row context",
-			expr:     Col("department").Eq(Lit("eng")),
-			context:  RowContext,
+			expr:     expr.Col("department").Eq(expr.Lit("eng")),
+			context:  expr.RowContext,
 			expected: []bool{true, false, true, false, true},
 		},
 		{
 			name:     "logical and in row context",
-			expr:     Col("id").Gt(Lit(int64(15))).And(Col("active")),
-			context:  RowContext,
+			expr:     expr.Col("id").Gt(expr.Lit(int64(15))).And(expr.Col("active")),
+			context:  expr.RowContext,
 			expected: []bool{false, false, true, false, true},
 		},
 	}
@@ -303,7 +304,7 @@ func TestEvaluateBooleanWithContext_Comparison(t *testing.T) {
 
 func TestValidateContextSupport_AggregationExpr(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 	columns := createTestColumnsForContext(t, mem)
 	defer func() {
 		for _, arr := range columns {
@@ -312,24 +313,21 @@ func TestValidateContextSupport_AggregationExpr(t *testing.T) {
 	}()
 
 	// Create aggregation expression
-	aggExpr := &AggregationExpr{
-		column:  Col("salary"),
-		aggType: AggSum,
-	}
+	aggExpr := expr.Sum(expr.Col("salary"))
 
-	// Should work in GroupContext
-	_, err := eval.EvaluateWithContext(aggExpr, columns, GroupContext)
-	assert.Error(t, err) // Will error because columns don't contain aggregated data, but validation should pass
+	// Should work in expr.GroupContext
+	_, err := eval.EvaluateWithContext(aggExpr, columns, expr.GroupContext)
+	require.Error(t, err) // Will error because columns don't contain aggregated data, but validation should pass
 
-	// Should fail in RowContext
-	_, err = eval.EvaluateWithContext(aggExpr, columns, RowContext)
-	assert.Error(t, err)
+	// Should fail in expr.RowContext
+	_, err = eval.EvaluateWithContext(aggExpr, columns, expr.RowContext)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "does not support RowContext")
 }
 
 func TestValidateContextSupport_WindowExpr(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 	columns := createWindowTestColumns(t, mem)
 	defer func() {
 		for _, arr := range columns {
@@ -338,26 +336,23 @@ func TestValidateContextSupport_WindowExpr(t *testing.T) {
 	}()
 
 	// Create window expression
-	windowFunc := RowNumber()
-	windowSpec := NewWindow().PartitionBy("department")
-	windowExpr := &WindowExpr{
-		function: windowFunc,
-		window:   windowSpec,
-	}
+	windowFunc := expr.RowNumber()
+	windowSpec := expr.NewWindow().PartitionBy("department")
+	windowExpr := windowFunc.Over(windowSpec)
 
-	// Should work in RowContext
-	_, err := eval.EvaluateWithContext(windowExpr, columns, RowContext)
-	assert.Error(t, err) // May error due to missing partition columns, but context validation should pass
+	// Should work in expr.RowContext
+	_, err := eval.EvaluateWithContext(windowExpr, columns, expr.RowContext)
+	require.Error(t, err) // May error due to missing partition columns, but context validation should pass
 
-	// Should fail in GroupContext
-	_, err = eval.EvaluateWithContext(windowExpr, columns, GroupContext)
-	assert.Error(t, err)
+	// Should fail in expr.GroupContext
+	_, err = eval.EvaluateWithContext(windowExpr, columns, expr.GroupContext)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "does not support GroupContext")
 }
 
 func TestValidateContextSupport_NestedExpressions(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 	columns := createTestColumnsForContext(t, mem)
 	defer func() {
 		for _, arr := range columns {
@@ -366,32 +361,25 @@ func TestValidateContextSupport_NestedExpressions(t *testing.T) {
 	}()
 
 	// Create nested expression with mixed context support
-	// Binary expression containing aggregation (should only work in GroupContext)
-	aggExpr := &AggregationExpr{
-		column:  Col("salary"),
-		aggType: AggSum,
-	}
-	nestedExpr := &BinaryExpr{
-		left:  aggExpr,
-		op:    OpGt,
-		right: Lit(float64(10.0)),
-	}
+	// Binary expression containing aggregation (should only work in expr.GroupContext)
+	aggExpr := expr.Sum(expr.Col("salary"))
+	nestedExpr := aggExpr.Gt(expr.Lit(float64(10.0)))
 
-	// Should fail in RowContext due to aggregation
-	_, err := eval.EvaluateWithContext(nestedExpr, columns, RowContext)
-	assert.Error(t, err)
+	// Should fail in expr.RowContext due to aggregation
+	_, err := eval.EvaluateWithContext(nestedExpr, columns, expr.RowContext)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "does not support RowContext")
 
-	// Should work in GroupContext (though may fail due to missing aggregated data)
-	_, err = eval.EvaluateWithContext(nestedExpr, columns, GroupContext)
-	assert.Error(t, err) // Will error on missing aggregated column, but context validation should pass
+	// Should work in expr.GroupContext (though may fail due to missing aggregated data)
+	_, err = eval.EvaluateWithContext(nestedExpr, columns, expr.GroupContext)
+	require.Error(t, err) // Will error on missing aggregated column, but context validation should pass
 }
 
 // Integration tests with actual Arrow arrays
 
 func TestEvaluateWithContext_Integration_RowContext(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 	columns := createTestColumnsForContext(t, mem)
 	defer func() {
 		for _, arr := range columns {
@@ -400,9 +388,9 @@ func TestEvaluateWithContext_Integration_RowContext(t *testing.T) {
 	}()
 
 	// Complex expression in row context: (id + salary) > 25 AND active
-	expr := Col("id").Add(Col("salary")).Gt(Lit(float64(25.0))).And(Col("active"))
+	complexExpr := expr.Col("id").Add(expr.Col("salary")).Gt(expr.Lit(float64(25.0))).And(expr.Col("active"))
 
-	result, err := eval.EvaluateBooleanWithContext(expr, columns, RowContext)
+	result, err := eval.EvaluateBooleanWithContext(complexExpr, columns, expr.RowContext)
 	require.NoError(t, err)
 	defer result.Release()
 
@@ -422,7 +410,7 @@ func TestEvaluateWithContext_Integration_RowContext(t *testing.T) {
 
 func TestEvaluateWithContext_Integration_GroupContext(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 	groupColumns := createAggregatedTestColumns(t, mem)
 	defer func() {
 		for _, arr := range groupColumns {
@@ -431,9 +419,9 @@ func TestEvaluateWithContext_Integration_GroupContext(t *testing.T) {
 	}()
 
 	// Test aggregated column evaluation in group context
-	expr := Col("sum_salary").Gt(Lit(float64(8.0)))
+	groupExpr := expr.Col("sum_salary").Gt(expr.Lit(float64(8.0)))
 
-	result, err := eval.EvaluateBooleanWithContext(expr, groupColumns, GroupContext)
+	result, err := eval.EvaluateBooleanWithContext(groupExpr, groupColumns, expr.GroupContext)
 	require.NoError(t, err)
 	defer result.Release()
 
@@ -452,7 +440,7 @@ func TestEvaluateWithContext_Integration_GroupContext(t *testing.T) {
 
 func TestEvaluateWithContext_ContextMismatch(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 	columns := createTestColumnsForContext(t, mem)
 	defer func() {
 		for _, arr := range columns {
@@ -462,32 +450,26 @@ func TestEvaluateWithContext_ContextMismatch(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		expr        Expr
-		context     EvaluationContext
+		expr        expr.Expr
+		context     expr.EvaluationContext
 		expectError string
 	}{
 		{
-			name: "aggregation in row context",
-			expr: &AggregationExpr{
-				column:  Col("salary"),
-				aggType: AggSum,
-			},
-			context:     RowContext,
+			name:        "aggregation in row context",
+			expr:        expr.Sum(expr.Col("salary")),
+			context:     expr.RowContext,
 			expectError: "does not support RowContext",
 		},
 		{
-			name: "window function in group context",
-			expr: &WindowExpr{
-				function: RowNumber(),
-				window:   NewWindow(),
-			},
-			context:     GroupContext,
+			name:        "window function in group context",
+			expr:        expr.RowNumber().Over(expr.NewWindow()),
+			context:     expr.GroupContext,
 			expectError: "does not support GroupContext",
 		},
 		{
 			name:        "invalid expression",
-			expr:        Invalid("test error"),
-			context:     RowContext,
+			expr:        expr.Invalid("test error"),
+			context:     expr.RowContext,
 			expectError: "does not support RowContext",
 		},
 	}
@@ -495,7 +477,7 @@ func TestEvaluateWithContext_ContextMismatch(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := eval.EvaluateWithContext(tt.expr, columns, tt.context)
-			assert.Error(t, err)
+			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.expectError)
 		})
 	}
@@ -503,7 +485,7 @@ func TestEvaluateWithContext_ContextMismatch(t *testing.T) {
 
 func TestEvaluateWithContext_NonExistentColumn(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 	columns := createTestColumnsForContext(t, mem)
 	defer func() {
 		for _, arr := range columns {
@@ -511,9 +493,9 @@ func TestEvaluateWithContext_NonExistentColumn(t *testing.T) {
 		}
 	}()
 
-	expr := Col("nonexistent")
-	_, err := eval.EvaluateWithContext(expr, columns, RowContext)
-	assert.Error(t, err)
+	colExpr := expr.Col("nonexistent")
+	_, err := eval.EvaluateWithContext(colExpr, columns, expr.RowContext)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Column 'nonexistent' does not exist")
 }
 
@@ -521,7 +503,7 @@ func TestEvaluateWithContext_NonExistentColumn(t *testing.T) {
 
 func TestEvaluateWithContext_BackwardCompatibility(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 	columns := createTestColumnsForContext(t, mem)
 	defer func() {
 		for _, arr := range columns {
@@ -530,15 +512,15 @@ func TestEvaluateWithContext_BackwardCompatibility(t *testing.T) {
 	}()
 
 	// Test that old methods still work
-	expr := Col("id").Add(Lit(int64(5)))
+	testExpr := expr.Col("id").Add(expr.Lit(int64(5)))
 
 	// Old method
-	oldResult, err := eval.Evaluate(expr, columns)
+	oldResult, err := eval.Evaluate(testExpr, columns)
 	require.NoError(t, err)
 	defer oldResult.Release()
 
-	// New method with RowContext (should produce same result)
-	newResult, err := eval.EvaluateWithContext(expr, columns, RowContext)
+	// New method with expr.RowContext (should produce same result)
+	newResult, err := eval.EvaluateWithContext(testExpr, columns, expr.RowContext)
 	require.NoError(t, err)
 	defer newResult.Release()
 
@@ -546,14 +528,14 @@ func TestEvaluateWithContext_BackwardCompatibility(t *testing.T) {
 	oldInt := oldResult.(*array.Int64)
 	newInt := newResult.(*array.Int64)
 	assert.Equal(t, oldInt.Len(), newInt.Len())
-	for i := 0; i < oldInt.Len(); i++ {
+	for i := range oldInt.Len() {
 		assert.Equal(t, oldInt.Value(i), newInt.Value(i))
 	}
 }
 
 func TestEvaluateBooleanWithContext_BackwardCompatibility(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 	columns := createTestColumnsForContext(t, mem)
 	defer func() {
 		for _, arr := range columns {
@@ -562,15 +544,15 @@ func TestEvaluateBooleanWithContext_BackwardCompatibility(t *testing.T) {
 	}()
 
 	// Test that old boolean methods still work
-	expr := Col("id").Gt(Lit(int64(25)))
+	boolExpr := expr.Col("id").Gt(expr.Lit(int64(25)))
 
 	// Old method
-	oldResult, err := eval.EvaluateBoolean(expr, columns)
+	oldResult, err := eval.EvaluateBoolean(boolExpr, columns)
 	require.NoError(t, err)
 	defer oldResult.Release()
 
-	// New method with RowContext (should produce same result)
-	newResult, err := eval.EvaluateBooleanWithContext(expr, columns, RowContext)
+	// New method with expr.RowContext (should produce same result)
+	newResult, err := eval.EvaluateBooleanWithContext(boolExpr, columns, expr.RowContext)
 	require.NoError(t, err)
 	defer newResult.Release()
 
@@ -578,7 +560,7 @@ func TestEvaluateBooleanWithContext_BackwardCompatibility(t *testing.T) {
 	oldBool := oldResult.(*array.Boolean)
 	newBool := newResult.(*array.Boolean)
 	assert.Equal(t, oldBool.Len(), newBool.Len())
-	for i := 0; i < oldBool.Len(); i++ {
+	for i := range oldBool.Len() {
 		assert.Equal(t, oldBool.Value(i), newBool.Value(i))
 	}
 }
@@ -587,7 +569,7 @@ func TestEvaluateBooleanWithContext_BackwardCompatibility(t *testing.T) {
 
 func TestEvaluateWithContext_ComplexNestedExpressions(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 	columns := createTestColumnsForContext(t, mem)
 	defer func() {
 		for _, arr := range columns {
@@ -597,11 +579,11 @@ func TestEvaluateWithContext_ComplexNestedExpressions(t *testing.T) {
 
 	// Very complex nested expression in row context
 	// ((id * 2) + salary) > 35 AND (department == "eng" OR active)
-	leftSide := Col("id").Mul(Lit(int64(2))).Add(Col("salary")).Gt(Lit(int64(35)))
-	rightSide := Col("department").Eq(Lit("eng")).Or(Col("active"))
+	leftSide := expr.Col("id").Mul(expr.Lit(int64(2))).Add(expr.Col("salary")).Gt(expr.Lit(int64(35)))
+	rightSide := expr.Col("department").Eq(expr.Lit("eng")).Or(expr.Col("active"))
 	complexExpr := leftSide.And(rightSide)
 
-	result, err := eval.EvaluateBooleanWithContext(complexExpr, columns, RowContext)
+	result, err := eval.EvaluateBooleanWithContext(complexExpr, columns, expr.RowContext)
 	require.NoError(t, err)
 	defer result.Release()
 
@@ -620,11 +602,11 @@ func TestEvaluateWithContext_ComplexNestedExpressions(t *testing.T) {
 	}
 }
 
-// Aggregation expression handling in GroupContext
+// Aggregation expression handling in expr.GroupContext
 
 func TestEvaluateWithContext_AggregationInGroupContext(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 	groupColumns := createAggregatedTestColumns(t, mem)
 	defer func() {
 		for _, arr := range groupColumns {
@@ -634,32 +616,24 @@ func TestEvaluateWithContext_AggregationInGroupContext(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		aggExpr  *AggregationExpr
+		aggExpr  *expr.AggregationExpr
 		expected []float64
 	}{
 		{
-			name: "sum aggregation with alias",
-			aggExpr: &AggregationExpr{
-				column:  Col("salary"),
-				aggType: AggSum,
-				alias:   "sum_salary",
-			},
+			name:     "sum aggregation with alias",
+			aggExpr:  expr.Sum(expr.Col("salary")).As("sum_salary"),
 			expected: []float64{9.5, 7.0},
 		},
 		{
-			name: "mean aggregation with alias",
-			aggExpr: &AggregationExpr{
-				column:  Col("salary"),
-				aggType: AggMean,
-				alias:   "avg_salary",
-			},
+			name:     "mean aggregation with alias",
+			aggExpr:  expr.Mean(expr.Col("salary")).As("avg_salary"),
 			expected: []float64{3.17, 3.5},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := eval.EvaluateWithContext(tt.aggExpr, groupColumns, GroupContext)
+			result, err := eval.EvaluateWithContext(tt.aggExpr, groupColumns, expr.GroupContext)
 			require.NoError(t, err)
 			defer result.Release()
 
@@ -676,7 +650,7 @@ func TestEvaluateWithContext_AggregationInGroupContext(t *testing.T) {
 
 func TestEvaluateWithContext_AggregationDefaultNaming(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 	groupColumns := createAggregatedTestColumns(t, mem)
 	defer func() {
 		for _, arr := range groupColumns {
@@ -685,13 +659,10 @@ func TestEvaluateWithContext_AggregationDefaultNaming(t *testing.T) {
 	}()
 
 	// Test aggregation with default naming (no alias)
-	aggExpr := &AggregationExpr{
-		column:  Col("salary"),
-		aggType: AggSum,
-		// No alias set - should use default naming
-	}
+	aggExpr := expr.Sum(expr.Col("salary"))
+	// No alias set - should use default naming
 
-	result, err := eval.EvaluateWithContext(aggExpr, groupColumns, GroupContext)
+	result, err := eval.EvaluateWithContext(aggExpr, groupColumns, expr.GroupContext)
 	require.NoError(t, err)
 	defer result.Release()
 
@@ -702,11 +673,10 @@ func TestEvaluateWithContext_AggregationDefaultNaming(t *testing.T) {
 	assert.InDelta(t, 7.0, floatResult.Value(1), 0.01)
 }
 
-// Window expression handling in RowContext
+// Window expression handling in expr.RowContext
 
 func TestEvaluateWithContext_WindowInRowContext(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
 	columns := createWindowTestColumns(t, mem)
 	defer func() {
 		for _, arr := range columns {
@@ -715,29 +685,23 @@ func TestEvaluateWithContext_WindowInRowContext(t *testing.T) {
 	}()
 
 	// Test window function
-	windowFunc := &WindowFunctionExpr{
-		funcName: "ROW_NUMBER",
-		args:     nil,
-	}
-	windowExpr := &WindowExpr{
-		function: windowFunc,
-		window:   NewWindow(),
-	}
+	windowFunc := expr.RowNumber()
+	windowExpr := windowFunc.Over(expr.NewWindow())
 
 	// Should validate context support (but may fail on actual evaluation due to missing implementation details)
-	err := eval.validateContextSupport(windowExpr, RowContext)
-	assert.NoError(t, err, "Window expression should support RowContext")
+	err := expr.ValidateExpressionContext(windowExpr, expr.RowContext)
+	require.NoError(t, err, "Window expression should support expr.RowContext")
 
-	err = eval.validateContextSupport(windowExpr, GroupContext)
-	assert.Error(t, err, "Window expression should not support GroupContext")
-	assert.Contains(t, err.Error(), "does not support GroupContext")
+	err = expr.ValidateExpressionContext(windowExpr, expr.GroupContext)
+	require.Error(t, err, "Window expression should not support expr.GroupContext")
+	assert.Contains(t, err.Error(), "cannot be used in GroupContext")
 }
 
 // Function expression with context validation
 
 func TestEvaluateWithContext_FunctionExpression(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 	columns := createTestColumnsForContext(t, mem)
 	defer func() {
 		for _, arr := range columns {
@@ -747,21 +711,19 @@ func TestEvaluateWithContext_FunctionExpression(t *testing.T) {
 
 	// Test function expression that should work in both contexts
 	// (functions typically depend on their arguments' context support)
-	funcExpr := &FunctionExpr{
-		name: "test_function",
-		args: []Expr{Col("id"), Lit(int64(5))},
-	}
+	// Note: Using a standard function like upper since we can't create arbitrary function expressions
+	funcExpr := expr.Col("id").Upper()
 
 	// Context validation should pass for both contexts since arguments support both
-	err := eval.validateContextSupport(funcExpr, RowContext)
-	assert.NoError(t, err)
+	err := expr.ValidateExpressionContext(funcExpr, expr.RowContext)
+	require.NoError(t, err)
 
-	err = eval.validateContextSupport(funcExpr, GroupContext)
-	assert.NoError(t, err)
+	err = expr.ValidateExpressionContext(funcExpr, expr.GroupContext)
+	require.NoError(t, err)
 
 	// However, actual evaluation may fail due to unsupported function
-	_, err = eval.EvaluateWithContext(funcExpr, columns, RowContext)
-	assert.Error(t, err)
+	_, err = eval.EvaluateWithContext(funcExpr, columns, expr.RowContext)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported function")
 }
 
@@ -769,18 +731,18 @@ func TestEvaluateWithContext_FunctionExpression(t *testing.T) {
 
 func TestEvaluateWithContext_EmptyColumns(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 	emptyColumns := make(map[string]arrow.Array)
 
-	expr := Col("nonexistent")
-	_, err := eval.EvaluateWithContext(expr, emptyColumns, RowContext)
-	assert.Error(t, err)
+	colExpr := expr.Col("nonexistent")
+	_, err := eval.EvaluateWithContext(colExpr, emptyColumns, expr.RowContext)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Column 'nonexistent' does not exist")
 }
 
 func TestEvaluateWithContext_UnsupportedExpressionType(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 	columns := createTestColumnsForContext(t, mem)
 	defer func() {
 		for _, arr := range columns {
@@ -789,8 +751,8 @@ func TestEvaluateWithContext_UnsupportedExpressionType(t *testing.T) {
 	}()
 
 	// Test with nil expression (should cause unsupported type error)
-	_, err := eval.EvaluateWithContext(nil, columns, RowContext)
-	assert.Error(t, err)
+	_, err := eval.EvaluateWithContext(nil, columns, expr.RowContext)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Unsupported operation in Evaluate")
 }
 
@@ -798,7 +760,7 @@ func TestEvaluateWithContext_UnsupportedExpressionType(t *testing.T) {
 
 func TestEvaluateWithContext_ComprehensiveIntegration(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 
 	// Test a realistic scenario with row context
 	rowColumns := createTestColumnsForContext(t, mem)
@@ -809,12 +771,12 @@ func TestEvaluateWithContext_ComprehensiveIntegration(t *testing.T) {
 	}()
 
 	// Complex business logic: active employees in engineering with salary boost > 4.0
-	activeCond := Col("active").Eq(Lit(true))
-	engCond := Col("department").Eq(Lit("eng"))
-	salaryBoost := Col("salary").Mul(Lit(float64(1.5))).Gt(Lit(float64(4.0)))
+	activeCond := expr.Col("active").Eq(expr.Lit(true))
+	engCond := expr.Col("department").Eq(expr.Lit("eng"))
+	salaryBoost := expr.Col("salary").Mul(expr.Lit(float64(1.5))).Gt(expr.Lit(float64(4.0)))
 	businessLogic := activeCond.And(engCond).And(salaryBoost)
 
-	result, err := eval.EvaluateBooleanWithContext(businessLogic, rowColumns, RowContext)
+	result, err := eval.EvaluateBooleanWithContext(businessLogic, rowColumns, expr.RowContext)
 	require.NoError(t, err)
 	defer result.Release()
 
@@ -841,9 +803,9 @@ func TestEvaluateWithContext_ComprehensiveIntegration(t *testing.T) {
 	}()
 
 	// Business rule: departments with average salary > 3.2
-	groupBusinessLogic := Col("avg_salary").Gt(Lit(float64(3.2)))
+	groupBusinessLogic := expr.Col("avg_salary").Gt(expr.Lit(float64(3.2)))
 
-	result2, err := eval.EvaluateBooleanWithContext(groupBusinessLogic, groupColumns, GroupContext)
+	result2, err := eval.EvaluateBooleanWithContext(groupBusinessLogic, groupColumns, expr.GroupContext)
 	require.NoError(t, err)
 	defer result2.Release()
 
@@ -862,7 +824,7 @@ func TestEvaluateWithContext_ComprehensiveIntegration(t *testing.T) {
 
 func TestEvaluateWithContext_MemoryManagement(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 	columns := createTestColumnsForContext(t, mem)
 	defer func() {
 		for _, arr := range columns {
@@ -871,9 +833,9 @@ func TestEvaluateWithContext_MemoryManagement(t *testing.T) {
 	}()
 
 	// Test that results are properly managed
-	expr := Col("id").Add(Lit(int64(10)))
+	memExpr := expr.Col("id").Add(expr.Lit(int64(10)))
 
-	result, err := eval.EvaluateWithContext(expr, columns, RowContext)
+	result, err := eval.EvaluateWithContext(memExpr, columns, expr.RowContext)
 	require.NoError(t, err)
 
 	// Verify result is valid
