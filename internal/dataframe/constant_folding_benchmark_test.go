@@ -1,3 +1,4 @@
+//nolint:testpackage // requires internal access to unexported types and functions
 package dataframe
 
 import (
@@ -18,7 +19,7 @@ func BenchmarkConstantFoldingImpact(b *testing.B) {
 	ids := make([]int64, size)
 	values := make([]int64, size)
 
-	for i := 0; i < size; i++ {
+	for i := range size {
 		ids[i] = int64(i)
 		values[i] = int64(i % 100)
 	}
@@ -33,7 +34,7 @@ func BenchmarkConstantFoldingImpact(b *testing.B) {
 		constantExpr := createBinaryLiteral(int64(2), expr.OpMul, int64(5))
 
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			lazy := df.Lazy()
 			result, err := lazy.
 				WithColumn("constant_result", constantExpr).
@@ -53,7 +54,7 @@ func BenchmarkConstantFoldingImpact(b *testing.B) {
 		nonConstantExpr := expr.Col("value").Add(expr.Lit(int64(10)))
 
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			lazy := df.Lazy()
 			result, err := lazy.
 				WithColumn("computed_result", nonConstantExpr).
@@ -77,7 +78,7 @@ func BenchmarkConstantFoldingComplexity(b *testing.B) {
 	// Create smaller dataset for complex expression benchmarking
 	size := 1000
 	values := make([]int64, size)
-	for i := 0; i < size; i++ {
+	for i := range size {
 		values[i] = int64(i)
 	}
 
@@ -123,10 +124,10 @@ func BenchmarkConstantFoldingComplexity(b *testing.B) {
 	})
 }
 
-// benchmarkConstantExpression is a helper function for expression benchmarks
+// benchmarkConstantExpression is a helper function for expression benchmarks.
 func benchmarkConstantExpression(b *testing.B, df *DataFrame, constantExpr expr.Expr) {
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		lazy := df.Lazy()
 		result, err := lazy.
 			WithColumn("result", constantExpr).
@@ -151,7 +152,7 @@ func BenchmarkQueryOptimizationEngine(b *testing.B) {
 	ages := make([]int64, size)
 	salaries := make([]float64, size)
 
-	for i := 0; i < size; i++ {
+	for i := range size {
 		ids[i] = int64(i)
 		ages[i] = int64(20 + (i % 50))
 		salaries[i] = float64(30000 + (i%100)*1000)
@@ -169,7 +170,7 @@ func BenchmarkQueryOptimizationEngine(b *testing.B) {
 		constantBonus := createBinaryLiteral(int64(1000), expr.OpMul, int64(2))     // 2000
 
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			lazy := df.Lazy()
 			result, err := lazy.
 				// These constant expressions should be folded during optimization
@@ -193,7 +194,7 @@ func BenchmarkQueryOptimizationEngine(b *testing.B) {
 	b.Run("WithoutConstantFolding", func(b *testing.B) {
 		// Similar query but with non-constant expressions
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			lazy := df.Lazy()
 			result, err := lazy.
 				// These expressions involve columns so cannot be folded
@@ -213,13 +214,13 @@ func BenchmarkQueryOptimizationEngine(b *testing.B) {
 	})
 }
 
-// BenchmarkConstantFoldingTypes measures folding performance across different data types
+// BenchmarkConstantFoldingTypes measures folding performance across different data types.
 func BenchmarkConstantFoldingTypes(b *testing.B) {
 	mem := memory.NewGoAllocator()
 
 	size := 1000
 	values := make([]int64, size)
-	for i := 0; i < size; i++ {
+	for i := range size {
 		values[i] = int64(i)
 	}
 
@@ -249,12 +250,12 @@ func BenchmarkConstantFoldingTypes(b *testing.B) {
 	})
 }
 
-// BenchmarkOptimizationOverhead measures the overhead of the optimization engine itself
+// BenchmarkOptimizationOverhead measures the overhead of the optimization engine itself.
 func BenchmarkOptimizationOverhead(b *testing.B) {
 	mem := memory.NewGoAllocator()
 
 	values := make([]int64, 100)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		values[i] = int64(i)
 	}
 
@@ -265,7 +266,7 @@ func BenchmarkOptimizationOverhead(b *testing.B) {
 	b.Run("OptimizationEnabled", func(b *testing.B) {
 		// Query that goes through the optimization engine
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			lazy := df.Lazy()
 			result, err := lazy.
 				Filter(expr.Col("value").Gt(expr.Lit(int64(50)))).

@@ -1,6 +1,7 @@
 package sql
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -9,13 +10,13 @@ import (
 	"github.com/paveg/gorilla/internal/expr"
 )
 
-// SQLTranslator translates SQL AST to DataFrame operations
-type SQLTranslator struct {
+// SQLTranslator translates SQL AST to DataFrame operations.
+type SQLTranslator struct { //nolint:revive // Maintained for consistent API naming
 	tables    map[string]*dataframe.DataFrame
 	evaluator *expr.Evaluator
 }
 
-// NewSQLTranslator creates a new SQL translator
+// NewSQLTranslator creates a new SQL translator.
 func NewSQLTranslator(mem memory.Allocator) *SQLTranslator {
 	return &SQLTranslator{
 		tables:    make(map[string]*dataframe.DataFrame),
@@ -23,13 +24,13 @@ func NewSQLTranslator(mem memory.Allocator) *SQLTranslator {
 	}
 }
 
-// RegisterTable registers a DataFrame with a table name for SQL queries
+// RegisterTable registers a DataFrame with a table name for SQL queries.
 func (t *SQLTranslator) RegisterTable(name string, df *dataframe.DataFrame) {
 	t.tables[name] = df
 }
 
-// TranslateStatement translates a SQL statement to a LazyFrame
-func (t *SQLTranslator) TranslateStatement(stmt SQLStatement) (*dataframe.LazyFrame, error) {
+// TranslateStatement translates a SQL statement to a LazyFrame.
+func (t *SQLTranslator) TranslateStatement(stmt Statement) (*dataframe.LazyFrame, error) {
 	switch s := stmt.(type) {
 	case *SelectStatement:
 		return t.translateSelect(s)
@@ -38,18 +39,12 @@ func (t *SQLTranslator) TranslateStatement(stmt SQLStatement) (*dataframe.LazyFr
 	}
 }
 
-// translateSelect translates a SELECT statement to LazyFrame operations
+// translateSelect translates a SELECT statement to LazyFrame operations.
 func (t *SQLTranslator) translateSelect(stmt *SelectStatement) (*dataframe.LazyFrame, error) {
-	// Start with FROM clause to get base DataFrame
-	var lazy *dataframe.LazyFrame
-	if stmt.FromClause != nil {
-		df, exists := t.tables[stmt.FromClause.TableName]
-		if !exists {
-			return nil, fmt.Errorf("table not found: %s", stmt.FromClause.TableName)
-		}
-		lazy = df.Lazy()
-	} else {
-		return nil, fmt.Errorf("FROM clause is required")
+	// Process FROM clause
+	lazy, err := t.processFromClause(stmt.FromClause)
+	if err != nil {
+		return nil, err
 	}
 
 	// Apply WHERE clause
@@ -57,136 +52,26 @@ func (t *SQLTranslator) translateSelect(stmt *SelectStatement) (*dataframe.LazyF
 		lazy = lazy.Filter(stmt.WhereClause.Condition)
 	}
 
-	// Apply GROUP BY clause
-	if stmt.GroupByClause != nil {
-		groupCols, err := t.extractColumnNames(stmt.GroupByClause.Columns)
-		if err != nil {
-			return nil, fmt.Errorf("error in GROUP BY: %w", err)
-		}
-
-		// Collect aggregations from SELECT list
-		aggExprs := t.extractAggregations(stmt.SelectList)
-
-		if len(aggExprs) > 0 {
-			// Extract aggregations with their aliases from SELECT list
-			aggPtrs := make([]*expr.AggregationExpr, 0, len(aggExprs))
-			for _, item := range stmt.SelectList {
-				if !item.IsWildcard {
-					if aggExpr, ok := item.Expression.(*expr.AggregationExpr); ok {
-						// Apply alias if provided
-						if item.Alias != "" {
-							aggExpr = aggExpr.As(item.Alias)
-						}
-						aggPtrs = append(aggPtrs, aggExpr)
-					}
-				}
-			}
-
-			// Apply HAVING clause if present
-			if stmt.HavingClause != nil {
-				// Build aggregation context for HAVING validation
-				aggContext := expr.NewAggregationContext()
-
-				for _, agg := range aggPtrs {
-					exprStr := agg.String()
-
-					// Use the actual alias if provided, otherwise use a generated name with SQL-appropriate prefix
-					var columnName string
-					if agg.Alias() != "" {
-						columnName = agg.Alias()
-					} else {
-						// Generate SQL-appropriate default name (e.g., "avg_salary" not "mean_salary")
-						tempResolver := expr.NewAliasResolver(false)
-						columnName = tempResolver.GenerateDefaultName(agg)
-					}
-
-					aggContext.AddMapping(exprStr, columnName)
-				}
-
-				// Build alias resolver from SELECT list
-				aliasResolver := expr.NewAliasResolver(false) // case-sensitive by default
-
-				// Add GROUP BY columns to alias resolver
-				for _, col := range groupCols {
-					aliasResolver.AddGroupByColumn(col)
-				}
-
-				// Add aggregations with their aliases
-				// Note: For HAVING clauses, we only need to track aggregation aliases and GROUP BY columns.
-				// Non-aggregation aliases in SELECT are not valid in HAVING unless they reference GROUP BY columns,
-				// which are already handled by aliasResolver.AddGroupByColumn() above.
-				for _, item := range stmt.SelectList {
-					if !item.IsWildcard {
-						if aggExpr, ok := item.Expression.(*expr.AggregationExpr); ok {
-							// If the item has an alias, update the aggregation expression
-							if item.Alias != "" {
-								// Type safety check: ensure the As method exists and returns correct type
-								if aliasableAgg, ok := interface{}(aggExpr).(interface {
-									As(string) *expr.AggregationExpr
-								}); ok {
-									aggExpr = aliasableAgg.As(item.Alias)
-								} else {
-									return nil, fmt.Errorf("aggregation expression does not support aliasing: %T", aggExpr)
-								}
-							}
-							if err := aliasResolver.AddAggregation(aggExpr); err != nil {
-								return nil, fmt.Errorf("error adding aggregation to alias resolver: %w", err)
-							}
-						}
-					}
-				}
-
-				// Create HAVING validator with alias support
-				havingValidator := expr.NewHavingValidatorWithAlias(aggContext, groupCols, aliasResolver)
-
-				// Validate HAVING expression
-				if err := havingValidator.ValidateExpression(stmt.HavingClause.Condition); err != nil {
-					return nil, fmt.Errorf("HAVING validation error: %w", err)
-				}
-
-				// Resolve aliases in HAVING expression
-				resolvedHavingCondition, err := t.resolveAliasesInExpression(stmt.HavingClause.Condition, aliasResolver, aggContext)
-				if err != nil {
-					return nil, fmt.Errorf("error resolving aliases in HAVING clause: %w", err)
-				}
-
-				// Use AggWithHaving for combined GROUP BY + HAVING operation
-				lazy = lazy.GroupBy(groupCols...).AggWithHaving(resolvedHavingCondition, aggPtrs...)
-			} else {
-				// No HAVING clause, use regular aggregation
-				lazy = lazy.GroupBy(groupCols...).Agg(aggPtrs...)
-			}
-		} else {
-			return nil, fmt.Errorf("GROUP BY requires aggregation functions in SELECT")
-		}
-	} else if stmt.HavingClause != nil {
-		// Validation handled in validateSelectStatement; no further action needed here.
-		return nil, fmt.Errorf("HAVING clause requires GROUP BY clause")
+	// Process GROUP BY and HAVING clauses
+	lazy, err = t.processGroupByAndHaving(stmt, lazy)
+	if err != nil {
+		return nil, err
 	}
 
 	// Apply computed columns from SELECT (non-aggregation expressions)
 	if stmt.GroupByClause == nil {
-		computedCols := t.extractComputedColumns(stmt.SelectList)
-
-		for alias, expression := range computedCols {
-			lazy = lazy.WithColumn(alias, expression)
-		}
+		lazy = t.processComputedColumns(stmt.SelectList, lazy)
 	}
 
 	// Apply column selection
-	selectCols := t.extractSelectColumns(stmt.SelectList)
-
-	if len(selectCols) > 0 && !t.isWildcardSelect(stmt.SelectList) {
-		lazy = lazy.Select(selectCols...)
-	}
+	lazy = t.processSelectColumns(stmt.SelectList, lazy)
 
 	// Apply ORDER BY clause
 	if stmt.OrderByClause != nil {
-		sortCols, ascending, err := t.translateOrderBy(stmt.OrderByClause)
+		lazy, err = t.processOrderBy(stmt.OrderByClause, lazy)
 		if err != nil {
-			return nil, fmt.Errorf("error in ORDER BY: %w", err)
+			return nil, err
 		}
-		lazy = lazy.SortBy(sortCols, ascending)
 	}
 
 	// Note: LIMIT/OFFSET will be handled during execution as they require
@@ -195,7 +80,182 @@ func (t *SQLTranslator) translateSelect(stmt *SelectStatement) (*dataframe.LazyF
 	return lazy, nil
 }
 
-// extractColumnNames extracts column names from expressions
+// processFromClause processes the FROM clause and returns the initial LazyFrame.
+func (t *SQLTranslator) processFromClause(fromClause *FromClause) (*dataframe.LazyFrame, error) {
+	if fromClause == nil {
+		return nil, errors.New("FROM clause is required")
+	}
+
+	df, exists := t.tables[fromClause.TableName]
+	if !exists {
+		return nil, fmt.Errorf("table not found: %s", fromClause.TableName)
+	}
+
+	return df.Lazy(), nil
+}
+
+// processGroupByAndHaving processes GROUP BY and HAVING clauses.
+func (t *SQLTranslator) processGroupByAndHaving(
+	stmt *SelectStatement,
+	lazy *dataframe.LazyFrame,
+) (*dataframe.LazyFrame, error) {
+	if stmt.GroupByClause == nil {
+		if stmt.HavingClause != nil {
+			return nil, errors.New("HAVING clause requires GROUP BY clause")
+		}
+		return lazy, nil
+	}
+
+	groupCols, err := t.extractColumnNames(stmt.GroupByClause.Columns)
+	if err != nil {
+		return nil, fmt.Errorf("error in GROUP BY: %w", err)
+	}
+
+	// Collect aggregations from SELECT list
+	aggExprs := t.extractAggregations(stmt.SelectList)
+	if len(aggExprs) == 0 {
+		return nil, errors.New("GROUP BY requires aggregation functions in SELECT")
+	}
+
+	// Extract aggregations with their aliases from SELECT list
+	aggPtrs := make([]*expr.AggregationExpr, 0, len(aggExprs))
+	for _, item := range stmt.SelectList {
+		if !item.IsWildcard {
+			if aggExpr, ok := item.Expression.(*expr.AggregationExpr); ok {
+				// Apply alias if provided
+				if item.Alias != "" {
+					aggExpr = aggExpr.As(item.Alias)
+				}
+				aggPtrs = append(aggPtrs, aggExpr)
+			}
+		}
+	}
+
+	// Apply HAVING clause if present
+	if stmt.HavingClause != nil {
+		return t.processHavingClause(stmt, lazy, groupCols, aggPtrs)
+	}
+
+	// No HAVING clause, use regular aggregation
+	return lazy.GroupBy(groupCols...).Agg(aggPtrs...), nil
+}
+
+// processHavingClause processes the HAVING clause with proper validation and alias resolution.
+func (t *SQLTranslator) processHavingClause(
+	stmt *SelectStatement,
+	lazy *dataframe.LazyFrame,
+	groupCols []string,
+	aggPtrs []*expr.AggregationExpr,
+) (*dataframe.LazyFrame, error) {
+	// Build aggregation context for HAVING validation
+	aggContext := expr.NewAggregationContext()
+
+	for _, agg := range aggPtrs {
+		exprStr := agg.String()
+
+		// Use the actual alias if provided, otherwise use a generated name
+		var columnName string
+		if agg.Alias() != "" {
+			columnName = agg.Alias()
+		} else {
+			// Generate SQL-appropriate default name
+			tempResolver := expr.NewAliasResolver(false)
+			columnName = tempResolver.GenerateDefaultName(agg)
+		}
+
+		aggContext.AddMapping(exprStr, columnName)
+	}
+
+	// Build alias resolver from SELECT list
+	aliasResolver, err := t.buildAliasResolver(stmt.SelectList, groupCols)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create HAVING validator with alias support
+	havingValidator := expr.NewHavingValidatorWithAlias(aggContext, groupCols, aliasResolver)
+
+	// Validate HAVING expression
+	if validateErr := havingValidator.ValidateExpression(stmt.HavingClause.Condition); validateErr != nil {
+		return nil, fmt.Errorf("HAVING validation error: %w", validateErr)
+	}
+
+	// Resolve aliases in HAVING expression
+	resolvedHavingCondition, err := t.resolveAliasesInExpression(
+		stmt.HavingClause.Condition,
+		aliasResolver,
+		aggContext,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("error resolving aliases in HAVING clause: %w", err)
+	}
+
+	// Use AggWithHaving for combined GROUP BY + HAVING operation
+	return lazy.GroupBy(groupCols...).AggWithHaving(resolvedHavingCondition, aggPtrs...), nil
+}
+
+// buildAliasResolver builds an alias resolver from the SELECT list and GROUP BY columns.
+func (t *SQLTranslator) buildAliasResolver(selectList []SelectItem, groupCols []string) (*expr.AliasResolver, error) {
+	aliasResolver := expr.NewAliasResolver(false) // case-sensitive by default
+
+	// Add GROUP BY columns to alias resolver
+	for _, col := range groupCols {
+		aliasResolver.AddGroupByColumn(col)
+	}
+
+	// Add aggregations with their aliases
+	for _, item := range selectList {
+		if !item.IsWildcard {
+			if err := t.processSelectItemAggregation(item, aliasResolver); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return aliasResolver, nil
+}
+
+// processComputedColumns processes computed columns from the SELECT list.
+func (t *SQLTranslator) processComputedColumns(
+	selectList []SelectItem,
+	lazy *dataframe.LazyFrame,
+) *dataframe.LazyFrame {
+	computedCols := t.extractComputedColumns(selectList)
+
+	for alias, expression := range computedCols {
+		lazy = lazy.WithColumn(alias, expression)
+	}
+
+	return lazy
+}
+
+// processSelectColumns processes column selection from the SELECT list.
+func (t *SQLTranslator) processSelectColumns(
+	selectList []SelectItem,
+	lazy *dataframe.LazyFrame,
+) *dataframe.LazyFrame {
+	selectCols := t.extractSelectColumns(selectList)
+
+	if len(selectCols) > 0 && !t.isWildcardSelect(selectList) {
+		lazy = lazy.Select(selectCols...)
+	}
+
+	return lazy
+}
+
+// processOrderBy processes the ORDER BY clause.
+func (t *SQLTranslator) processOrderBy(
+	orderBy *OrderByClause,
+	lazy *dataframe.LazyFrame,
+) (*dataframe.LazyFrame, error) {
+	sortCols, ascending, err := t.translateOrderBy(orderBy)
+	if err != nil {
+		return nil, fmt.Errorf("error in ORDER BY: %w", err)
+	}
+	return lazy.SortBy(sortCols, ascending), nil
+}
+
+// extractColumnNames extracts column names from expressions.
 func (t *SQLTranslator) extractColumnNames(expressions []expr.Expr) ([]string, error) {
 	var columns []string
 
@@ -210,7 +270,7 @@ func (t *SQLTranslator) extractColumnNames(expressions []expr.Expr) ([]string, e
 	return columns, nil
 }
 
-// extractAggregations extracts aggregation expressions from SELECT list
+// extractAggregations extracts aggregation expressions from SELECT list.
 func (t *SQLTranslator) extractAggregations(selectList []SelectItem) []expr.Expr {
 	var aggExprs []expr.Expr
 
@@ -234,7 +294,7 @@ func (t *SQLTranslator) extractAggregations(selectList []SelectItem) []expr.Expr
 	return aggExprs
 }
 
-// extractComputedColumns extracts computed column expressions (non-aggregations)
+// extractComputedColumns extracts computed column expressions (non-aggregations).
 func (t *SQLTranslator) extractComputedColumns(selectList []SelectItem) map[string]expr.Expr {
 	computedCols := make(map[string]expr.Expr)
 
@@ -265,7 +325,7 @@ func (t *SQLTranslator) extractComputedColumns(selectList []SelectItem) map[stri
 	return computedCols
 }
 
-// extractSelectColumns extracts final column selection list
+// extractSelectColumns extracts final column selection list.
 func (t *SQLTranslator) extractSelectColumns(selectList []SelectItem) []string {
 	var columns []string
 
@@ -290,7 +350,7 @@ func (t *SQLTranslator) extractSelectColumns(selectList []SelectItem) []string {
 	return columns
 }
 
-// isWildcardSelect checks if SELECT list contains wildcard
+// isWildcardSelect checks if SELECT list contains wildcard.
 func (t *SQLTranslator) isWildcardSelect(selectList []SelectItem) bool {
 	for _, item := range selectList {
 		if item.IsWildcard {
@@ -300,7 +360,7 @@ func (t *SQLTranslator) isWildcardSelect(selectList []SelectItem) bool {
 	return false
 }
 
-// isAggregationExpression checks if expression is an aggregation
+// isAggregationExpression checks if expression is an aggregation.
 func (t *SQLTranslator) isAggregationExpression(expression expr.Expr) bool {
 	switch e := expression.(type) {
 	case *expr.AggregationExpr:
@@ -316,7 +376,7 @@ func (t *SQLTranslator) isAggregationExpression(expression expr.Expr) bool {
 	return false
 }
 
-// translateOrderBy translates ORDER BY clause
+// translateOrderBy translates ORDER BY clause.
 func (t *SQLTranslator) translateOrderBy(orderBy *OrderByClause) ([]string, []bool, error) {
 	var columns []string
 	var ascending []bool
@@ -334,81 +394,36 @@ func (t *SQLTranslator) translateOrderBy(orderBy *OrderByClause) ([]string, []bo
 	return columns, ascending, nil
 }
 
-// TranslateFunctionCall translates SQL function calls to Gorilla expressions
-func (t *SQLTranslator) TranslateFunctionCall(fn *SQLFunction) (expr.Expr, error) {
+// TranslateFunctionCall translates SQL function calls to Gorilla expressions.
+func (t *SQLTranslator) TranslateFunctionCall(fn *Function) (expr.Expr, error) {
 	funcName := strings.ToUpper(fn.Name)
 
 	switch funcName {
 	// Aggregation functions
 	case "COUNT":
-		if len(fn.Args) == 0 {
-			return expr.Count(expr.Lit(1)), nil
-		}
-		return expr.Count(fn.Args[0]), nil
+		return t.translateCountFunction(fn)
 	case "SUM":
-		if len(fn.Args) != 1 {
-			return nil, fmt.Errorf("SUM function requires exactly one argument")
-		}
-		return expr.Sum(fn.Args[0]), nil
+		return t.translateUnaryAggregationFunction(fn, "SUM", expr.Sum)
 	case "AVG", "MEAN":
-		if len(fn.Args) != 1 {
-			return nil, fmt.Errorf("%s function requires exactly one argument", funcName)
-		}
-		return expr.Mean(fn.Args[0]), nil
+		return t.translateUnaryAggregationFunction(fn, funcName, expr.Mean)
 	case "MIN":
-		if len(fn.Args) != 1 {
-			return nil, fmt.Errorf("MIN function requires exactly one argument")
-		}
-		return expr.Min(fn.Args[0]), nil
+		return t.translateUnaryAggregationFunction(fn, "MIN", expr.Min)
 	case "MAX":
-		if len(fn.Args) != 1 {
-			return nil, fmt.Errorf("MAX function requires exactly one argument")
-		}
-		return expr.Max(fn.Args[0]), nil
+		return t.translateUnaryAggregationFunction(fn, "MAX", expr.Max)
 
 	// String functions
 	case "UPPER":
-		if len(fn.Args) != 1 {
-			return nil, fmt.Errorf("UPPER function requires exactly one argument")
-		}
-		if colExpr, ok := fn.Args[0].(*expr.ColumnExpr); ok {
-			return colExpr.Upper(), nil
-		}
-		return nil, fmt.Errorf("UPPER function requires a column expression")
+		return t.translateUnaryColumnFunction(fn, "UPPER", (*expr.ColumnExpr).Upper)
 	case "LOWER":
-		if len(fn.Args) != 1 {
-			return nil, fmt.Errorf("LOWER function requires exactly one argument")
-		}
-		if colExpr, ok := fn.Args[0].(*expr.ColumnExpr); ok {
-			return colExpr.Lower(), nil
-		}
-		return nil, fmt.Errorf("LOWER function requires a column expression")
+		return t.translateUnaryColumnFunction(fn, "LOWER", (*expr.ColumnExpr).Lower)
 	case "LENGTH":
-		if len(fn.Args) != 1 {
-			return nil, fmt.Errorf("LENGTH function requires exactly one argument")
-		}
-		if colExpr, ok := fn.Args[0].(*expr.ColumnExpr); ok {
-			return colExpr.Length(), nil
-		}
-		return nil, fmt.Errorf("LENGTH function requires a column expression")
+		return t.translateUnaryColumnFunction(fn, "LENGTH", (*expr.ColumnExpr).Length)
 
 	// Math functions
 	case "ABS":
-		if len(fn.Args) != 1 {
-			return nil, fmt.Errorf("ABS function requires exactly one argument")
-		}
-		if colExpr, ok := fn.Args[0].(*expr.ColumnExpr); ok {
-			return colExpr.Abs(), nil
-		}
-		return nil, fmt.Errorf("ABS function requires a column expression")
+		return t.translateUnaryColumnFunction(fn, "ABS", (*expr.ColumnExpr).Abs)
 	case "ROUND":
-		if len(fn.Args) != 1 {
-			return nil, fmt.Errorf("ROUND function requires exactly one argument")
-		}
-		if colExpr, ok := fn.Args[0].(*expr.ColumnExpr); ok {
-			return colExpr.Round(), nil
-		}
-		return nil, fmt.Errorf("ROUND function requires a column expression")
+		return t.translateUnaryColumnFunction(fn, "ROUND", (*expr.ColumnExpr).Round)
 
 	// Date functions (basic implementations) - TODO: Implement date functions
 	// case "NOW":
@@ -445,8 +460,46 @@ func (t *SQLTranslator) TranslateFunctionCall(fn *SQLFunction) (expr.Expr, error
 	}
 }
 
-// ValidateSQLSyntax performs basic validation of SQL statement
-func (t *SQLTranslator) ValidateSQLSyntax(stmt SQLStatement) error {
+// translateCountFunction handles COUNT function translation with special logic for COUNT(*).
+func (t *SQLTranslator) translateCountFunction(fn *Function) (expr.Expr, error) {
+	if len(fn.Args) == 0 {
+		return expr.Count(expr.Lit(1)), nil
+	}
+	return expr.Count(fn.Args[0]), nil
+}
+
+// translateUnaryAggregationFunction handles aggregation functions that take exactly one argument.
+func (t *SQLTranslator) translateUnaryAggregationFunction(
+	fn *Function,
+	funcName string,
+	exprFunc func(expr.Expr) *expr.AggregationExpr,
+) (expr.Expr, error) {
+	if len(fn.Args) != 1 {
+		return nil, fmt.Errorf("%s function requires exactly one argument", funcName)
+	}
+	return exprFunc(fn.Args[0]), nil
+}
+
+// translateUnaryColumnFunction handles functions that operate on a single column expression.
+func (t *SQLTranslator) translateUnaryColumnFunction(
+	fn *Function,
+	funcName string,
+	methodFunc func(*expr.ColumnExpr) *expr.FunctionExpr,
+) (expr.Expr, error) {
+	if len(fn.Args) != 1 {
+		return nil, fmt.Errorf("%s function requires exactly one argument", funcName)
+	}
+
+	colExpr, ok := fn.Args[0].(*expr.ColumnExpr)
+	if !ok {
+		return nil, fmt.Errorf("%s function requires a column expression", funcName)
+	}
+
+	return methodFunc(colExpr), nil
+}
+
+// ValidateSQLSyntax performs basic validation of SQL statement.
+func (t *SQLTranslator) ValidateSQLSyntax(stmt Statement) error {
 	switch s := stmt.(type) {
 	case *SelectStatement:
 		return t.validateSelectStatement(s)
@@ -455,41 +508,23 @@ func (t *SQLTranslator) ValidateSQLSyntax(stmt SQLStatement) error {
 	}
 }
 
-// validateSelectStatement validates SELECT statement syntax
+// validateSelectStatement validates SELECT statement syntax.
 func (t *SQLTranslator) validateSelectStatement(stmt *SelectStatement) error {
 	// Check that SELECT list is not empty
 	if len(stmt.SelectList) == 0 {
-		return fmt.Errorf("SELECT list cannot be empty")
+		return errors.New("SELECT list cannot be empty")
 	}
 
 	// Validate GROUP BY usage
 	if stmt.GroupByClause != nil {
-		// When GROUP BY is used, all non-aggregated columns in SELECT must be in GROUP BY
-		groupColumns := make(map[string]bool)
-		for _, colExpr := range stmt.GroupByClause.Columns {
-			if col, ok := colExpr.(*expr.ColumnExpr); ok {
-				groupColumns[col.Name()] = true
-			}
-		}
-
-		for _, item := range stmt.SelectList {
-			if item.IsWildcard {
-				return fmt.Errorf("wildcard (*) not allowed with GROUP BY")
-			}
-
-			if !t.isAggregationExpression(item.Expression) {
-				if col, ok := item.Expression.(*expr.ColumnExpr); ok {
-					if !groupColumns[col.Name()] {
-						return fmt.Errorf("column '%s' must appear in GROUP BY clause or be used in aggregate function", col.Name())
-					}
-				}
-			}
+		if err := t.validateGroupByUsage(stmt); err != nil {
+			return err
 		}
 	}
 
 	// Validate HAVING clause
 	if stmt.HavingClause != nil && stmt.GroupByClause == nil {
-		return fmt.Errorf("HAVING clause requires GROUP BY clause")
+		return errors.New("HAVING clause requires GROUP BY clause")
 	}
 
 	// Additional HAVING validation will be done during translation when we have
@@ -500,7 +535,7 @@ func (t *SQLTranslator) validateSelectStatement(stmt *SelectStatement) error {
 		// Basic validation - ensure expressions are valid
 		for _, item := range stmt.OrderByClause.OrderItems {
 			if item.Expression == nil {
-				return fmt.Errorf("ORDER BY expression cannot be nil")
+				return errors.New("ORDER BY expression cannot be nil")
 			}
 		}
 	}
@@ -509,7 +544,11 @@ func (t *SQLTranslator) validateSelectStatement(stmt *SelectStatement) error {
 	if stmt.LimitClause != nil {
 		// Allow Count = OffsetOnlyLimit for OFFSET-only queries, and Count >= 0 for regular LIMIT
 		if stmt.LimitClause.Count < OffsetOnlyLimit {
-			return fmt.Errorf("invalid LIMIT count %d, must be non-negative or %d", stmt.LimitClause.Count, OffsetOnlyLimit)
+			return fmt.Errorf(
+				"invalid LIMIT count %d, must be non-negative or %d",
+				stmt.LimitClause.Count,
+				OffsetOnlyLimit,
+			)
 		}
 		if stmt.LimitClause.Offset < 0 {
 			return fmt.Errorf("OFFSET must be non-negative, got %d", stmt.LimitClause.Offset)
@@ -519,7 +558,7 @@ func (t *SQLTranslator) validateSelectStatement(stmt *SelectStatement) error {
 	return nil
 }
 
-// GetRegisteredTables returns the list of registered table names
+// GetRegisteredTables returns the list of registered table names.
 func (t *SQLTranslator) GetRegisteredTables() []string {
 	var tables []string
 	for name := range t.tables {
@@ -528,12 +567,12 @@ func (t *SQLTranslator) GetRegisteredTables() []string {
 	return tables
 }
 
-// ClearTables removes all registered tables
+// ClearTables removes all registered tables.
 func (t *SQLTranslator) ClearTables() {
 	t.tables = make(map[string]*dataframe.DataFrame)
 }
 
-// resolveAliasesInExpression recursively resolves aliases in an expression tree
+// resolveAliasesInExpression recursively resolves aliases in an expression tree.
 func (t *SQLTranslator) resolveAliasesInExpression(
 	expression expr.Expr,
 	aliasResolver *expr.AliasResolver,
@@ -584,4 +623,60 @@ func (t *SQLTranslator) resolveAliasesInExpression(
 		// For any other expression types, return as-is
 		return expression, nil
 	}
+}
+
+// processSelectItemAggregation processes a select item for aggregation handling.
+func (t *SQLTranslator) processSelectItemAggregation(item SelectItem, aliasResolver *expr.AliasResolver) error {
+	aggExpr, ok := item.Expression.(*expr.AggregationExpr)
+	if !ok {
+		return nil // Not an aggregation expression, skip
+	}
+
+	// If the item has an alias, update the aggregation expression
+	if item.Alias != "" {
+		// Type safety check: ensure the As method exists and returns correct type
+		if aliasableAgg, aliasOk := interface{}(aggExpr).(interface {
+			As(string) *expr.AggregationExpr
+		}); aliasOk {
+			aggExpr = aliasableAgg.As(item.Alias)
+		} else {
+			return fmt.Errorf("aggregation expression does not support aliasing: %T", aggExpr)
+		}
+	}
+
+	if err := aliasResolver.AddAggregation(aggExpr); err != nil {
+		return fmt.Errorf("error adding aggregation to alias resolver: %w", err)
+	}
+
+	return nil
+}
+
+// validateGroupByUsage validates GROUP BY clause usage with SELECT list.
+func (t *SQLTranslator) validateGroupByUsage(stmt *SelectStatement) error {
+	// When GROUP BY is used, all non-aggregated columns in SELECT must be in GROUP BY
+	groupColumns := make(map[string]bool)
+	for _, colExpr := range stmt.GroupByClause.Columns {
+		if col, ok := colExpr.(*expr.ColumnExpr); ok {
+			groupColumns[col.Name()] = true
+		}
+	}
+
+	for _, item := range stmt.SelectList {
+		if item.IsWildcard {
+			return errors.New("wildcard (*) not allowed with GROUP BY")
+		}
+
+		if !t.isAggregationExpression(item.Expression) {
+			if col, ok := item.Expression.(*expr.ColumnExpr); ok {
+				if !groupColumns[col.Name()] {
+					return fmt.Errorf(
+						"column '%s' must appear in GROUP BY clause or be used in aggregate function",
+						col.Name(),
+					)
+				}
+			}
+		}
+	}
+
+	return nil
 }

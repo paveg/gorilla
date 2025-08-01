@@ -1,3 +1,4 @@
+//nolint:testpackage // requires internal access to unexported types and functions
 package dataframe
 
 import (
@@ -15,7 +16,7 @@ import (
 	"github.com/paveg/gorilla/internal/series"
 )
 
-// TestHavingEdgeCases_EmptyAndNull tests edge cases related to empty and null data
+// TestHavingEdgeCases_EmptyAndNull tests edge cases related to empty and null data.
 func TestHavingEdgeCases_EmptyAndNull(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
@@ -104,7 +105,7 @@ func TestHavingEdgeCases_EmptyAndNull(t *testing.T) {
 	})
 }
 
-// TestHavingEdgeCases_TypeHandling tests edge cases related to type handling and coercion
+// TestHavingEdgeCases_TypeHandling tests edge cases related to type handling and coercion.
 func TestHavingEdgeCases_TypeHandling(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
@@ -136,7 +137,10 @@ func TestHavingEdgeCases_TypeHandling(t *testing.T) {
 		defer df.Release()
 
 		// COUNT aggregation on boolean values
-		result, err := df.Lazy().GroupBy("category").Having(expr.Count(expr.Col("flags")).Gt(expr.Lit(int64(1)))).Collect()
+		result, err := df.Lazy().
+			GroupBy("category").
+			Having(expr.Count(expr.Col("flags")).Gt(expr.Lit(int64(1)))).
+			Collect()
 		require.NoError(t, err)
 		defer result.Release()
 
@@ -152,7 +156,10 @@ func TestHavingEdgeCases_TypeHandling(t *testing.T) {
 		df := New(categories, values)
 		defer df.Release()
 
-		result, err := df.Lazy().GroupBy("category").Having(expr.Sum(expr.Col("values")).Gt(expr.Lit(int64(35)))).Collect()
+		result, err := df.Lazy().
+			GroupBy("category").
+			Having(expr.Sum(expr.Col("values")).Gt(expr.Lit(int64(35)))).
+			Collect()
 		require.NoError(t, err)
 		defer result.Release()
 
@@ -191,7 +198,7 @@ func TestHavingEdgeCases_TypeHandling(t *testing.T) {
 	})
 }
 
-// TestHavingEdgeCases_Performance tests performance-related edge cases
+// TestHavingEdgeCases_Performance tests performance-related edge cases.
 func TestHavingEdgeCases_Performance(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
@@ -219,7 +226,7 @@ func TestHavingEdgeCases_Performance(t *testing.T) {
 		values := make([]float64, size)
 
 		// Create 100 groups with 500 rows each
-		for i := 0; i < size; i++ {
+		for i := range size {
 			categories[i] = fmt.Sprintf("Group_%d", i%100)
 			values[i] = float64(i)
 		}
@@ -230,12 +237,15 @@ func TestHavingEdgeCases_Performance(t *testing.T) {
 		df := New(catSeries, valSeries)
 		defer df.Release()
 
-		result, err := df.Lazy().GroupBy("category").Having(expr.Sum(expr.Col("values")).Gt(expr.Lit(1000000.0))).Collect()
+		result, err := df.Lazy().
+			GroupBy("category").
+			Having(expr.Sum(expr.Col("values")).Gt(expr.Lit(1000000.0))).
+			Collect()
 		require.NoError(t, err)
 		defer result.Release()
 
 		// Many groups will pass the threshold - adjust expectation
-		assert.Greater(t, result.Len(), 0)
+		assert.Positive(t, result.Len())
 		assert.LessOrEqual(t, result.Len(), size) // Can't exceed total row count
 	})
 
@@ -245,7 +255,7 @@ func TestHavingEdgeCases_Performance(t *testing.T) {
 		categories := make([]string, size)
 		values := make([]float64, size)
 
-		for i := 0; i < size; i++ {
+		for i := range size {
 			categories[i] = fmt.Sprintf("UniqueGroup_%d", i)
 			values[i] = float64(i)
 		}
@@ -288,7 +298,7 @@ func TestHavingEdgeCases_Performance(t *testing.T) {
 	})
 }
 
-// TestHavingEdgeCases_ComplexScenarios tests complex edge case scenarios
+// TestHavingEdgeCases_ComplexScenarios tests complex edge case scenarios.
 func TestHavingEdgeCases_ComplexScenarios(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
@@ -327,7 +337,7 @@ func TestHavingEdgeCases_ComplexScenarios(t *testing.T) {
 
 		// This should either error or return empty result due to invalid grouping column
 		if err != nil {
-			assert.Error(t, err, "HAVING with invalid GROUP BY should produce an error")
+			require.Error(t, err, "HAVING with invalid GROUP BY should produce an error")
 		} else {
 			defer result.Release()
 			assert.Equal(t, 0, result.Len(), "HAVING with invalid GROUP BY should return empty result")
@@ -389,168 +399,199 @@ func TestHavingEdgeCases_ComplexScenarios(t *testing.T) {
 	})
 }
 
-// TestHavingEdgeCases_ConcurrencyAndMemory tests memory and concurrency edge cases
+// TestHavingEdgeCases_ConcurrencyAndMemory tests memory and concurrency edge cases.
 func TestHavingEdgeCases_ConcurrencyAndMemory(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
 	t.Run("ConcurrentHavingOperations", func(t *testing.T) {
-		// Test thread safety of HAVING operations
-		const numGoroutines = 10
-		const dataSize = 1000
-
-		categories := make([]string, dataSize)
-		values := make([]float64, dataSize)
-
-		for i := 0; i < dataSize; i++ {
-			categories[i] = fmt.Sprintf("Group_%d", i%50)
-			values[i] = float64(i)
-		}
-
-		catSeries := series.New("category", categories, mem)
-		valSeries := series.New("values", values, mem)
-
-		df := New(catSeries, valSeries)
-		defer df.Release()
-
-		var wg sync.WaitGroup
-		results := make([]*DataFrame, numGoroutines)
-		errors := make([]error, numGoroutines)
-
-		for i := 0; i < numGoroutines; i++ {
-			wg.Add(1)
-			go func(idx int) {
-				defer wg.Done()
-
-				// Each goroutine performs the same HAVING operation
-				result, err := df.Lazy().GroupBy("category").Having(expr.Sum(expr.Col("values")).Gt(expr.Lit(5000.0))).Collect()
-				results[idx] = result
-				errors[idx] = err
-			}(i)
-		}
-
-		wg.Wait()
-
-		// Cleanup all results at once after all goroutines finish
-		defer func() {
-			for i := 0; i < numGoroutines; i++ {
-				if results[i] != nil {
-					results[i].Release()
-				}
-			}
-		}()
-
-		// Verify all operations succeeded and produced consistent results
-		for i := 0; i < numGoroutines; i++ {
-			require.NoError(t, errors[i], "Concurrent operation %d should succeed", i)
-			require.NotNil(t, results[i], "Result %d should not be nil", i)
-
-			// All results should have the same number of rows
-			if i > 0 {
-				assert.Equal(t, results[0].Len(), results[i].Len(), "All concurrent results should be identical")
-			}
-		}
+		testConcurrentHavingOperations(t, mem)
 	})
 
 	t.Run("MemoryPressureScenarios", func(t *testing.T) {
-		// Test HAVING under memory pressure conditions
-		const largeSize = 100000
-		categories := make([]string, largeSize)
-		values := make([]float64, largeSize)
-
-		// Create large dataset with many unique groups
-		for i := 0; i < largeSize; i++ {
-			categories[i] = fmt.Sprintf("Group_%d", i%1000) // 1000 groups
-			values[i] = float64(i)
-		}
-
-		catSeries := series.New("category", categories, mem)
-		valSeries := series.New("values", values, mem)
-
-		df := New(catSeries, valSeries)
-		defer df.Release()
-
-		// Perform HAVING operation on large dataset
-		result, err := df.Lazy().GroupBy("category").Having(expr.Sum(expr.Col("values")).Gt(expr.Lit(1000000.0))).Collect()
-		require.NoError(t, err)
-		defer result.Release()
-
-		// Should successfully handle large dataset, may or may not have results
-		assert.GreaterOrEqual(t, result.Len(), 0)
-		assert.LessOrEqual(t, result.Len(), 1000)
+		testMemoryPressureScenarios(t, mem)
 	})
 
 	t.Run("ResourceCleanupValidation", func(t *testing.T) {
-		// Test that resources are properly cleaned up in error scenarios
-		categories := series.New("category", []string{"A", "B"}, mem)
-		values := series.New("values", []float64{10, 20}, mem)
-
-		df := New(categories, values)
-		defer df.Release()
-
-		// Multiple HAVING operations to test cleanup
-		for i := 0; i < 100; i++ {
-			result, err := df.Lazy().GroupBy("category").Having(expr.Sum(expr.Col("values")).Gt(expr.Lit(5.0))).Collect()
-			require.NoError(t, err)
-
-			// Immediately release to test cleanup
-			result.Release()
-		}
-
-		// Test should complete without memory issues
-		assert.True(t, true, "Resource cleanup test completed")
+		testResourceCleanupValidation(t, mem)
 	})
 
 	t.Run("ErrorRecoveryInParallelOperations", func(t *testing.T) {
-		// Test error recovery in parallel HAVING scenarios
-		categories := series.New("category", []string{"A", "A", "B", "B"}, mem)
-		values := series.New("values", []float64{10, 20, 30, 40}, mem)
-
-		df := New(categories, values)
-		defer df.Release()
-
-		const numOps = 20
-		var wg sync.WaitGroup
-		var successCount int64
-		var mu sync.Mutex
-
-		for i := 0; i < numOps; i++ {
-			wg.Add(1)
-			go func(idx int) {
-				defer wg.Done()
-
-				// Some operations might have valid conditions, others might not
-				threshold := float64(idx * 10)
-				result, err := df.Lazy().GroupBy("category").Having(expr.Sum(expr.Col("values")).Gt(expr.Lit(threshold))).Collect()
-
-				if err == nil && result != nil {
-					result.Release()
-					mu.Lock()
-					successCount++
-					mu.Unlock()
-				}
-			}(i)
-		}
-
-		wg.Wait()
-
-		// At least half operations should succeed
-		assert.GreaterOrEqual(t, successCount, int64(numOps/2), "At least half parallel operations should succeed")
+		testErrorRecoveryInParallelOperations(t, mem)
 	})
 
 	t.Run("PanicRecoveryInWorkerThreads", func(t *testing.T) {
-		// Test that panics in worker threads are handled gracefully
-		categories := series.New("category", []string{"A", "A", "B", "B"}, mem)
-		values := series.New("values", []float64{10, 20, 30, 40}, mem)
-
-		df := New(categories, values)
-		defer df.Release()
-
-		// Normal HAVING operation should work despite internal complexity
-		result, err := df.Lazy().GroupBy("category").Having(expr.Sum(expr.Col("values")).Gt(expr.Lit(25.0))).Collect()
-		require.NoError(t, err)
-		defer result.Release()
-
-		// Should handle the operation successfully
-		assert.GreaterOrEqual(t, result.Len(), 0) // May have different results
+		testPanicRecoveryInWorkerThreads(t, mem)
 	})
+}
+
+// testConcurrentHavingOperations tests thread safety of HAVING operations.
+func testConcurrentHavingOperations(t *testing.T, mem memory.Allocator) {
+	const numGoroutines = 10
+	const dataSize = 1000
+
+	df := createConcurrencyTestDataFrame(mem, dataSize)
+	defer df.Release()
+
+	results, errors := runConcurrentHavingOperations(df, numGoroutines)
+	defer cleanupConcurrentResults(results)
+
+	validateConcurrentResults(t, results, errors, numGoroutines)
+}
+
+// createConcurrencyTestDataFrame creates test data for concurrency tests.
+func createConcurrencyTestDataFrame(mem memory.Allocator, dataSize int) *DataFrame {
+	categories := make([]string, dataSize)
+	values := make([]float64, dataSize)
+
+	for i := range dataSize {
+		categories[i] = fmt.Sprintf("Group_%d", i%50)
+		values[i] = float64(i)
+	}
+
+	catSeries := series.New("category", categories, mem)
+	valSeries := series.New("values", values, mem)
+	return New(catSeries, valSeries)
+}
+
+// runConcurrentHavingOperations executes HAVING operations concurrently.
+func runConcurrentHavingOperations(df *DataFrame, numGoroutines int) ([]*DataFrame, []error) {
+	var wg sync.WaitGroup
+	results := make([]*DataFrame, numGoroutines)
+	errors := make([]error, numGoroutines)
+
+	for i := range numGoroutines {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			result, err := df.Lazy().
+				GroupBy("category").
+				Having(expr.Sum(expr.Col("values")).Gt(expr.Lit(5000.0))).
+				Collect()
+			results[idx] = result
+			errors[idx] = err
+		}(i)
+	}
+
+	wg.Wait()
+	return results, errors
+}
+
+// cleanupConcurrentResults releases all concurrent operation results.
+func cleanupConcurrentResults(results []*DataFrame) {
+	for _, result := range results {
+		if result != nil {
+			result.Release()
+		}
+	}
+}
+
+// validateConcurrentResults validates that all concurrent operations succeeded with consistent results.
+func validateConcurrentResults(t *testing.T, results []*DataFrame, errors []error, numGoroutines int) {
+	for i := range numGoroutines {
+		require.NoError(t, errors[i], "Concurrent operation %d should succeed", i)
+		require.NotNil(t, results[i], "Result %d should not be nil", i)
+
+		if i > 0 {
+			assert.Equal(t, results[0].Len(), results[i].Len(), "All concurrent results should be identical")
+		}
+	}
+}
+
+// testMemoryPressureScenarios tests HAVING under memory pressure conditions.
+func testMemoryPressureScenarios(t *testing.T, mem memory.Allocator) {
+	const largeSize = 100000
+	categories := make([]string, largeSize)
+	values := make([]float64, largeSize)
+
+	for i := range largeSize {
+		categories[i] = fmt.Sprintf("Group_%d", i%1000) // 1000 groups
+		values[i] = float64(i)
+	}
+
+	catSeries := series.New("category", categories, mem)
+	valSeries := series.New("values", values, mem)
+	df := New(catSeries, valSeries)
+	defer df.Release()
+
+	result, err := df.Lazy().
+		GroupBy("category").
+		Having(expr.Sum(expr.Col("values")).Gt(expr.Lit(1000000.0))).
+		Collect()
+	require.NoError(t, err)
+	defer result.Release()
+
+	assert.GreaterOrEqual(t, result.Len(), 0)
+	assert.LessOrEqual(t, result.Len(), 1000)
+}
+
+// testResourceCleanupValidation tests that resources are properly cleaned up.
+func testResourceCleanupValidation(t *testing.T, mem memory.Allocator) {
+	categories := series.New("category", []string{"A", "B"}, mem)
+	values := series.New("values", []float64{10, 20}, mem)
+	df := New(categories, values)
+	defer df.Release()
+
+	for range 100 {
+		result, err := df.Lazy().
+			GroupBy("category").
+			Having(expr.Sum(expr.Col("values")).Gt(expr.Lit(5.0))).
+			Collect()
+		require.NoError(t, err)
+		result.Release()
+	}
+}
+
+// testErrorRecoveryInParallelOperations tests error recovery in parallel HAVING scenarios.
+func testErrorRecoveryInParallelOperations(t *testing.T, mem memory.Allocator) {
+	categories := series.New("category", []string{"A", "A", "B", "B"}, mem)
+	values := series.New("values", []float64{10, 20, 30, 40}, mem)
+	df := New(categories, values)
+	defer df.Release()
+
+	const numOps = 20
+	successCount := runParallelErrorRecoveryOperations(df, numOps)
+	assert.GreaterOrEqual(t, successCount, int64(numOps/2), "At least half parallel operations should succeed")
+}
+
+// runParallelErrorRecoveryOperations runs parallel operations and counts successes.
+func runParallelErrorRecoveryOperations(df *DataFrame, numOps int) int64 {
+	var wg sync.WaitGroup
+	var successCount int64
+	var mu sync.Mutex
+
+	for i := range numOps {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			threshold := float64(idx * 10)
+			result, err := df.Lazy().
+				GroupBy("category").
+				Having(expr.Sum(expr.Col("values")).Gt(expr.Lit(threshold))).
+				Collect()
+
+			if err == nil && result != nil {
+				result.Release()
+				mu.Lock()
+				successCount++
+				mu.Unlock()
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	return successCount
+}
+
+// testPanicRecoveryInWorkerThreads tests that panics in worker threads are handled gracefully.
+func testPanicRecoveryInWorkerThreads(t *testing.T, mem memory.Allocator) {
+	categories := series.New("category", []string{"A", "A", "B", "B"}, mem)
+	values := series.New("values", []float64{10, 20, 30, 40}, mem)
+	df := New(categories, values)
+	defer df.Release()
+
+	result, err := df.Lazy().GroupBy("category").Having(expr.Sum(expr.Col("values")).Gt(expr.Lit(25.0))).Collect()
+	require.NoError(t, err)
+	defer result.Release()
+
+	assert.GreaterOrEqual(t, result.Len(), 0)
 }

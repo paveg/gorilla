@@ -1,3 +1,4 @@
+//nolint:testpackage // requires internal access to unexported types and functions
 package dataframe
 
 import (
@@ -31,7 +32,7 @@ type PerformanceThresholds struct {
 	MinParallelEfficiency  float64       // >80% efficiency up to 8 cores
 }
 
-// DefaultPerformanceThresholds returns the performance targets from issue #117
+// DefaultPerformanceThresholds returns the performance targets from issue #117.
 func DefaultPerformanceThresholds() PerformanceThresholds {
 	// Detect CI environment and adjust thresholds accordingly
 	_, isCI := os.LookupEnv("CI")
@@ -50,7 +51,7 @@ func DefaultPerformanceThresholds() PerformanceThresholds {
 	}
 }
 
-// TestHavingPerformanceRegression ensures HAVING performance doesn't regress
+// TestHavingPerformanceRegression ensures HAVING performance doesn't regress.
 func TestHavingPerformanceRegression(t *testing.T) {
 	thresholds := DefaultPerformanceThresholds()
 
@@ -71,7 +72,7 @@ func TestHavingPerformanceRegression(t *testing.T) {
 	})
 }
 
-// testLatencyRegression verifies latency doesn't exceed target for small datasets
+// testLatencyRegression verifies latency doesn't exceed target for small datasets.
 func testLatencyRegression(t *testing.T, maxLatency time.Duration) {
 	mem := memory.NewGoAllocator()
 
@@ -81,7 +82,7 @@ func testLatencyRegression(t *testing.T, maxLatency time.Duration) {
 	salaries := make([]float64, size)
 
 	deptNames := []string{"Engineering", "Sales", "HR"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(40000 + (i * 100))
 	}
@@ -95,7 +96,7 @@ func testLatencyRegression(t *testing.T, maxLatency time.Duration) {
 	runs := 10
 	totalDuration := time.Duration(0)
 
-	for i := 0; i < runs; i++ {
+	for range runs {
 		start := time.Now()
 
 		lazy := df.Lazy()
@@ -121,7 +122,7 @@ func testLatencyRegression(t *testing.T, maxLatency time.Duration) {
 	}
 }
 
-// testThroughputRegression verifies throughput meets target for large datasets
+// testThroughputRegression verifies throughput meets target for large datasets.
 func testThroughputRegression(t *testing.T, minThroughput float64) {
 	mem := memory.NewGoAllocator()
 
@@ -131,7 +132,7 @@ func testThroughputRegression(t *testing.T, minThroughput float64) {
 	salaries := make([]float64, size)
 
 	deptNames := []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(30000 + (i % 100000))
 	}
@@ -145,7 +146,7 @@ func testThroughputRegression(t *testing.T, minThroughput float64) {
 	runs := 3
 	totalDuration := time.Duration(0)
 
-	for i := 0; i < runs; i++ {
+	for range runs {
 		start := time.Now()
 
 		lazy := df.Lazy()
@@ -183,7 +184,7 @@ func testThroughputRegression(t *testing.T, minThroughput float64) {
 	}
 }
 
-// testMemoryOverheadRegression verifies memory overhead stays within limits
+// testMemoryOverheadRegression verifies memory overhead stays within limits.
 func testMemoryOverheadRegression(t *testing.T, maxOverhead float64) {
 	mem := memory.NewGoAllocator()
 
@@ -192,7 +193,7 @@ func testMemoryOverheadRegression(t *testing.T, maxOverhead float64) {
 	salaries := make([]float64, size)
 
 	deptNames := []string{"Engineering", "Sales", "HR", "Marketing", "Support"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(40000 + (i * 3))
 	}
@@ -206,7 +207,7 @@ func testMemoryOverheadRegression(t *testing.T, maxOverhead float64) {
 	runs := 5
 	havingDuration := time.Duration(0)
 
-	for i := 0; i < runs; i++ {
+	for range runs {
 		start := time.Now()
 
 		lazy := df.Lazy()
@@ -226,7 +227,7 @@ func testMemoryOverheadRegression(t *testing.T, maxOverhead float64) {
 	// Measure manual filtering performance
 	manualDuration := time.Duration(0)
 
-	for i := 0; i < runs; i++ {
+	for range runs {
 		start := time.Now()
 
 		// First aggregate
@@ -262,7 +263,7 @@ func testMemoryOverheadRegression(t *testing.T, maxOverhead float64) {
 	}
 }
 
-// testParallelEfficiencyRegression verifies parallel execution efficiency
+// testParallelEfficiencyRegression verifies parallel execution efficiency.
 func testParallelEfficiencyRegression(t *testing.T, minEfficiency float64) {
 	mem := memory.NewGoAllocator()
 
@@ -273,7 +274,7 @@ func testParallelEfficiencyRegression(t *testing.T, minEfficiency float64) {
 	experience := make([]int64, size)
 
 	deptNames := []string{"Eng", "Sales", "HR", "Marketing", "Support", "Finance", "Ops", "Legal"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(30000 + (i * 1))
 		experience[i] = int64(i % 25)
@@ -289,7 +290,7 @@ func testParallelEfficiencyRegression(t *testing.T, minEfficiency float64) {
 	runs := 3
 	totalDuration := time.Duration(0)
 
-	for i := 0; i < runs; i++ {
+	for range runs {
 		start := time.Now()
 
 		lazy := df.Lazy()
@@ -327,7 +328,7 @@ func testParallelEfficiencyRegression(t *testing.T, minEfficiency float64) {
 	}
 }
 
-// TestHavingPerformanceMonitoring tests the performance metrics collection
+// TestHavingPerformanceMonitoring tests the performance metrics collection.
 func TestHavingPerformanceMonitoring(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping performance monitoring test in short mode")
@@ -341,7 +342,7 @@ func TestHavingPerformanceMonitoring(t *testing.T) {
 	salaries := make([]float64, size)
 
 	deptNames := []string{"Engineering", "Sales", "HR"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(40000 + (i * 50))
 	}
@@ -366,7 +367,7 @@ func TestHavingPerformanceMonitoring(t *testing.T) {
 	groupByOp.Release()
 }
 
-// TestHavingConstantFolding tests compile-time optimization of constant expressions
+// TestHavingConstantFolding tests compile-time optimization of constant expressions.
 func TestHavingConstantFolding(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
@@ -376,7 +377,7 @@ func TestHavingConstantFolding(t *testing.T) {
 	salaries := make([]float64, size)
 
 	deptNames := []string{"Engineering", "Sales"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(40000 + (i * 20))
 	}
@@ -401,7 +402,7 @@ func TestHavingConstantFolding(t *testing.T) {
 	groupByOp.Release()
 }
 
-// BenchmarkHavingPerformanceBaseline establishes performance baselines
+// BenchmarkHavingPerformanceBaseline establishes performance baselines.
 func BenchmarkHavingPerformanceBaseline(b *testing.B) {
 	mem := memory.NewGoAllocator()
 
@@ -411,7 +412,7 @@ func BenchmarkHavingPerformanceBaseline(b *testing.B) {
 	salaries := make([]float64, size)
 
 	deptNames := []string{"Engineering", "Sales", "HR", "Marketing", "Support", "Finance"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(35000 + (i * 2))
 	}
@@ -423,7 +424,7 @@ func BenchmarkHavingPerformanceBaseline(b *testing.B) {
 
 	b.Run("Current implementation", func(b *testing.B) {
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			lazy := df.Lazy()
 			groupByOp := &GroupByHavingOperation{
 				groupByCols: []string{"department"},
@@ -447,7 +448,7 @@ func BenchmarkHavingPerformanceBaseline(b *testing.B) {
 
 	b.Run("Optimized implementation", func(b *testing.B) {
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			lazy := df.Lazy()
 			groupByOp := &GroupByHavingOperation{
 				groupByCols: []string{"department"},

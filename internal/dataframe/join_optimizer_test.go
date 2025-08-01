@@ -1,3 +1,4 @@
+//nolint:testpackage // requires internal access to unexported types and functions
 package dataframe
 
 import (
@@ -125,10 +126,10 @@ func TestBroadcastJoin(t *testing.T) {
 		expectedValues := []string{"b", "d", "f"}
 		expectedScores := []float64{2.5, 4.5, 6.5}
 
-		for i := 0; i < result.Len(); i++ {
+		for i := range result.Len() {
 			assert.Equal(t, expectedIDs[i], idCol.(*series.Series[int64]).Value(i))
 			assert.Equal(t, expectedValues[i], valueCol.(*series.Series[string]).Value(i))
-			assert.Equal(t, expectedScores[i], scoreCol.(*series.Series[float64]).Value(i))
+			assert.InDelta(t, expectedScores[i], scoreCol.(*series.Series[float64]).Value(i), 0.001)
 		}
 	})
 
@@ -187,7 +188,7 @@ func TestMergeJoin(t *testing.T) {
 		if result.Len() > 0 {
 			idCol, _ := result.Column("id")
 			var actualIDs []int64
-			for i := 0; i < result.Len(); i++ {
+			for i := range result.Len() {
 				actualIDs = append(actualIDs, idCol.(*series.Series[int64]).Value(i))
 			}
 			t.Logf("Actual IDs: %v", actualIDs)
@@ -198,7 +199,7 @@ func TestMergeJoin(t *testing.T) {
 		// Verify results
 		idCol, _ := result.Column("id")
 		expectedIDs := []int64{2, 4, 6, 8, 10}
-		for i := 0; i < result.Len(); i++ {
+		for i := range result.Len() {
 			assert.Equal(t, expectedIDs[i], idCol.(*series.Series[int64]).Value(i))
 		}
 	})
@@ -223,6 +224,19 @@ func TestMergeJoin(t *testing.T) {
 		result, err := left.mergeJoin(right, []string{"id"}, []string{"id"}, FullOuterJoin)
 		require.NoError(t, err)
 		defer result.Release()
+
+		// Debug output
+		t.Logf("Result has %d rows", result.Len())
+		t.Logf("Result columns: %v", result.Columns())
+		if result.Len() > 0 {
+			idCol, _ := result.Column("id")
+			var actualIDs []int64
+			for i := range result.Len() {
+				actualIDs = append(actualIDs, idCol.(*series.Series[int64]).Value(i))
+			}
+			t.Logf("Actual IDs: %v", actualIDs)
+			t.Logf("Expected IDs: [1, 2, 3, 4, 5, 7]")
+		}
 
 		// Should have all unique IDs: 1, 2, 3, 4, 5, 7
 		assert.Equal(t, 6, result.Len())
@@ -284,13 +298,13 @@ func TestOptimizedHashMap(t *testing.T) {
 		hashMap := NewOptimizedHashMap(4) // Small initial capacity
 
 		// Add enough entries to trigger resize
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			key := fmt.Sprintf("key%d", i)
 			hashMap.Put(key, i)
 		}
 
 		// Verify all entries are still accessible
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			key := fmt.Sprintf("key%d", i)
 			val, ok := hashMap.Get(key)
 			assert.True(t, ok)
@@ -324,14 +338,14 @@ func TestOptimizedHashJoin(t *testing.T) {
 		size := 6000
 		leftIDs := make([]int64, size)
 		leftValues := make([]string, size)
-		for i := 0; i < size; i++ {
+		for i := range size {
 			leftIDs[i] = int64(i)
 			leftValues[i] = fmt.Sprintf("left_%d", i)
 		}
 
 		rightIDs := make([]int64, size/2)
 		rightScores := make([]float64, size/2)
-		for i := 0; i < size/2; i++ {
+		for i := range size / 2 {
 			rightIDs[i] = int64(i * 2) // Every other ID
 			rightScores[i] = float64(i) * 1.5
 		}
@@ -406,78 +420,105 @@ func TestOptimizedJoin_Integration(t *testing.T) {
 	})
 }
 
-// Benchmark functions
+// Benchmark functions.
 func BenchmarkJoinStrategies(b *testing.B) {
 	mem := memory.NewGoAllocator()
-
 	sizes := []int{1000, 5000, 10000}
 
 	for _, size := range sizes {
-		// Create test data
-		leftIDs := make([]int64, size)
-		rightIDs := make([]int64, size/2)
+		left, right := createJoinBenchmarkTestData(size, mem)
+		defer left.Release()
+		defer right.Release()
 
-		for i := range leftIDs {
-			leftIDs[i] = int64(i)
-		}
-		for i := range rightIDs {
-			rightIDs[i] = int64(i * 2)
-		}
-
-		left := New(series.New("id", leftIDs, mem))
-		right := New(series.New("id", rightIDs, mem))
-
-		options := &JoinOptions{
-			Type:     InnerJoin,
-			LeftKey:  "id",
-			RightKey: "id",
-		}
-
-		b.Run(fmt.Sprintf("StandardHashJoin_%d", size), func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
-				result, err := left.Join(right, options)
-				if err != nil {
-					b.Fatal(err)
-				}
-				result.Release()
-			}
-		})
-
-		b.Run(fmt.Sprintf("OptimizedHashJoin_%d", size), func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
-				result, err := left.optimizedHashJoin(right, []string{"id"}, []string{"id"}, InnerJoin)
-				if err != nil {
-					b.Fatal(err)
-				}
-				result.Release()
-			}
-		})
-
-		b.Run(fmt.Sprintf("MergeJoin_%d", size), func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
-				result, err := left.mergeJoin(right, []string{"id"}, []string{"id"}, InnerJoin)
-				if err != nil {
-					b.Fatal(err)
-				}
-				result.Release()
-			}
-		})
-
-		if size <= 1000 {
-			b.Run(fmt.Sprintf("BroadcastJoin_%d", size), func(b *testing.B) {
-				for i := 0; i < b.N; i++ {
-					result, err := left.broadcastJoin(right, []string{"id"}, []string{"id"}, InnerJoin)
-					if err != nil {
-						b.Fatal(err)
-					}
-					result.Release()
-				}
-			})
-		}
-
-		left.Release()
-		right.Release()
+		runJoinBenchmarks(b, left, right, size)
 	}
+}
+
+// createJoinBenchmarkTestData creates test DataFrames for join benchmarks.
+func createJoinBenchmarkTestData(size int, mem memory.Allocator) (*DataFrame, *DataFrame) {
+	leftIDs := make([]int64, size)
+	rightIDs := make([]int64, size/2)
+
+	for i := range leftIDs {
+		leftIDs[i] = int64(i)
+	}
+	for i := range rightIDs {
+		rightIDs[i] = int64(i * 2)
+	}
+
+	left := New(series.New("id", leftIDs, mem))
+	right := New(series.New("id", rightIDs, mem))
+	return left, right
+}
+
+// runJoinBenchmarks runs all join strategy benchmarks for a given size.
+func runJoinBenchmarks(b *testing.B, left, right *DataFrame, size int) {
+	benchmarkStandardHashJoin(b, left, right, size)
+	benchmarkOptimizedHashJoin(b, left, right, size)
+	benchmarkMergeJoin(b, left, right, size)
+	benchmarkBroadcastJoinIfSmall(b, left, right, size)
+}
+
+// benchmarkStandardHashJoin runs standard hash join benchmark.
+func benchmarkStandardHashJoin(b *testing.B, left, right *DataFrame, size int) {
+	options := &JoinOptions{
+		Type:     InnerJoin,
+		LeftKey:  "id",
+		RightKey: "id",
+	}
+
+	b.Run(fmt.Sprintf("StandardHashJoin_%d", size), func(b *testing.B) {
+		for range b.N {
+			result, err := left.Join(right, options)
+			if err != nil {
+				b.Fatal(err)
+			}
+			result.Release()
+		}
+	})
+}
+
+// benchmarkOptimizedHashJoin runs optimized hash join benchmark.
+func benchmarkOptimizedHashJoin(b *testing.B, left, right *DataFrame, size int) {
+	b.Run(fmt.Sprintf("OptimizedHashJoin_%d", size), func(b *testing.B) {
+		for range b.N {
+			result, err := left.optimizedHashJoin(right, []string{"id"}, []string{"id"}, InnerJoin)
+			if err != nil {
+				b.Fatal(err)
+			}
+			result.Release()
+		}
+	})
+}
+
+// benchmarkMergeJoin runs merge join benchmark.
+func benchmarkMergeJoin(b *testing.B, left, right *DataFrame, size int) {
+	b.Run(fmt.Sprintf("MergeJoin_%d", size), func(b *testing.B) {
+		for range b.N {
+			result, err := left.mergeJoin(right, []string{"id"}, []string{"id"}, InnerJoin)
+			if err != nil {
+				b.Fatal(err)
+			}
+			result.Release()
+		}
+	})
+}
+
+// benchmarkBroadcastJoinIfSmall runs broadcast join benchmark for small datasets.
+func benchmarkBroadcastJoinIfSmall(b *testing.B, left, right *DataFrame, size int) {
+	if size > 1000 {
+		return
+	}
+
+	b.Run(fmt.Sprintf("BroadcastJoin_%d", size), func(b *testing.B) {
+		for range b.N {
+			result, err := left.broadcastJoin(right, []string{"id"}, []string{"id"}, InnerJoin)
+			if err != nil {
+				b.Fatal(err)
+			}
+			result.Release()
+		}
+	})
 }
 
 func BenchmarkOptimizedHashMap(b *testing.B) {
@@ -485,9 +526,9 @@ func BenchmarkOptimizedHashMap(b *testing.B) {
 
 	for _, size := range sizes {
 		b.Run(fmt.Sprintf("OptimizedHashMap_Put_%d", size), func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				hashMap := NewOptimizedHashMap(size)
-				for j := 0; j < size; j++ {
+				for j := range size {
 					key := fmt.Sprintf("key%d", j)
 					hashMap.Put(key, j)
 				}
@@ -495,9 +536,9 @@ func BenchmarkOptimizedHashMap(b *testing.B) {
 		})
 
 		b.Run(fmt.Sprintf("StandardMap_Put_%d", size), func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				m := make(map[string][]int)
-				for j := 0; j < size; j++ {
+				for j := range size {
 					key := fmt.Sprintf("key%d", j)
 					m[key] = append(m[key], j)
 				}

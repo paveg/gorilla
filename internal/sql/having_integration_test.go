@@ -1,3 +1,4 @@
+//nolint:testpackage // requires internal access to unexported types and functions
 package sql
 
 import (
@@ -48,7 +49,7 @@ func TestHavingCrossFeatureIntegration(t *testing.T) {
 		require.NoError(t, err)
 		defer result.Release()
 
-		assert.True(t, result.Len() > 0)
+		assert.Positive(t, result.Len())
 		assert.True(t, result.HasColumn("region"))
 		assert.True(t, result.HasColumn("department"))
 		assert.True(t, result.HasColumn("avg_salary"))
@@ -63,7 +64,7 @@ func TestHavingCrossFeatureIntegration(t *testing.T) {
 		defer avgArray.Release()
 		defer countArray.Release()
 
-		for i := 0; i < result.Len(); i++ {
+		for i := range result.Len() {
 			avgSalaryFloat64, ok := avgArray.(*array.Float64)
 			require.True(t, ok, "avg_salary column should be Float64 array")
 			avgSalary := avgSalaryFloat64.Value(i)
@@ -72,8 +73,8 @@ func TestHavingCrossFeatureIntegration(t *testing.T) {
 			require.True(t, ok, "emp_count column should be Int64 array")
 			empCount := empCountInt64.Value(i)
 
-			assert.True(t, avgSalary > 75000, "avg_salary should be > 75000, got %f", avgSalary)
-			assert.True(t, empCount >= 2, "emp_count should be >= 2, got %d", empCount)
+			assert.Greater(t, avgSalary, 75000.0, "avg_salary should be > 75000, got %f", avgSalary)
+			assert.GreaterOrEqual(t, empCount, int64(2), "emp_count should be >= 2, got %d", empCount)
 		}
 	})
 
@@ -93,7 +94,7 @@ func TestHavingCrossFeatureIntegration(t *testing.T) {
 		defer result.Release()
 
 		// Should have at most 2 results due to LIMIT
-		assert.True(t, result.Len() <= 2)
+		assert.LessOrEqual(t, result.Len(), 2)
 
 		if result.Len() > 1 {
 			// Verify ORDER BY DESC is working
@@ -106,7 +107,14 @@ func TestHavingCrossFeatureIntegration(t *testing.T) {
 			require.True(t, ok, "total_salary column should be Float64 array")
 			salary1 := salaryFloat64.Value(0)
 			salary2 := salaryFloat64.Value(1)
-			assert.True(t, salary1 >= salary2, "First result salary %f should be >= second result salary %f", salary1, salary2)
+			assert.GreaterOrEqual(
+				t,
+				salary1,
+				salary2,
+				"First result salary %f should be >= second result salary %f",
+				salary1,
+				salary2,
+			)
 		}
 	})
 
@@ -152,7 +160,7 @@ func TestHavingCrossFeatureIntegration(t *testing.T) {
 
 		// Verify HAVING conditions are satisfied only if we have results
 		if result.Len() > 0 {
-			for i := 0; i < result.Len(); i++ {
+			for i := range result.Len() {
 				avgSalCol, _ := result.Column("avg_sal")
 				teamSizeCol, _ := result.Column("team_size")
 				totalExpCol, _ := result.Column("total_exp")
@@ -172,9 +180,9 @@ func TestHavingCrossFeatureIntegration(t *testing.T) {
 				require.True(t, ok, "total_exp column should be Float64 array")
 				totalExp := totalExpFloat64.Value(i)
 
-				assert.True(t, avgSal > 70000, "avg_sal should be > 70000, got %f", avgSal)
-				assert.True(t, teamSize >= 3, "team_size should be >= 3, got %d", teamSize)
-				assert.True(t, totalExp > 10, "total_exp should be > 10, got %f", totalExp)
+				assert.Greater(t, avgSal, 70000.0, "avg_sal should be > 70000, got %f", avgSal)
+				assert.GreaterOrEqual(t, teamSize, int64(3), "team_size should be >= 3, got %d", teamSize)
+				assert.Greater(t, totalExp, 10.0, "total_exp should be > 10, got %f", totalExp)
 			}
 		}
 	})
@@ -216,7 +224,7 @@ func TestHavingBackwardCompatibility(t *testing.T) {
 		require.NoError(t, err)
 		defer result.Release()
 
-		assert.True(t, result.Len() > 0)
+		assert.Positive(t, result.Len())
 		assert.True(t, result.HasColumn("department"))
 	})
 
@@ -229,7 +237,7 @@ func TestHavingBackwardCompatibility(t *testing.T) {
 
 		// This might return 0 or 1 rows depending on implementation
 		// The important thing is it doesn't error
-		assert.True(t, result.Len() >= 0)
+		assert.GreaterOrEqual(t, result.Len(), 0)
 
 		// Only check for column if we have results
 		if result.Len() > 0 {
@@ -245,19 +253,19 @@ func TestHavingWithJoinsIntegration(t *testing.T) {
 	// Create related test tables for join testing
 
 	// Employees table
-	empIds := series.New("emp_id", []int64{1, 2, 3, 4, 5}, mem)
+	empIDs := series.New("emp_id", []int64{1, 2, 3, 4, 5}, mem)
 	empNames := series.New("name", []string{"Alice", "Bob", "Charlie", "David", "Eve"}, mem)
-	deptIds := series.New("dept_id", []int64{1, 2, 1, 3, 2}, mem)
+	deptIDs := series.New("dept_id", []int64{1, 2, 1, 3, 2}, mem)
 	empSalaries := series.New("salary", []float64{80000, 70000, 85000, 60000, 75000}, mem)
 
-	employees := dataframe.New(empIds, empNames, deptIds, empSalaries)
+	employees := dataframe.New(empIDs, empNames, deptIDs, empSalaries)
 	defer employees.Release()
 
 	// Departments table
-	deptIdsSeries := series.New("dept_id", []int64{1, 2, 3}, mem)
+	deptIDsSeries := series.New("dept_id", []int64{1, 2, 3}, mem)
 	deptNames := series.New("dept_name", []string{"Engineering", "Sales", "HR"}, mem)
 
-	departments := dataframe.New(deptIdsSeries, deptNames)
+	departments := dataframe.New(deptIDsSeries, deptNames)
 	defer departments.Release()
 
 	executor.RegisterTable("employees", employees)
@@ -279,10 +287,10 @@ func TestHavingWithJoinsIntegration(t *testing.T) {
 		require.NoError(t, err)
 		defer result.Release()
 
-		assert.True(t, result.Len() > 0)
+		assert.Positive(t, result.Len())
 
 		// Verify HAVING conditions
-		for i := 0; i < result.Len(); i++ {
+		for i := range result.Len() {
 			avgSalCol, _ := result.Column("avg_salary")
 			empCountCol, _ := result.Column("emp_count")
 
@@ -296,8 +304,8 @@ func TestHavingWithJoinsIntegration(t *testing.T) {
 			require.True(t, ok, "emp_count column should be Int64 array")
 			empCount := empCountInt64.Value(i)
 
-			assert.True(t, avgSal > 70000, "avg_salary should be > 70000, got %f", avgSal)
-			assert.True(t, empCount >= 2, "emp_count should be >= 2, got %d", empCount)
+			assert.Greater(t, avgSal, 70000.0, "avg_salary should be > 70000, got %f", avgSal)
+			assert.GreaterOrEqual(t, empCount, int64(2), "emp_count should be >= 2, got %d", empCount)
 		}
 	})
 }
@@ -307,13 +315,13 @@ func TestHavingComplexWorkflows(t *testing.T) {
 	executor := NewSQLExecutor(mem)
 
 	// Create complex business scenario data
-	orderIds := series.New("order_id", []int64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, mem)
-	customerIds := series.New("customer_id", []int64{1, 2, 1, 3, 2, 1, 3, 4, 2, 3}, mem)
+	orderIDs := series.New("order_id", []int64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, mem)
+	customerIDs := series.New("customer_id", []int64{1, 2, 1, 3, 2, 1, 3, 4, 2, 3}, mem)
 	products := series.New("product", []string{"A", "B", "A", "C", "B", "A", "C", "D", "B", "C"}, mem)
 	quantities := series.New("quantity", []int64{2, 1, 3, 1, 2, 1, 2, 1, 3, 1}, mem)
 	prices := series.New("price", []float64{100, 200, 100, 300, 200, 100, 300, 400, 200, 300}, mem)
 
-	orders := dataframe.New(orderIds, customerIds, products, quantities, prices)
+	orders := dataframe.New(orderIDs, customerIDs, products, quantities, prices)
 	defer orders.Release()
 
 	executor.RegisterTable("orders", orders)
@@ -336,10 +344,10 @@ func TestHavingComplexWorkflows(t *testing.T) {
 		require.NoError(t, err)
 		defer result.Release()
 
-		assert.True(t, result.Len() > 0)
+		assert.Positive(t, result.Len())
 
 		// Verify business logic
-		for i := 0; i < result.Len(); i++ {
+		for i := range result.Len() {
 			orderCountCol, _ := result.Column("order_count")
 			totalSpentCol, _ := result.Column("total_spent")
 
@@ -353,8 +361,8 @@ func TestHavingComplexWorkflows(t *testing.T) {
 			require.True(t, ok, "total_spent column should be Float64 array")
 			totalSpent := totalSpentFloat64.Value(i)
 
-			assert.True(t, totalSpent > 500, "total_spent should be > 500, got %f", totalSpent)
-			assert.True(t, orderCount >= 2, "order_count should be >= 2, got %d", orderCount)
+			assert.Greater(t, totalSpent, 500.0, "total_spent should be > 500, got %f", totalSpent)
+			assert.GreaterOrEqual(t, orderCount, int64(2), "order_count should be >= 2, got %d", orderCount)
 		}
 	})
 
@@ -377,7 +385,7 @@ func TestHavingComplexWorkflows(t *testing.T) {
 		defer result.Release()
 
 		// Verify each product meets the criteria
-		for i := 0; i < result.Len(); i++ {
+		for i := range result.Len() {
 			timesOrderedCol, _ := result.Column("times_ordered")
 			totalQuantityCol, _ := result.Column("total_quantity")
 
@@ -391,8 +399,8 @@ func TestHavingComplexWorkflows(t *testing.T) {
 			require.True(t, ok, "total_quantity column should be Float64 array")
 			totalQuantity := totalQuantityFloat64.Value(i)
 
-			assert.True(t, timesOrdered >= 2, "times_ordered should be >= 2, got %d", timesOrdered)
-			assert.True(t, totalQuantity >= 4, "total_quantity should be >= 4, got %f", totalQuantity)
+			assert.GreaterOrEqual(t, timesOrdered, int64(2), "times_ordered should be >= 2, got %d", timesOrdered)
+			assert.GreaterOrEqual(t, totalQuantity, 4.0, "total_quantity should be >= 4, got %f", totalQuantity)
 		}
 	})
 }
@@ -420,7 +428,7 @@ func TestHavingErrorRecoveryAndRobustness(t *testing.T) {
 		for _, query := range invalidQueries {
 			currentQuery := query
 			result, err := executor.Execute(currentQuery)
-			assert.Error(t, err, "Query should fail: %s", currentQuery)
+			require.Error(t, err, "Query should fail: %s", currentQuery)
 			if result != nil {
 				result.Release()
 			}
@@ -430,7 +438,7 @@ func TestHavingErrorRecoveryAndRobustness(t *testing.T) {
 	t.Run("recovery after failed HAVING operations", func(t *testing.T) {
 		// Execute a failing query
 		_, err := executor.Execute("SELECT category FROM test_data HAVING value > 10")
-		assert.Error(t, err)
+		require.Error(t, err)
 
 		// Then execute a valid query - should work fine
 		validResult, err := executor.Execute(`
@@ -442,7 +450,7 @@ func TestHavingErrorRecoveryAndRobustness(t *testing.T) {
 		require.NoError(t, err)
 		defer validResult.Release()
 
-		assert.True(t, validResult.Len() > 0)
+		assert.Positive(t, validResult.Len())
 	})
 
 	t.Run("HAVING with empty result sets", func(t *testing.T) {
@@ -480,7 +488,7 @@ func TestHavingPerformanceRegression(t *testing.T) {
 	values := make([]float64, size)
 
 	catNames := []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		categories[i] = catNames[i%len(catNames)]
 		values[i] = float64(100 + (i % 1000))
 	}
@@ -513,10 +521,10 @@ func TestHavingPerformanceRegression(t *testing.T) {
 		defer result.Release()
 
 		// Verify we get reasonable results
-		assert.True(t, result.Len() >= 0) // Should execute without hanging
+		assert.GreaterOrEqual(t, result.Len(), 0) // Should execute without hanging
 
 		// Verify HAVING conditions are satisfied
-		for i := 0; i < result.Len(); i++ {
+		for i := range result.Len() {
 			countCol, _ := result.Column("count")
 			avgCol, _ := result.Column("avg_value")
 			maxCol, _ := result.Column("max_value")
@@ -536,9 +544,9 @@ func TestHavingPerformanceRegression(t *testing.T) {
 			require.True(t, ok, "max_value column should be Float64 array")
 			maxValue := maxFloat64.Value(i)
 
-			assert.True(t, count > 500, "count should be > 500, got %d", count)
-			assert.True(t, avgValue > 400, "avg_value should be > 400, got %f", avgValue)
-			assert.True(t, maxValue > 800, "max_value should be > 800, got %f", maxValue)
+			assert.Greater(t, count, int64(500), "count should be > 500, got %d", count)
+			assert.Greater(t, avgValue, 400.0, "avg_value should be > 400, got %f", avgValue)
+			assert.Greater(t, maxValue, 800.0, "max_value should be > 800, got %f", maxValue)
 		}
 	})
 }

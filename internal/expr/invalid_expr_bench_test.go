@@ -1,4 +1,4 @@
-package expr
+package expr_test
 
 import (
 	"testing"
@@ -6,6 +6,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/paveg/gorilla/internal/expr"
 )
 
 func BenchmarkInvalidExprCreation(b *testing.B) {
@@ -13,27 +14,27 @@ func BenchmarkInvalidExprCreation(b *testing.B) {
 		message := "test error message"
 
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			_ = Invalid(message)
+		for range b.N {
+			_ = expr.Invalid(message)
 		}
 	})
 
 	b.Run("create invalid vs regular expression", func(b *testing.B) {
 		b.Run("invalid", func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
-				_ = Invalid("error message")
+			for range b.N {
+				_ = expr.Invalid("error message")
 			}
 		})
 
 		b.Run("column", func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
-				_ = Col("test")
+			for range b.N {
+				_ = expr.Col("test")
 			}
 		})
 
 		b.Run("literal", func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
-				_ = Lit(42)
+			for range b.N {
+				_ = expr.Lit(42)
 			}
 		})
 	})
@@ -41,23 +42,23 @@ func BenchmarkInvalidExprCreation(b *testing.B) {
 
 func BenchmarkInvalidExprEvaluation(b *testing.B) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 	columns := map[string]arrow.Array{} // Empty columns map for benchmarking
 
 	b.Run("evaluate invalid expression", func(b *testing.B) {
-		invalidExpr := Invalid("benchmark error")
+		invalidExpr := expr.Invalid("benchmark error")
 
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			_, _ = eval.Evaluate(invalidExpr, columns)
 		}
 	})
 
 	b.Run("evaluate boolean invalid expression", func(b *testing.B) {
-		invalidExpr := Invalid("benchmark boolean error")
+		invalidExpr := expr.Invalid("benchmark boolean error")
 
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			_, _ = eval.EvaluateBoolean(invalidExpr, columns)
 		}
 	})
@@ -65,7 +66,7 @@ func BenchmarkInvalidExprEvaluation(b *testing.B) {
 
 func BenchmarkErrorPathVsSuccessPath(b *testing.B) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 	columns := createBenchmarkColumns(b, mem)
 	defer func() {
 		for _, arr := range columns {
@@ -74,10 +75,10 @@ func BenchmarkErrorPathVsSuccessPath(b *testing.B) {
 	}()
 
 	b.Run("success path - column evaluation", func(b *testing.B) {
-		colExpr := Col("age")
+		colExpr := expr.Col("age")
 
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			result, _ := eval.Evaluate(colExpr, columns)
 			if result != nil {
 				result.Release()
@@ -86,10 +87,10 @@ func BenchmarkErrorPathVsSuccessPath(b *testing.B) {
 	})
 
 	b.Run("error path - invalid expression", func(b *testing.B) {
-		invalidExpr := Invalid("benchmark error path")
+		invalidExpr := expr.Invalid("benchmark error path")
 
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			_, _ = eval.Evaluate(invalidExpr, columns)
 		}
 	})

@@ -1,4 +1,4 @@
-package expr
+package expr_test
 
 import (
 	"testing"
@@ -6,13 +6,14 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/paveg/gorilla/internal/expr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestIntLiteralSupport(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 
 	// Create a test int64 column
 	builder := array.NewInt64Builder(mem)
@@ -65,16 +66,16 @@ func TestIntLiteralSupport(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create literal expression
-			literalExpr := Lit(tt.literal)
+			literalExpr := expr.Lit(tt.literal)
 
 			// Create comparison expression: age > literal
-			compExpr := Col("age").Gt(literalExpr)
+			compExpr := expr.Col("age").Gt(literalExpr)
 
 			// Evaluate the boolean expression
 			result, err := eval.EvaluateBoolean(compExpr, columns)
 
 			if tt.expectError {
-				assert.Error(t, err, tt.description)
+				require.Error(t, err, tt.description)
 				return
 			}
 
@@ -91,7 +92,7 @@ func TestIntLiteralSupport(t *testing.T) {
 			assert.Equal(t, 4, boolArray.Len(), "Should have 4 boolean values")
 
 			expectedResults := []bool{false, false, true, false}
-			for i := 0; i < boolArray.Len(); i++ {
+			for i := range boolArray.Len() {
 				assert.Equal(t, expectedResults[i], boolArray.Value(i),
 					"Row %d: expected %v, got %v", i, expectedResults[i], boolArray.Value(i))
 			}
@@ -101,7 +102,7 @@ func TestIntLiteralSupport(t *testing.T) {
 
 func TestIntLiteralArithmetic(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 
 	// Create a test int64 column
 	builder := array.NewInt64Builder(mem)
@@ -120,7 +121,7 @@ func TestIntLiteralArithmetic(t *testing.T) {
 	}
 
 	// Test arithmetic with int literal: value + 5
-	expr := Col("value").Add(Lit(5)) // 5 is of type `int`
+	expr := expr.Col("value").Add(expr.Lit(5)) // 5 is of type `int`
 
 	result, err := eval.Evaluate(expr, columns)
 	require.NoError(t, err)
@@ -134,7 +135,7 @@ func TestIntLiteralArithmetic(t *testing.T) {
 	expectedResults := []int64{15, 25, 35}
 	assert.Equal(t, 3, int64Array.Len())
 
-	for i := 0; i < int64Array.Len(); i++ {
+	for i := range int64Array.Len() {
 		assert.Equal(t, expectedResults[i], int64Array.Value(i),
 			"Row %d: expected %v, got %v", i, expectedResults[i], int64Array.Value(i))
 	}

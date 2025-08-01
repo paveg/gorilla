@@ -14,71 +14,97 @@ import (
 )
 
 const (
-	// Boolean string constants
+	// Boolean string constants.
 	trueStr  = "true"
 	falseStr = "false"
 	boolType = "bool"
 )
 
-// Read reads CSV data and returns a DataFrame
+// Read reads CSV data and returns a DataFrame.
 func (r *CSVReader) Read() (*dataframe.DataFrame, error) {
-	// Create CSV reader
-	csvReader := csv.NewReader(r.reader)
-	csvReader.Comma = r.options.Delimiter
-	csvReader.Comment = r.options.Comment
-	csvReader.TrimLeadingSpace = r.options.SkipInitialSpace
-
-	// Read all records
-	records, err := csvReader.ReadAll()
+	records, err := r.readCSVRecords()
 	if err != nil {
-		return nil, fmt.Errorf("reading CSV: %w", err)
+		return nil, err
 	}
 
-	// Handle empty CSV
 	if len(records) == 0 {
 		return dataframe.New(), nil
 	}
 
-	var headers []string
-	var dataRows [][]string
+	headers, dataRows := r.extractHeadersAndData(records)
 
-	if r.options.Header {
-		if len(records) == 1 {
-			// Only headers, no data
-			headers = records[0]
-			dataRows = [][]string{}
-		} else {
-			headers = records[0]
-			dataRows = records[1:]
-		}
-	} else {
-		// Generate default column names
-		numCols := len(records[0])
-		headers = make([]string, numCols)
-		for i := 0; i < numCols; i++ {
-			headers[i] = fmt.Sprintf("column_%d", i)
-		}
-		dataRows = records
-	}
-
-	// Handle case with no data rows
 	if len(dataRows) == 0 {
-		// Create empty series for each column
-		var emptySeries []dataframe.ISeries
-		for _, header := range headers {
-			s, err := series.NewSafe(header, []string{}, r.mem)
-			if err != nil {
-				return nil, fmt.Errorf("creating empty series for column %s: %w", header, err)
-			}
-			emptySeries = append(emptySeries, s)
-		}
-		return dataframe.New(emptySeries...), nil
+		return r.createEmptyDataFrame(headers)
 	}
 
-	// Transpose data to work with columns
+	columns := r.transposeDataToColumns(headers, dataRows)
+	return r.createDataFrameFromColumns(headers, columns)
+}
+
+// readCSVRecords reads and parses CSV records.
+func (r *CSVReader) readCSVRecords() ([][]string, error) {
+	csvReader := csv.NewReader(r.reader)
+	r.configureCSVReader(csvReader)
+
+	records, err := csvReader.ReadAll()
+	if err != nil {
+		return nil, fmt.Errorf("reading CSV: %w", err)
+	}
+	return records, nil
+}
+
+// configureCSVReader configures the CSV reader with options.
+func (r *CSVReader) configureCSVReader(csvReader *csv.Reader) {
+	csvReader.Comma = r.options.Delimiter
+	csvReader.Comment = r.options.Comment
+	csvReader.TrimLeadingSpace = r.options.SkipInitialSpace
+}
+
+// extractHeadersAndData separates headers and data rows from records.
+func (r *CSVReader) extractHeadersAndData(records [][]string) ([]string, [][]string) {
+	if r.options.Header {
+		return r.extractWithHeaders(records)
+	}
+	return r.generateDefaultHeaders(records), records
+}
+
+// extractWithHeaders extracts headers when Header option is true.
+func (r *CSVReader) extractWithHeaders(records [][]string) ([]string, [][]string) {
+	if len(records) == 1 {
+		return records[0], [][]string{}
+	}
+	return records[0], records[1:]
+}
+
+// generateDefaultHeaders generates default column names when no headers.
+func (r *CSVReader) generateDefaultHeaders(records [][]string) []string {
+	numCols := len(records[0])
+	headers := make([]string, numCols)
+	for i := range numCols {
+		headers[i] = fmt.Sprintf("column_%d", i)
+	}
+	return headers
+}
+
+// createEmptyDataFrame creates a DataFrame with empty series for each column.
+func (r *CSVReader) createEmptyDataFrame(headers []string) (*dataframe.DataFrame, error) {
+	var emptySeries []dataframe.ISeries
+	for _, header := range headers {
+		s, err := series.NewSafe(header, []string{}, r.mem)
+		if err != nil {
+			return nil, fmt.Errorf("creating empty series for column %s: %w", header, err)
+		}
+		emptySeries = append(emptySeries, s)
+	}
+	return dataframe.New(emptySeries...), nil
+}
+
+// transposeDataToColumns transposes row-based data to column-based data.
+func (r *CSVReader) transposeDataToColumns(headers []string, dataRows [][]string) [][]string {
 	numCols := len(headers)
 	columns := make([][]string, numCols)
-	for i := 0; i < numCols; i++ {
+
+	for i := range numCols {
 		columns[i] = make([]string, len(dataRows))
 		for j, row := range dataRows {
 			if i < len(row) {
@@ -88,8 +114,11 @@ func (r *CSVReader) Read() (*dataframe.DataFrame, error) {
 			}
 		}
 	}
+	return columns
+}
 
-	// Infer types and create series
+// createDataFrameFromColumns creates DataFrame from column data.
+func (r *CSVReader) createDataFrameFromColumns(headers []string, columns [][]string) (*dataframe.DataFrame, error) {
 	var seriesList []dataframe.ISeries
 	for i, header := range headers {
 		columnData := columns[i]
@@ -99,11 +128,10 @@ func (r *CSVReader) Read() (*dataframe.DataFrame, error) {
 		}
 		seriesList = append(seriesList, s)
 	}
-
 	return dataframe.New(seriesList...), nil
 }
 
-// createSeriesFromStrings creates a series from string data, inferring the appropriate type
+// createSeriesFromStrings creates a series from string data, inferring the appropriate type.
 func (r *CSVReader) createSeriesFromStrings(name string, data []string) (dataframe.ISeries, error) {
 	if len(data) == 0 {
 		return series.NewSafe(name, []string{}, r.mem)
@@ -125,63 +153,100 @@ func (r *CSVReader) createSeriesFromStrings(name string, data []string) (datafra
 	}
 }
 
-// inferDataType determines the most appropriate data type for the given string data
+// inferDataType determines the most appropriate data type for the given string data.
 func (r *CSVReader) inferDataType(data []string) string {
-	canBeInt := true
-	canBeFloat := true
-	canBeBool := true
-	hasNonEmptyValue := false
+	typeChecker := r.createTypeChecker()
 
 	for _, value := range data {
 		if value == "" {
 			continue // Skip empty values for type inference
 		}
-		hasNonEmptyValue = true
 
-		// Check if it's a boolean
-		if canBeBool {
-			lower := strings.ToLower(value)
-			if lower != trueStr && lower != falseStr {
-				canBeBool = false
-			}
-		}
-
-		// Check if it's an integer
-		if canBeInt {
-			_, err := strconv.ParseInt(value, 10, 64)
-			if err != nil {
-				canBeInt = false
-			}
-		}
-
-		// Check if it's a float
-		if canBeFloat {
-			_, err := strconv.ParseFloat(value, 64)
-			if err != nil {
-				canBeFloat = false
-			}
-		}
+		typeChecker.processValue(value)
 	}
 
-	// If all values are empty, default to string
-	if !hasNonEmptyValue {
+	return typeChecker.getMostSpecificType()
+}
+
+// typeChecker manages type inference for CSV data.
+type typeChecker struct {
+	canBeInt         bool
+	canBeFloat       bool
+	canBeBool        bool
+	hasNonEmptyValue bool
+}
+
+// createTypeChecker creates a new type checker with initial state.
+func (r *CSVReader) createTypeChecker() *typeChecker {
+	return &typeChecker{
+		canBeInt:   true,
+		canBeFloat: true,
+		canBeBool:  true,
+	}
+}
+
+// processValue processes a single value and updates type compatibility.
+func (tc *typeChecker) processValue(value string) {
+	tc.hasNonEmptyValue = true
+
+	tc.checkBoolCompatibility(value)
+	tc.checkIntCompatibility(value)
+	tc.checkFloatCompatibility(value)
+}
+
+// checkBoolCompatibility checks if value is compatible with bool type.
+func (tc *typeChecker) checkBoolCompatibility(value string) {
+	if !tc.canBeBool {
+		return
+	}
+
+	lower := strings.ToLower(value)
+	if lower != trueStr && lower != falseStr {
+		tc.canBeBool = false
+	}
+}
+
+// checkIntCompatibility checks if value is compatible with int type.
+func (tc *typeChecker) checkIntCompatibility(value string) {
+	if !tc.canBeInt {
+		return
+	}
+
+	if _, err := strconv.ParseInt(value, 10, 64); err != nil {
+		tc.canBeInt = false
+	}
+}
+
+// checkFloatCompatibility checks if value is compatible with float type.
+func (tc *typeChecker) checkFloatCompatibility(value string) {
+	if !tc.canBeFloat {
+		return
+	}
+
+	if _, err := strconv.ParseFloat(value, 64); err != nil {
+		tc.canBeFloat = false
+	}
+}
+
+// getMostSpecificType returns the most specific compatible type.
+func (tc *typeChecker) getMostSpecificType() string {
+	if !tc.hasNonEmptyValue {
 		return "string"
 	}
 
-	// Return the most specific type
-	if canBeBool {
+	if tc.canBeBool {
 		return boolType
 	}
-	if canBeInt {
+	if tc.canBeInt {
 		return "int"
 	}
-	if canBeFloat {
+	if tc.canBeFloat {
 		return "float"
 	}
 	return "string"
 }
 
-// createBoolSeries creates a boolean series from string data
+// createBoolSeries creates a boolean series from string data.
 func (r *CSVReader) createBoolSeries(name string, data []string) (dataframe.ISeries, error) {
 	boolData := make([]bool, len(data))
 	for i, value := range data {
@@ -194,7 +259,7 @@ func (r *CSVReader) createBoolSeries(name string, data []string) (dataframe.ISer
 	return series.NewSafe(name, boolData, r.mem)
 }
 
-// createIntSeries creates an integer series from string data
+// createIntSeries creates an integer series from string data.
 func (r *CSVReader) createIntSeries(name string, data []string) (dataframe.ISeries, error) {
 	intData := make([]int64, len(data))
 	for i, value := range data {
@@ -208,7 +273,7 @@ func (r *CSVReader) createIntSeries(name string, data []string) (dataframe.ISeri
 	return series.NewSafe(name, intData, r.mem)
 }
 
-// createFloatSeries creates a float series from string data
+// createFloatSeries creates a float series from string data.
 func (r *CSVReader) createFloatSeries(name string, data []string) (dataframe.ISeries, error) {
 	floatData := make([]float64, len(data))
 	for i, value := range data {
@@ -222,7 +287,7 @@ func (r *CSVReader) createFloatSeries(name string, data []string) (dataframe.ISe
 	return series.NewSafe(name, floatData, r.mem)
 }
 
-// Write writes the DataFrame to CSV format
+// Write writes the DataFrame to CSV format.
 func (w *CSVWriter) Write(df *dataframe.DataFrame) error {
 	csvWriter := csv.NewWriter(w.writer)
 	csvWriter.Comma = w.options.Delimiter
@@ -236,7 +301,7 @@ func (w *CSVWriter) Write(df *dataframe.DataFrame) error {
 	}
 
 	// Write data rows
-	for i := 0; i < df.Len(); i++ {
+	for i := range df.Len() {
 		row := make([]string, df.Width())
 		for j, colName := range df.Columns() {
 			column, exists := df.Column(colName)
@@ -257,7 +322,7 @@ func (w *CSVWriter) Write(df *dataframe.DataFrame) error {
 	return nil
 }
 
-// getValueAsString extracts a value from a column at the given index as a string
+// getValueAsString extracts a value from a column at the given index as a string.
 func (w *CSVWriter) getValueAsString(column dataframe.ISeries, index int) string {
 	arr := column.Array()
 	defer arr.Release()

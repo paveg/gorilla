@@ -1,10 +1,11 @@
-package series
+package series_test
 
 import (
 	"testing"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/paveg/gorilla/internal/series"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -19,7 +20,7 @@ func TestDateTimeSeries(t *testing.T) {
 			time.Date(2023, 1, 3, 14, 45, 0, 0, time.UTC),
 		}
 
-		series := New("timestamps", times, mem)
+		series := series.New("timestamps", times, mem)
 		defer series.Release()
 
 		assert.Equal(t, "timestamps", series.Name())
@@ -43,7 +44,7 @@ func TestDateTimeSeries(t *testing.T) {
 			time.Date(2023, 1, 2, 13, 30, 0, 0, location),
 		}
 
-		series := New("timestamps_tz", times, mem)
+		series := series.New("timestamps_tz", times, mem)
 		defer series.Release()
 
 		assert.Equal(t, "timestamps_tz", series.Name())
@@ -70,7 +71,7 @@ func TestDateTimeSeries(t *testing.T) {
 			time.Date(2023, 1, 3, 0, 0, 0, 0, time.UTC),
 		}
 
-		series := New("dates", dates, mem)
+		series := series.New("dates", dates, mem)
 		defer series.Release()
 
 		assert.Equal(t, "dates", series.Name())
@@ -93,7 +94,7 @@ func TestDateTimeSeries(t *testing.T) {
 			time.Date(2023, 1, 2, 13, 30, 0, 0, time.UTC),
 		}
 
-		series := New("timestamps", times, mem)
+		series := series.New("timestamps", times, mem)
 		defer series.Release()
 
 		// Test individual value access
@@ -109,7 +110,7 @@ func TestDateTimeSeries(t *testing.T) {
 	t.Run("Empty time series", func(t *testing.T) {
 		var times []time.Time
 
-		series := New("empty_timestamps", times, mem)
+		series := series.New("empty_timestamps", times, mem)
 		defer series.Release()
 
 		assert.Equal(t, "empty_timestamps", series.Name())
@@ -125,7 +126,7 @@ func TestDateTimeSeriesDataType(t *testing.T) {
 		time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
 	}
 
-	series := New("timestamps", times, mem)
+	series := series.New("timestamps", times, mem)
 	defer series.Release()
 
 	dataType := series.DataType()
@@ -142,7 +143,7 @@ func TestDateTimeSeriesString(t *testing.T) {
 		time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
 	}
 
-	series := New("timestamps", times, mem)
+	series := series.New("timestamps", times, mem)
 	defer series.Release()
 
 	str := series.String()

@@ -1,7 +1,7 @@
+//nolint:testpackage // requires internal access to unexported types and functions
 package dataframe
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
@@ -40,7 +40,7 @@ func TestSort_ErrorHandling(t *testing.T) {
 		assert.Nil(t, result)
 
 		var dfErr *dferrors.DataFrameError
-		require.True(t, errors.As(err, &dfErr))
+		require.ErrorAs(t, err, &dfErr)
 		assert.Equal(t, "Sort", dfErr.Op)
 		assert.Equal(t, "age", dfErr.Column)
 		assert.Equal(t, "column does not exist", dfErr.Message)
@@ -86,7 +86,7 @@ func TestSortBy_ErrorHandling(t *testing.T) {
 		assert.Nil(t, result)
 
 		var dfErr *dferrors.DataFrameError
-		require.True(t, errors.As(err, &dfErr))
+		require.ErrorAs(t, err, &dfErr)
 		assert.Equal(t, "SortBy", dfErr.Op)
 		assert.Contains(t, dfErr.Message, "expected length 2, got 1")
 	})
@@ -97,7 +97,7 @@ func TestSortBy_ErrorHandling(t *testing.T) {
 		assert.Nil(t, result)
 
 		var dfErr *dferrors.DataFrameError
-		require.True(t, errors.As(err, &dfErr))
+		require.ErrorAs(t, err, &dfErr)
 		assert.Equal(t, "SortBy", dfErr.Op)
 		assert.Equal(t, "salary", dfErr.Column)
 		assert.Equal(t, "column does not exist", dfErr.Message)
@@ -109,7 +109,7 @@ func TestSortBy_ErrorHandling(t *testing.T) {
 		assert.Nil(t, result)
 
 		var dfErr *dferrors.DataFrameError
-		require.True(t, errors.As(err, &dfErr))
+		require.ErrorAs(t, err, &dfErr)
 		assert.Equal(t, "invalid", dfErr.Column)
 	})
 
@@ -152,7 +152,7 @@ func TestSort_PerformanceWithErrors(t *testing.T) {
 	// Create larger dataset
 	size := 1000
 	data := make([]int64, size)
-	for i := 0; i < size; i++ {
+	for i := range size {
 		data[i] = int64(size - i) // Reverse order
 	}
 
@@ -202,7 +202,7 @@ func TestLazyOperation_ErrorPropagation(t *testing.T) {
 		assert.Nil(t, result)
 
 		var dfErr *dferrors.DataFrameError
-		require.True(t, errors.As(err, &dfErr))
+		require.ErrorAs(t, err, &dfErr)
 		assert.Equal(t, "SortBy", dfErr.Op) // Note: lazy operations use SortBy internally
 		assert.Equal(t, "missing", dfErr.Column)
 	})

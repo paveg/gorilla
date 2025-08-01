@@ -1,4 +1,4 @@
-package io
+package io_test
 
 import (
 	"strings"
@@ -7,6 +7,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/paveg/gorilla/internal/dataframe"
+	"github.com/paveg/gorilla/internal/io"
 	"github.com/paveg/gorilla/internal/series"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -21,7 +22,7 @@ Alice,25,50000
 Bob,30,60000
 Charlie,35,70000`
 
-		reader := NewCSVReader(strings.NewReader(csvData), DefaultCSVOptions(), mem)
+		reader := io.NewCSVReader(strings.NewReader(csvData), io.DefaultCSVOptions(), mem)
 		df, err := reader.Read()
 		require.NoError(t, err)
 		defer df.Release()
@@ -58,10 +59,10 @@ Charlie,35,70000`
 Bob,30,60000
 Charlie,35,70000`
 
-		options := DefaultCSVOptions()
+		options := io.DefaultCSVOptions()
 		options.Header = false
 
-		reader := NewCSVReader(strings.NewReader(csvData), options, mem)
+		reader := io.NewCSVReader(strings.NewReader(csvData), options, mem)
 		df, err := reader.Read()
 		require.NoError(t, err)
 		defer df.Release()
@@ -77,10 +78,10 @@ Charlie,35,70000`
 Alice;25;50000
 Bob;30;60000`
 
-		options := DefaultCSVOptions()
+		options := io.DefaultCSVOptions()
 		options.Delimiter = ';'
 
-		reader := NewCSVReader(strings.NewReader(csvData), options, mem)
+		reader := io.NewCSVReader(strings.NewReader(csvData), options, mem)
 		df, err := reader.Read()
 		require.NoError(t, err)
 		defer df.Release()
@@ -93,7 +94,7 @@ Bob;30;60000`
 	t.Run("handles empty CSV", func(t *testing.T) {
 		csvData := ``
 
-		reader := NewCSVReader(strings.NewReader(csvData), DefaultCSVOptions(), mem)
+		reader := io.NewCSVReader(strings.NewReader(csvData), io.DefaultCSVOptions(), mem)
 		df, err := reader.Read()
 		require.NoError(t, err)
 		defer df.Release()
@@ -105,7 +106,7 @@ Bob;30;60000`
 	t.Run("handles CSV with only headers", func(t *testing.T) {
 		csvData := `name,age,salary`
 
-		reader := NewCSVReader(strings.NewReader(csvData), DefaultCSVOptions(), mem)
+		reader := io.NewCSVReader(strings.NewReader(csvData), io.DefaultCSVOptions(), mem)
 		df, err := reader.Read()
 		require.NoError(t, err)
 		defer df.Release()
@@ -121,7 +122,7 @@ Alice,25,50000.5,true
 Bob,30,60000.0,false
 Charlie,35,70000.25,true`
 
-		reader := NewCSVReader(strings.NewReader(csvData), DefaultCSVOptions(), mem)
+		reader := io.NewCSVReader(strings.NewReader(csvData), io.DefaultCSVOptions(), mem)
 		df, err := reader.Read()
 		require.NoError(t, err)
 		defer df.Release()
@@ -147,13 +148,13 @@ Charlie,35,70000.25,true`
 		salaryArray := salaryCol.Array()
 		defer salaryArray.Release()
 		salaryFloat64Array := salaryArray.(*array.Float64)
-		assert.Equal(t, 50000.5, salaryFloat64Array.Value(0))
+		assert.InDelta(t, 50000.5, salaryFloat64Array.Value(0), 0.001)
 
 		activeCol, _ := df.Column("active")
 		activeArray := activeCol.Array()
 		defer activeArray.Release()
 		activeBoolArray := activeArray.(*array.Boolean)
-		assert.Equal(t, true, activeBoolArray.Value(0))
+		assert.True(t, activeBoolArray.Value(0))
 	})
 }
 
@@ -166,7 +167,7 @@ func TestCSVWriter(t *testing.T) {
 		defer df.Release()
 
 		var output strings.Builder
-		writer := NewCSVWriter(&output, DefaultCSVOptions())
+		writer := io.NewCSVWriter(&output, io.DefaultCSVOptions())
 		err := writer.Write(df)
 		require.NoError(t, err)
 
@@ -183,11 +184,11 @@ Charlie,35,70000
 		df := createTestDataFrame(mem)
 		defer df.Release()
 
-		options := DefaultCSVOptions()
+		options := io.DefaultCSVOptions()
 		options.Header = false
 
 		var output strings.Builder
-		writer := NewCSVWriter(&output, options)
+		writer := io.NewCSVWriter(&output, options)
 		err := writer.Write(df)
 		require.NoError(t, err)
 
@@ -203,11 +204,11 @@ Charlie,35,70000
 		df := createTestDataFrame(mem)
 		defer df.Release()
 
-		options := DefaultCSVOptions()
+		options := io.DefaultCSVOptions()
 		options.Delimiter = ';'
 
 		var output strings.Builder
-		writer := NewCSVWriter(&output, options)
+		writer := io.NewCSVWriter(&output, options)
 		err := writer.Write(df)
 		require.NoError(t, err)
 
@@ -220,7 +221,7 @@ Charlie;35;70000
 	})
 }
 
-// Helper function to create test DataFrame
+// Helper function to create test DataFrame.
 func createTestDataFrame(mem memory.Allocator) *dataframe.DataFrame {
 	names := []string{"Alice", "Bob", "Charlie"}
 	ages := []int64{25, 30, 35}

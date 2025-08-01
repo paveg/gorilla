@@ -1,21 +1,22 @@
-package errors
+package errors_test
 
 import (
-	"errors"
+	stderrors "errors"
 	"testing"
 
+	"github.com/paveg/gorilla/internal/errors"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestDataFrameError_Error(t *testing.T) {
 	tests := []struct {
 		name     string
-		err      *DataFrameError
+		err      *errors.DataFrameError
 		expected string
 	}{
 		{
 			name: "Error with column",
-			err: &DataFrameError{
+			err: &errors.DataFrameError{
 				Op:      "Sort",
 				Column:  "age",
 				Message: "column does not exist",
@@ -24,7 +25,7 @@ func TestDataFrameError_Error(t *testing.T) {
 		},
 		{
 			name: "Error without column",
-			err: &DataFrameError{
+			err: &errors.DataFrameError{
 				Op:      "Join",
 				Message: "mismatched lengths",
 			},
@@ -40,8 +41,8 @@ func TestDataFrameError_Error(t *testing.T) {
 }
 
 func TestDataFrameError_Unwrap(t *testing.T) {
-	cause := errors.New("underlying error")
-	err := &DataFrameError{
+	cause := stderrors.New("underlying error")
+	err := &errors.DataFrameError{
 		Op:      "Filter",
 		Message: "evaluation failed",
 		Cause:   cause,
@@ -51,19 +52,19 @@ func TestDataFrameError_Unwrap(t *testing.T) {
 }
 
 func TestDataFrameError_Is(t *testing.T) {
-	err1 := &DataFrameError{
+	err1 := &errors.DataFrameError{
 		Op:      "Sort",
 		Column:  "age",
 		Message: "column does not exist",
 	}
 
-	err2 := &DataFrameError{
+	err2 := &errors.DataFrameError{
 		Op:      "Sort",
 		Column:  "age",
 		Message: "column does not exist",
 	}
 
-	err3 := &DataFrameError{
+	err3 := &errors.DataFrameError{
 		Op:      "Filter",
 		Column:  "age",
 		Message: "column does not exist",
@@ -71,11 +72,11 @@ func TestDataFrameError_Is(t *testing.T) {
 
 	assert.True(t, err1.Is(err2))
 	assert.False(t, err1.Is(err3))
-	assert.False(t, err1.Is(errors.New("different error")))
+	assert.False(t, err1.Is(stderrors.New("different error")))
 }
 
 func TestNewColumnNotFoundError(t *testing.T) {
-	err := NewColumnNotFoundError("Sort", "missing_column")
+	err := errors.NewColumnNotFoundError("Sort", "missing_column")
 
 	assert.Equal(t, "Sort", err.Op)
 	assert.Equal(t, "missing_column", err.Column)
@@ -84,23 +85,23 @@ func TestNewColumnNotFoundError(t *testing.T) {
 }
 
 func TestNewInvalidInputError(t *testing.T) {
-	err := NewInvalidInputError("SortBy", "arrays must have same length")
+	err := errors.NewInvalidInputError("SortBy", "arrays must have same length")
 
 	assert.Equal(t, "SortBy", err.Op)
-	assert.Equal(t, "", err.Column)
+	assert.Empty(t, err.Column)
 	assert.Equal(t, "arrays must have same length", err.Message)
 	assert.Equal(t, "SortBy operation failed: arrays must have same length", err.Error())
 }
 
 func TestNewUnsupportedTypeError(t *testing.T) {
-	err := NewUnsupportedTypeError("series creation", "[]complex128")
+	err := errors.NewUnsupportedTypeError("series creation", "[]complex128")
 
 	assert.Equal(t, "series creation", err.Op)
 	assert.Equal(t, "unsupported type: []complex128", err.Message)
 }
 
 func TestNewValidationError(t *testing.T) {
-	err := NewValidationError("Sort", "age", "index out of bounds")
+	err := errors.NewValidationError("Sort", "age", "index out of bounds")
 
 	assert.Equal(t, "Sort", err.Op)
 	assert.Equal(t, "age", err.Column)
@@ -108,8 +109,8 @@ func TestNewValidationError(t *testing.T) {
 }
 
 func TestNewInternalError(t *testing.T) {
-	cause := errors.New("memory allocation failed")
-	err := NewInternalError("GroupBy", cause)
+	cause := stderrors.New("memory allocation failed")
+	err := errors.NewInternalError("GroupBy", cause)
 
 	assert.Equal(t, "GroupBy", err.Op)
 	assert.Equal(t, "internal error occurred", err.Message)
@@ -118,12 +119,12 @@ func TestNewInternalError(t *testing.T) {
 }
 
 func TestPredefinedErrors(t *testing.T) {
-	assert.Equal(t, "validation", ErrEmptyDataFrame.Op)
-	assert.Equal(t, "operation not supported on empty DataFrame", ErrEmptyDataFrame.Message)
+	assert.Equal(t, "validation", errors.ErrEmptyDataFrame.Op)
+	assert.Equal(t, "operation not supported on empty DataFrame", errors.ErrEmptyDataFrame.Message)
 
-	assert.Equal(t, "validation", ErrMismatchedLength.Op)
-	assert.Equal(t, "arrays must have the same length", ErrMismatchedLength.Message)
+	assert.Equal(t, "validation", errors.ErrMismatchedLength.Op)
+	assert.Equal(t, "arrays must have the same length", errors.ErrMismatchedLength.Message)
 
-	assert.Equal(t, "indexing", ErrInvalidIndex.Op)
-	assert.Equal(t, "index out of bounds", ErrInvalidIndex.Message)
+	assert.Equal(t, "indexing", errors.ErrInvalidIndex.Op)
+	assert.Equal(t, "index out of bounds", errors.ErrInvalidIndex.Message)
 }

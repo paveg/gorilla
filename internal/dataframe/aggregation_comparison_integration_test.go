@@ -9,6 +9,8 @@
 // The tests showcase realistic business scenarios where these comparison methods
 // would be used to filter grouped aggregations, effectively implementing the
 // functionality needed for SQL HAVING clauses in Gorilla DataFrames.
+//
+//nolint:testpackage // requires internal access to unexported types and functions
 package dataframe
 
 import (
@@ -22,7 +24,7 @@ import (
 )
 
 // TestAggregationExprComparison_SalesDataScenario demonstrates a realistic sales analysis
-// scenario where we need to filter groups based on aggregated values (future HAVING clause)
+// scenario where we need to filter groups based on aggregated values (future HAVING clause).
 func TestAggregationExprComparison_SalesDataScenario(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
@@ -132,7 +134,7 @@ func TestAggregationExprComparison_SalesDataScenario(t *testing.T) {
 }
 
 // TestAggregationExprComparison_EmployeeAnalysisScenario demonstrates HR analytics
-// use case with department-based aggregations and filtering
+// use case with department-based aggregations and filtering.
 func TestAggregationExprComparison_EmployeeAnalysisScenario(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
@@ -198,7 +200,7 @@ func TestAggregationExprComparison_EmployeeAnalysisScenario(t *testing.T) {
 }
 
 // TestAggregationExprComparison_InventoryManagementScenario demonstrates inventory
-// management with stock level analysis and supplier performance
+// management with stock level analysis and supplier performance.
 func TestAggregationExprComparison_InventoryManagementScenario(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
@@ -285,7 +287,7 @@ func TestAggregationExprComparison_InventoryManagementScenario(t *testing.T) {
 	})
 }
 
-// TestAggregationExprComparison_ChainedComparisons tests complex chained comparison scenarios
+// TestAggregationExprComparison_ChainedComparisons tests complex chained comparison scenarios.
 func TestAggregationExprComparison_ChainedComparisons(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
@@ -350,7 +352,7 @@ func TestAggregationExprComparison_ChainedComparisons(t *testing.T) {
 	})
 }
 
-// TestAggregationExprComparison_ErrorHandling tests edge cases and error conditions
+// TestAggregationExprComparison_ErrorHandling tests edge cases and error conditions.
 func TestAggregationExprComparison_ErrorHandling(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
@@ -400,7 +402,7 @@ func TestAggregationExprComparison_ErrorHandling(t *testing.T) {
 }
 
 // TestAggregationExprComparison_TypeConsistency verifies that comparison operations
-// maintain type consistency and produce valid expression trees
+// maintain type consistency and produce valid expression trees.
 func TestAggregationExprComparison_TypeConsistency(t *testing.T) {
 	t.Run("All Aggregation Types Support All Comparisons", func(t *testing.T) {
 		// Test that all aggregation types support all comparison operations
@@ -468,7 +470,7 @@ func TestAggregationExprComparison_TypeConsistency(t *testing.T) {
 }
 
 // TestAggregationExprComparison_DocumentedUsageExamples provides clear examples
-// of how these comparison methods will be used in practice
+// of how these comparison methods will be used in practice.
 func TestAggregationExprComparison_DocumentedUsageExamples(t *testing.T) {
 	mem := memory.NewGoAllocator()
 

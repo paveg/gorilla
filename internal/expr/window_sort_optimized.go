@@ -8,34 +8,34 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 )
 
-// Configuration constants for optimization thresholds
+// Configuration constants for optimization thresholds.
 const (
-	// parallelSortThreshold is the minimum partition size to use parallel sorting
+	// parallelSortThreshold is the minimum partition size to use parallel sorting.
 	parallelSortThreshold = 10000
 
-	// maxWorkers limits the number of parallel sort workers
+	// maxWorkers limits the number of parallel sort workers.
 	maxWorkers = 4
 
-	// smallPartitionThreshold is the threshold below which to use original sorting
+	// smallPartitionThreshold is the threshold below which to use original sorting.
 	smallPartitionThreshold = 100
 
-	// minWorkersForParallel is the minimum number of workers needed for parallel sorting
+	// minWorkersForParallel is the minimum number of workers needed for parallel sorting.
 	minWorkersForParallel = 2
 )
 
-// SortKey represents pre-computed sort keys for a row
+// SortKey represents pre-computed sort keys for a row.
 type SortKey struct {
 	index int
 	keys  []interface{}
 }
 
-// Comparator interface for type-specific comparison
+// Comparator interface for type-specific comparison.
 type Comparator interface {
 	Compare(arr arrow.Array, i, j int) int
 	CompareValues(v1, v2 interface{}) int
 }
 
-// compareNullsSortOptimized handles null comparison for any comparator
+// compareNullsSortOptimized handles null comparison for any comparator.
 func compareNullsSortOptimized(arr arrow.Array, i, j int) int {
 	if arr.IsNull(i) && arr.IsNull(j) {
 		return 0
@@ -49,7 +49,7 @@ func compareNullsSortOptimized(arr arrow.Array, i, j int) int {
 	return 0
 }
 
-// compareValuesSortOptimized compares two values with ascending/descending order
+// compareValuesSortOptimized compares two values with ascending/descending order.
 func compareValuesSortOptimized[T interface {
 	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~float32 | ~float64 | ~string
 }](v1, v2 T, ascending bool) int {
@@ -68,7 +68,7 @@ func compareValuesSortOptimized[T interface {
 	return -result
 }
 
-// compareInterfaceValuesSortOptimized compares interface values with null handling
+// compareInterfaceValuesSortOptimized compares interface values with null handling.
 func compareInterfaceValuesSortOptimized[T interface {
 	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~float32 | ~float64 | ~string
 }](v1, v2 interface{}, ascending bool) int {
@@ -81,10 +81,15 @@ func compareInterfaceValuesSortOptimized[T interface {
 	if v2 == nil {
 		return 1
 	}
-	return compareValuesSortOptimized(v1.(T), v2.(T), ascending)
+	t1, ok1 := v1.(T)
+	t2, ok2 := v2.(T)
+	if !ok1 || !ok2 {
+		return 0 // Fallback for type assertion failure
+	}
+	return compareValuesSortOptimized(t1, t2, ascending)
 }
 
-// Int64Comparator provides optimized int64 comparison
+// Int64Comparator provides optimized int64 comparison.
 type Int64Comparator struct {
 	ascending bool
 }
@@ -94,15 +99,17 @@ func (c *Int64Comparator) Compare(arr arrow.Array, i, j int) int {
 		return nullCmp
 	}
 
-	a := arr.(*array.Int64)
-	return compareValuesSortOptimized(a.Value(i), a.Value(j), c.ascending)
+	if a, ok := arr.(*array.Int64); ok {
+		return compareValuesSortOptimized(a.Value(i), a.Value(j), c.ascending)
+	}
+	return 0 // Fallback for type assertion failure
 }
 
 func (c *Int64Comparator) CompareValues(v1, v2 interface{}) int {
 	return compareInterfaceValuesSortOptimized[int64](v1, v2, c.ascending)
 }
 
-// Float64Comparator provides optimized float64 comparison
+// Float64Comparator provides optimized float64 comparison.
 type Float64Comparator struct {
 	ascending bool
 }
@@ -112,15 +119,17 @@ func (c *Float64Comparator) Compare(arr arrow.Array, i, j int) int {
 		return nullCmp
 	}
 
-	a := arr.(*array.Float64)
-	return compareValuesSortOptimized(a.Value(i), a.Value(j), c.ascending)
+	if a, ok := arr.(*array.Float64); ok {
+		return compareValuesSortOptimized(a.Value(i), a.Value(j), c.ascending)
+	}
+	return 0 // Fallback for type assertion failure
 }
 
 func (c *Float64Comparator) CompareValues(v1, v2 interface{}) int {
 	return compareInterfaceValuesSortOptimized[float64](v1, v2, c.ascending)
 }
 
-// StringComparator provides optimized string comparison
+// StringComparator provides optimized string comparison.
 type StringComparator struct {
 	ascending bool
 }
@@ -130,15 +139,17 @@ func (c *StringComparator) Compare(arr arrow.Array, i, j int) int {
 		return nullCmp
 	}
 
-	a := arr.(*array.String)
-	return compareValuesSortOptimized(a.Value(i), a.Value(j), c.ascending)
+	if a, ok := arr.(*array.String); ok {
+		return compareValuesSortOptimized(a.Value(i), a.Value(j), c.ascending)
+	}
+	return 0 // Fallback for type assertion failure
 }
 
 func (c *StringComparator) CompareValues(v1, v2 interface{}) int {
 	return compareInterfaceValuesSortOptimized[string](v1, v2, c.ascending)
 }
 
-// BooleanComparator provides optimized boolean comparison
+// BooleanComparator provides optimized boolean comparison.
 type BooleanComparator struct {
 	ascending bool
 }
@@ -148,7 +159,10 @@ func (c *BooleanComparator) Compare(arr arrow.Array, i, j int) int {
 		return nullCmp
 	}
 
-	a := arr.(*array.Boolean)
+	a, ok := arr.(*array.Boolean)
+	if !ok {
+		return 0 // Fallback for type assertion failure
+	}
 	v1, v2 := a.Value(i), a.Value(j)
 
 	if !v1 && v2 { // false < true
@@ -177,7 +191,11 @@ func (c *BooleanComparator) CompareValues(v1, v2 interface{}) int {
 		return 1
 	}
 
-	val1, val2 := v1.(bool), v2.(bool)
+	val1, ok1 := v1.(bool)
+	val2, ok2 := v2.(bool)
+	if !ok1 || !ok2 {
+		return 0 // Fallback for type assertion failure
+	}
 	if !val1 && val2 { // false < true
 		if c.ascending {
 			return -1
@@ -193,7 +211,7 @@ func (c *BooleanComparator) CompareValues(v1, v2 interface{}) int {
 	return 0
 }
 
-// createComparator creates a type-specific comparator for an arrow array
+// createComparator creates a type-specific comparator for an arrow array.
 func createComparator(arr arrow.Array, ascending bool) Comparator {
 	switch arr.(type) {
 	case *array.Int64:
@@ -209,7 +227,7 @@ func createComparator(arr arrow.Array, ascending bool) Comparator {
 	}
 }
 
-// sortPartitionOptimized is an optimized version of sortPartition
+// sortPartitionOptimized is an optimized version of sortPartition.
 func (e *Evaluator) sortPartitionOptimized(
 	partition []int,
 	orderBy []OrderByExpr,
@@ -233,7 +251,7 @@ func (e *Evaluator) sortPartitionOptimized(
 	return e.sortPartitionWithKeys(partition, orderBy, columns)
 }
 
-// sortPartitionWithKeys sorts using pre-computed sort keys
+// sortPartitionWithKeys sorts using pre-computed sort keys.
 func (e *Evaluator) sortPartitionWithKeys(
 	partition []int,
 	orderBy []OrderByExpr,
@@ -285,7 +303,7 @@ func (e *Evaluator) sortPartitionWithKeys(
 	return result
 }
 
-// sortPartitionParallelOptimized performs parallel sorting for large partitions
+// sortPartitionParallelOptimized performs parallel sorting for large partitions.
 func (e *Evaluator) sortPartitionParallelOptimized(
 	partition []int,
 	orderBy []OrderByExpr,
@@ -310,7 +328,7 @@ func (e *Evaluator) sortPartitionParallelOptimized(
 
 	// Split partition into chunks
 	chunks := make([][]int, numWorkers)
-	for i := 0; i < numWorkers; i++ {
+	for i := range numWorkers {
 		start := i * chunkSize
 		end := start + chunkSize
 		if i == numWorkers-1 {
@@ -323,7 +341,7 @@ func (e *Evaluator) sortPartitionParallelOptimized(
 	var wg sync.WaitGroup
 	sortedChunks := make([][]int, numWorkers)
 
-	for i := 0; i < numWorkers; i++ {
+	for i := range numWorkers {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
@@ -337,68 +355,20 @@ func (e *Evaluator) sortPartitionParallelOptimized(
 	return e.mergeSortedChunks(sortedChunks, orderBy, columns)
 }
 
-// mergeSortedChunks merges multiple sorted chunks into a single sorted result
+// mergeSortedChunks merges multiple sorted chunks into a single sorted result.
 func (e *Evaluator) mergeSortedChunks(
 	chunks [][]int,
 	orderBy []OrderByExpr,
 	columns map[string]arrow.Array,
 ) []int {
-	// Calculate total size
-	totalSize := 0
-	for _, chunk := range chunks {
-		totalSize += len(chunk)
-	}
-
+	totalSize := e.calculateTotalSize(chunks)
 	result := make([]int, 0, totalSize)
-	indices := make([]int, len(chunks)) // Current index in each chunk
-
-	// Create comparators
-	comparators := make([]Comparator, len(orderBy))
-	for i, order := range orderBy {
-		arr := columns[order.column]
-		comparators[i] = createComparator(arr, order.ascending)
-	}
+	indices := make([]int, len(chunks))
+	comparators := e.createComparators(orderBy, columns)
 
 	// Merge using a min-heap approach
 	for len(result) < totalSize {
-		minChunk := -1
-
-		// Find the chunk with the minimum next element
-		for i, chunk := range chunks {
-			if indices[i] >= len(chunk) {
-				continue // This chunk is exhausted
-			}
-
-			if minChunk == -1 {
-				minChunk = i
-				continue
-			}
-
-			// Compare current minimum with this chunk's next element
-			minIdx := chunks[minChunk][indices[minChunk]]
-			curIdx := chunk[indices[i]]
-
-			shouldSwap := false
-			for j, order := range orderBy {
-				arr := columns[order.column]
-				comp := comparators[j]
-				if comp != nil {
-					cmp := comp.Compare(arr, minIdx, curIdx)
-					if cmp > 0 {
-						shouldSwap = true
-						break
-					} else if cmp < 0 {
-						break
-					}
-				}
-			}
-
-			if shouldSwap {
-				minChunk = i
-			}
-		}
-
-		// Add the minimum element to result
+		minChunk := e.findMinimumChunk(chunks, indices, comparators, orderBy, columns)
 		if minChunk != -1 {
 			result = append(result, chunks[minChunk][indices[minChunk]])
 			indices[minChunk]++
@@ -406,4 +376,79 @@ func (e *Evaluator) mergeSortedChunks(
 	}
 
 	return result
+}
+
+// calculateTotalSize computes the total number of elements across all chunks.
+func (e *Evaluator) calculateTotalSize(chunks [][]int) int {
+	totalSize := 0
+	for _, chunk := range chunks {
+		totalSize += len(chunk)
+	}
+	return totalSize
+}
+
+// createComparators creates comparison functions for each order by column.
+func (e *Evaluator) createComparators(orderBy []OrderByExpr, columns map[string]arrow.Array) []Comparator {
+	comparators := make([]Comparator, len(orderBy))
+	for i, order := range orderBy {
+		arr := columns[order.column]
+		comparators[i] = createComparator(arr, order.ascending)
+	}
+	return comparators
+}
+
+// findMinimumChunk finds the chunk with the minimum next element based on the sort order.
+func (e *Evaluator) findMinimumChunk(
+	chunks [][]int,
+	indices []int,
+	comparators []Comparator,
+	orderBy []OrderByExpr,
+	columns map[string]arrow.Array,
+) int {
+	minChunk := -1
+
+	for i, chunk := range chunks {
+		if indices[i] >= len(chunk) {
+			continue // This chunk is exhausted
+		}
+
+		if minChunk == -1 {
+			minChunk = i
+			continue
+		}
+
+		if e.shouldSwapMinimum(chunks, indices, minChunk, i, comparators, orderBy, columns) {
+			minChunk = i
+		}
+	}
+
+	return minChunk
+}
+
+// shouldSwapMinimum determines if the current chunk has a smaller element than the current minimum.
+func (e *Evaluator) shouldSwapMinimum(
+	chunks [][]int,
+	indices []int,
+	minChunk, currentChunk int,
+	comparators []Comparator,
+	orderBy []OrderByExpr,
+	columns map[string]arrow.Array,
+) bool {
+	minIdx := chunks[minChunk][indices[minChunk]]
+	curIdx := chunks[currentChunk][indices[currentChunk]]
+
+	for j, order := range orderBy {
+		arr := columns[order.column]
+		comp := comparators[j]
+		if comp != nil {
+			cmp := comp.Compare(arr, minIdx, curIdx)
+			if cmp > 0 {
+				return true
+			}
+			if cmp < 0 {
+				return false
+			}
+		}
+	}
+	return false
 }

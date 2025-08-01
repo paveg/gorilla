@@ -1,3 +1,4 @@
+//nolint:testpackage // requires internal access to unexported types and functions
 package dataframe
 
 import (
@@ -23,7 +24,7 @@ func BenchmarkHavingWithSmallDataset(b *testing.B) {
 	salaries := make([]float64, size)
 
 	deptNames := []string{"Engineering", "Sales", "HR", "Marketing"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(40000 + (i * 500))
 	}
@@ -34,7 +35,7 @@ func BenchmarkHavingWithSmallDataset(b *testing.B) {
 	defer df.Release()
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		// Test HAVING functionality through GroupByHavingOperation
 		lazy := df.Lazy()
 		groupByOp := &GroupByHavingOperation{
@@ -60,7 +61,7 @@ func BenchmarkHavingWithMediumDataset(b *testing.B) {
 	salaries := make([]float64, size)
 
 	deptNames := []string{"Engineering", "Sales", "HR", "Marketing", "Support", "Finance"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(40000 + (i * 5))
 	}
@@ -71,7 +72,7 @@ func BenchmarkHavingWithMediumDataset(b *testing.B) {
 	defer df.Release()
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		// Test HAVING functionality through GroupByHavingOperation
 		lazy := df.Lazy()
 		groupByOp := &GroupByHavingOperation{
@@ -99,7 +100,7 @@ func BenchmarkHavingWithLargeDataset(b *testing.B) {
 	experience := make([]int64, size)
 
 	deptNames := []string{"Engineering", "Sales", "HR", "Marketing", "Support", "Finance", "Operations", "Legal"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(35000 + (i % 100000))
 		experience[i] = int64(i % 20)
@@ -112,7 +113,7 @@ func BenchmarkHavingWithLargeDataset(b *testing.B) {
 	defer df.Release()
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		// Test HAVING functionality through GroupByHavingOperation
 		lazy := df.Lazy()
 		groupByOp := &GroupByHavingOperation{
@@ -139,7 +140,7 @@ func BenchmarkHavingParallelExecution(b *testing.B) {
 	salaries := make([]float64, size)
 
 	deptNames := []string{"Eng", "Sales", "HR", "Marketing", "Support", "Finance", "Ops", "Legal", "R&D", "QA"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(30000 + (i * 2))
 	}
@@ -150,7 +151,7 @@ func BenchmarkHavingParallelExecution(b *testing.B) {
 	defer df.Release()
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		// Test HAVING functionality through GroupByHavingOperation
 		lazy := df.Lazy()
 		groupByOp := &GroupByHavingOperation{
@@ -178,7 +179,7 @@ func BenchmarkHavingComplexPredicates(b *testing.B) {
 	values3 := make([]int64, size)
 
 	catNames := []string{"A", "B", "C", "D", "E", "F", "G", "H"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		categories[i] = catNames[i%len(catNames)]
 		values1[i] = float64(100 + (i * 3))
 		values2[i] = float64(50 + (i * 2))
@@ -198,7 +199,7 @@ func BenchmarkHavingComplexPredicates(b *testing.B) {
 		Or(expr.Count(expr.Col("category")).As("count_items").Gt(expr.Lit(5000)))
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		// Test HAVING functionality through GroupByHavingOperation
 		lazy := df.Lazy()
 		groupByOp := &GroupByHavingOperation{
@@ -215,7 +216,7 @@ func BenchmarkHavingComplexPredicates(b *testing.B) {
 	}
 }
 
-// Comparative performance tests
+// Comparative performance tests.
 func BenchmarkHavingVsManualFiltering(b *testing.B) {
 	mem := memory.NewGoAllocator()
 
@@ -224,7 +225,7 @@ func BenchmarkHavingVsManualFiltering(b *testing.B) {
 	salaries := make([]float64, size)
 
 	deptNames := []string{"Engineering", "Sales", "HR", "Marketing", "Support"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(40000 + (i * 3))
 	}
@@ -235,7 +236,7 @@ func BenchmarkHavingVsManualFiltering(b *testing.B) {
 	defer df.Release()
 
 	b.Run("Using HAVING clause", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			// Test HAVING functionality through GroupByHavingOperation
 			lazy := df.Lazy()
 			groupByOp := &GroupByHavingOperation{
@@ -253,7 +254,7 @@ func BenchmarkHavingVsManualFiltering(b *testing.B) {
 	})
 
 	b.Run("Manual aggregation then filtering", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			// First aggregate without HAVING
 			aggregated, err := df.Lazy().
 				GroupBy("department").
@@ -287,7 +288,7 @@ func TestHavingParallelExecutionCorrectness(t *testing.T) {
 	salaries := make([]float64, size)
 
 	deptNames := []string{"Engineering", "Sales", "HR", "Marketing", "Support"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(40000 + (i * 5))
 	}
@@ -301,7 +302,7 @@ func TestHavingParallelExecutionCorrectness(t *testing.T) {
 		// Run the same operation multiple times
 		var results []*DataFrame
 
-		for i := 0; i < 5; i++ {
+		for range 5 {
 			// Test HAVING functionality through GroupByHavingOperation
 			lazy := df.Lazy()
 			groupByOp := &GroupByHavingOperation{
@@ -356,13 +357,13 @@ func TestHavingMemoryLeakDetection(t *testing.T) {
 
 	// Perform many HAVING operations
 	iterations := 100
-	for i := 0; i < iterations; i++ {
+	for i := range iterations {
 		size := 1000
 		departments := make([]string, size)
 		salaries := make([]float64, size)
 
 		deptNames := []string{"A", "B", "C", "D", "E"}
-		for j := 0; j < size; j++ {
+		for j := range size {
 			departments[j] = deptNames[j%len(deptNames)]
 			salaries[j] = float64(40000 + (j * 10))
 		}
@@ -404,7 +405,7 @@ func TestHavingMemoryLeakDetection(t *testing.T) {
 
 	// Allow some growth but not excessive (adjust threshold as needed)
 	maxAllowedGrowth := uint64(50 * 1024 * 1024) // 50MB
-	assert.True(t, memoryGrowth < maxAllowedGrowth,
+	assert.Less(t, memoryGrowth, maxAllowedGrowth,
 		"Memory growth %d bytes exceeds threshold %d bytes", memoryGrowth, maxAllowedGrowth)
 }
 
@@ -417,7 +418,7 @@ func TestHavingConcurrentSafety(t *testing.T) {
 	salaries := make([]float64, size)
 
 	deptNames := []string{"Engineering", "Sales", "HR", "Marketing"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(40000 + (i * 8))
 	}
@@ -432,7 +433,7 @@ func TestHavingConcurrentSafety(t *testing.T) {
 		var wg sync.WaitGroup
 		errChan := make(chan error, numGoroutines)
 
-		for i := 0; i < numGoroutines; i++ {
+		for i := range numGoroutines {
 			wg.Add(1)
 			go func(threshold float64) {
 				defer wg.Done()
@@ -466,7 +467,7 @@ func TestHavingConcurrentSafety(t *testing.T) {
 
 		// Check for any errors
 		for err := range errChan {
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		}
 	})
 }
@@ -482,7 +483,7 @@ func BenchmarkHavingScalability(b *testing.B) {
 			salaries := make([]float64, size)
 
 			deptNames := []string{"Eng", "Sales", "HR", "Marketing", "Support", "Finance"}
-			for i := 0; i < size; i++ {
+			for i := range size {
 				departments[i] = deptNames[i%len(deptNames)]
 				salaries[i] = float64(35000 + (i * 3))
 			}
@@ -493,7 +494,7 @@ func BenchmarkHavingScalability(b *testing.B) {
 			defer df.Release()
 
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				// Test HAVING functionality through GroupByHavingOperation
 				lazy := df.Lazy()
 				groupByOp := &GroupByHavingOperation{
@@ -515,7 +516,7 @@ func BenchmarkHavingScalability(b *testing.B) {
 // ========== COMPREHENSIVE PERFORMANCE BENCHMARKS ==========
 // These benchmarks implement the requirements from issue #117
 
-// BenchmarkHavingVsManualFilter compares HAVING performance with manual filtering
+// BenchmarkHavingVsManualFilter compares HAVING performance with manual filtering.
 func BenchmarkHavingVsManualFilter(b *testing.B) {
 	mem := memory.NewGoAllocator()
 
@@ -524,7 +525,7 @@ func BenchmarkHavingVsManualFilter(b *testing.B) {
 	salaries := make([]float64, size)
 
 	deptNames := []string{"Engineering", "Sales", "HR", "Marketing", "Support"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(40000 + (i * 3))
 	}
@@ -535,7 +536,7 @@ func BenchmarkHavingVsManualFilter(b *testing.B) {
 	defer df.Release()
 
 	b.Run("Using HAVING clause", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			// Test HAVING functionality through GroupByHavingOperation
 			lazy := df.Lazy()
 			groupByOp := &GroupByHavingOperation{
@@ -553,7 +554,7 @@ func BenchmarkHavingVsManualFilter(b *testing.B) {
 	})
 
 	b.Run("Manual aggregation then filtering", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			// First aggregate without HAVING
 			aggregated, err := df.Lazy().
 				GroupBy("department").
@@ -578,7 +579,7 @@ func BenchmarkHavingVsManualFilter(b *testing.B) {
 	})
 }
 
-// BenchmarkHavingWithGroupByOverhead measures GROUP BY + HAVING overhead
+// BenchmarkHavingWithGroupByOverhead measures GROUP BY + HAVING overhead.
 func BenchmarkHavingWithGroupByOverhead(b *testing.B) {
 	mem := memory.NewGoAllocator()
 
@@ -588,7 +589,7 @@ func BenchmarkHavingWithGroupByOverhead(b *testing.B) {
 	experience := make([]int64, size)
 
 	deptNames := []string{"Eng", "Sales", "HR", "Marketing", "Support", "Finance"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(35000 + (i % 80000))
 		experience[i] = int64(i % 25)
@@ -602,7 +603,7 @@ func BenchmarkHavingWithGroupByOverhead(b *testing.B) {
 
 	b.Run("GroupBy only", func(b *testing.B) {
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			result, err := df.Lazy().
 				GroupBy("department").
 				Agg(expr.Mean(expr.Col("salary")).As("avg_salary"),
@@ -618,7 +619,7 @@ func BenchmarkHavingWithGroupByOverhead(b *testing.B) {
 
 	b.Run("GroupBy with simple HAVING", func(b *testing.B) {
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			lazy := df.Lazy()
 			groupByOp := &GroupByHavingOperation{
 				groupByCols: []string{"department"},
@@ -636,7 +637,7 @@ func BenchmarkHavingWithGroupByOverhead(b *testing.B) {
 
 	b.Run("GroupBy with complex HAVING", func(b *testing.B) {
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			lazy := df.Lazy()
 			groupByOp := &GroupByHavingOperation{
 				groupByCols: []string{"department"},
@@ -654,7 +655,7 @@ func BenchmarkHavingWithGroupByOverhead(b *testing.B) {
 	})
 }
 
-// BenchmarkHavingParallelScaling tests parallel execution scaling
+// BenchmarkHavingParallelScaling tests parallel execution scaling.
 func BenchmarkHavingParallelScaling(b *testing.B) {
 	mem := memory.NewGoAllocator()
 
@@ -664,7 +665,7 @@ func BenchmarkHavingParallelScaling(b *testing.B) {
 	salaries := make([]float64, size)
 
 	deptNames := []string{"Eng", "Sales", "HR", "Marketing", "Support", "Finance", "Ops", "Legal", "R&D", "QA"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(30000 + (i * 1))
 	}
@@ -680,7 +681,7 @@ func BenchmarkHavingParallelScaling(b *testing.B) {
 			// Note: In a full implementation, we would control worker count
 			// For now, this tests the current parallel implementation
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				lazy := df.Lazy()
 				groupByOp := &GroupByHavingOperation{
 					groupByCols: []string{"department"},
@@ -699,7 +700,7 @@ func BenchmarkHavingParallelScaling(b *testing.B) {
 	}
 }
 
-// BenchmarkHavingMemoryEfficiency tests memory usage patterns
+// BenchmarkHavingMemoryEfficiency tests memory usage patterns.
 func BenchmarkHavingMemoryEfficiency(b *testing.B) {
 	mem := memory.NewGoAllocator()
 
@@ -711,7 +712,7 @@ func BenchmarkHavingMemoryEfficiency(b *testing.B) {
 	values3 := make([]int64, size)
 
 	deptNames := []string{"A", "B", "C", "D", "E", "F", "G", "H"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(40000 + (i * 2))
 		values1[i] = float64(100 + (i % 1000))
@@ -730,7 +731,7 @@ func BenchmarkHavingMemoryEfficiency(b *testing.B) {
 	b.Run("Memory efficient HAVING", func(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			lazy := df.Lazy()
 			groupByOp := &GroupByHavingOperation{
 				groupByCols: []string{"department"},
@@ -749,7 +750,7 @@ func BenchmarkHavingMemoryEfficiency(b *testing.B) {
 	})
 }
 
-// BenchmarkHavingPredicateComplexity tests different predicate complexities
+// BenchmarkHavingPredicateComplexity tests different predicate complexities.
 func BenchmarkHavingPredicateComplexity(b *testing.B) {
 	mem := memory.NewGoAllocator()
 
@@ -759,7 +760,7 @@ func BenchmarkHavingPredicateComplexity(b *testing.B) {
 	experience := make([]int64, size)
 
 	deptNames := []string{"Engineering", "Sales", "HR", "Marketing"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(35000 + (i * 2))
 		experience[i] = int64(i % 30)
@@ -773,7 +774,7 @@ func BenchmarkHavingPredicateComplexity(b *testing.B) {
 
 	b.Run("Simple predicate", func(b *testing.B) {
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			lazy := df.Lazy()
 			groupByOp := &GroupByHavingOperation{
 				groupByCols: []string{"department"},
@@ -791,7 +792,7 @@ func BenchmarkHavingPredicateComplexity(b *testing.B) {
 
 	b.Run("Complex predicate with AND/OR", func(b *testing.B) {
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			lazy := df.Lazy()
 			groupByOp := &GroupByHavingOperation{
 				groupByCols: []string{"department"},
@@ -811,7 +812,7 @@ func BenchmarkHavingPredicateComplexity(b *testing.B) {
 
 	b.Run("Nested expressions", func(b *testing.B) {
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			lazy := df.Lazy()
 			// Complex predicate with salary and experience conditions
 			salaryCondition := expr.Mean(expr.Col("salary")).As("avg_salary").Mul(expr.Lit(1.1)).Gt(expr.Lit(70000.0))
@@ -834,7 +835,7 @@ func BenchmarkHavingPredicateComplexity(b *testing.B) {
 	})
 }
 
-// BenchmarkHavingDatasetSizes tests performance across different dataset sizes
+// BenchmarkHavingDatasetSizes tests performance across different dataset sizes.
 func BenchmarkHavingDatasetSizes(b *testing.B) {
 	mem := memory.NewGoAllocator()
 
@@ -846,7 +847,7 @@ func BenchmarkHavingDatasetSizes(b *testing.B) {
 			departments := make([]string, size)
 			salaries := make([]float64, size)
 
-			for i := 0; i < size; i++ {
+			for i := range size {
 				departments[i] = deptNames[i%len(deptNames)]
 				salaries[i] = float64(30000 + (i * 2))
 			}
@@ -858,7 +859,7 @@ func BenchmarkHavingDatasetSizes(b *testing.B) {
 
 			b.ResetTimer()
 			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				lazy := df.Lazy()
 				groupByOp := &GroupByHavingOperation{
 					groupByCols: []string{"department"},
@@ -884,7 +885,7 @@ func BenchmarkHavingDatasetSizes(b *testing.B) {
 	}
 }
 
-// BenchmarkHavingThroughputTarget tests if we meet the 1M rows/second target
+// BenchmarkHavingThroughputTarget tests if we meet the 1M rows/second target.
 func BenchmarkHavingThroughputTarget(b *testing.B) {
 	mem := memory.NewGoAllocator()
 
@@ -894,7 +895,7 @@ func BenchmarkHavingThroughputTarget(b *testing.B) {
 	salaries := make([]float64, size)
 
 	deptNames := []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(30000 + (i % 100000))
 	}
@@ -908,7 +909,7 @@ func BenchmarkHavingThroughputTarget(b *testing.B) {
 	b.ReportAllocs()
 	start := time.Now()
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		lazy := df.Lazy()
 		groupByOp := &GroupByHavingOperation{
 			groupByCols: []string{"department"},
@@ -940,7 +941,7 @@ func BenchmarkHavingThroughputTarget(b *testing.B) {
 	}
 }
 
-// BenchmarkHavingLatencyTarget tests if we meet the <1ms latency target for small datasets
+// BenchmarkHavingLatencyTarget tests if we meet the <1ms latency target for small datasets.
 func BenchmarkHavingLatencyTarget(b *testing.B) {
 	mem := memory.NewGoAllocator()
 
@@ -950,7 +951,7 @@ func BenchmarkHavingLatencyTarget(b *testing.B) {
 	salaries := make([]float64, size)
 
 	deptNames := []string{"Engineering", "Sales", "HR"}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		departments[i] = deptNames[i%len(deptNames)]
 		salaries[i] = float64(40000 + (i * 100))
 	}
@@ -963,7 +964,7 @@ func BenchmarkHavingLatencyTarget(b *testing.B) {
 	b.ResetTimer()
 	totalLatency := time.Duration(0)
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		start := time.Now()
 
 		lazy := df.Lazy()
