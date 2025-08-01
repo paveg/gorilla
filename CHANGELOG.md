@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.3.0] - 2025-07-27
 
 ### Added
+
 - **HAVING clause support** with full SQL compatibility and high-performance optimization
   - Expression validation ensuring proper column references
   - Alias resolution for user-defined and auto-generated aggregation names
@@ -50,11 +51,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Version information accessible via library API
 
 ### Changed
+
 - Improved memory management with mutex synchronization for thread-safe operations
 - Enhanced performance optimization framework with expression compilation and caching
 - Optimized parallel execution with adaptive chunking and worker pools
 
 ### Fixed
+
 - Race conditions in GroupByHavingOperation for parallel execution safety
 - Type assertion error handling throughout test suite
 - CI test stability with environment-aware performance thresholds
@@ -63,6 +66,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] - 2025-07-16
 
 ### Added
+
 - Comprehensive CSV I/O operations with automatic type inference
 - Join operations (Inner, Left, Right, Full Outer) with multi-key support
 - GroupBy operations with Sum, Count, Mean, Min, Max aggregations
@@ -78,11 +82,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Memory management improvements with GC pressure monitoring
 
 ### Changed
+
 - Enhanced memory management with defer pattern recommendations
 - Improved parallel processing thresholds and worker pool sizing
 - Updated API documentation and examples
 
 ### Fixed
+
 - Flaky trace ID generation test resolved with atomic counter
 - Type assertion optimization to eliminate double assertions
 - Memory leaks in parallel operations with proper resource cleanup
@@ -93,6 +99,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Contributing
 
 When adding entries to this changelog:
+
 1. Add new changes under the `[Unreleased]` section
 2. Use the format: `- Brief description (Issue #X or PR #Y)`
 3. Categorize changes as Added, Changed, Deprecated, Removed, Fixed, or Security
