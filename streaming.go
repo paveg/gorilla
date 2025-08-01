@@ -9,6 +9,9 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 )
 
+// ErrEndOfStream indicates the end of the data stream.
+var ErrEndOfStream = errors.New("end of stream")
+
 const (
 	// DefaultChunkSize is the default size for processing chunks.
 	DefaultChunkSize = 1000
@@ -73,66 +76,111 @@ type StreamingOperation interface {
 func (sp *StreamingProcessor) ProcessStreaming(
 	reader ChunkReader, writer ChunkWriter, operations []StreamingOperation,
 ) error {
+	if err := sp.validateProcessor(); err != nil {
+		return err
+	}
+
+	defer sp.cleanupOperations(operations)
+
+	return sp.processAllChunks(reader, writer, operations)
+}
+
+// validateProcessor checks if the processor is in valid state.
+func (sp *StreamingProcessor) validateProcessor() error {
 	sp.mu.RLock()
+	defer sp.mu.RUnlock()
+
 	if sp.closed {
-		sp.mu.RUnlock()
 		return errors.New("streaming processor is closed")
 	}
-	sp.mu.RUnlock()
+	return nil
+}
 
-	defer func() {
-		// Clean up operations
-		for _, op := range operations {
-			if op != nil {
-				op.Release()
-			}
-		}
-	}()
-
-	// Process chunks sequentially
-	for reader.HasNext() {
-		// Read next chunk
-		chunk, err := reader.ReadChunk()
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			return fmt.Errorf("failed to read chunk: %w", err)
-		}
-
-		if chunk == nil {
-			continue
-		}
-
-		// Process chunk with operations
-		processedChunk, err := sp.processChunk(chunk, operations)
-		if err != nil {
-			chunk.Release()
-			return fmt.Errorf("failed to process chunk: %w", err)
-		}
-
-		// Write processed chunk
-		if err := writer.WriteChunk(processedChunk); err != nil {
-			chunk.Release()
-			processedChunk.Release()
-			return fmt.Errorf("failed to write chunk: %w", err)
-		}
-
-		// Release resources
-		chunk.Release()
-		processedChunk.Release()
-
-		// Check memory pressure and trigger cleanup if needed
-		if sp.monitor != nil {
-			stats := sp.monitor.GetStats()
-			if stats.MemoryPressure > HighMemoryPressureThreshold {
-				// Force garbage collection under high memory pressure
-				sp.forceGC()
-			}
+// cleanupOperations releases all operations.
+func (sp *StreamingProcessor) cleanupOperations(operations []StreamingOperation) {
+	for _, op := range operations {
+		if op != nil {
+			op.Release()
 		}
 	}
+}
 
+// processAllChunks processes all chunks from reader to writer.
+func (sp *StreamingProcessor) processAllChunks(
+	reader ChunkReader,
+	writer ChunkWriter,
+	operations []StreamingOperation,
+) error {
+	for reader.HasNext() {
+		if err := sp.processSingleChunk(reader, writer, operations); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// processSingleChunk processes a single chunk from reader to writer.
+func (sp *StreamingProcessor) processSingleChunk(
+	reader ChunkReader,
+	writer ChunkWriter,
+	operations []StreamingOperation,
+) error {
+	chunk, err := sp.readChunk(reader)
+	if err != nil {
+		return err
+	}
+
+	if chunk == nil {
+		return nil
+	}
+
+	return sp.processAndWriteChunk(chunk, writer, operations)
+}
+
+// readChunk reads a single chunk from the reader.
+func (sp *StreamingProcessor) readChunk(reader ChunkReader) (*DataFrame, error) {
+	chunk, err := reader.ReadChunk()
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil, ErrEndOfStream
+		}
+		return nil, fmt.Errorf("failed to read chunk: %w", err)
+	}
+	return chunk, nil
+}
+
+// processAndWriteChunk processes and writes a single chunk.
+func (sp *StreamingProcessor) processAndWriteChunk(
+	chunk *DataFrame,
+	writer ChunkWriter,
+	operations []StreamingOperation,
+) error {
+	defer chunk.Release()
+
+	processedChunk, err := sp.processChunk(chunk, operations)
+	if err != nil {
+		return fmt.Errorf("failed to process chunk: %w", err)
+	}
+	defer processedChunk.Release()
+
+	if writeErr := writer.WriteChunk(processedChunk); writeErr != nil {
+		return fmt.Errorf("failed to write chunk: %w", writeErr)
+	}
+
+	sp.handleMemoryPressure()
+	return nil
+}
+
+// handleMemoryPressure checks and handles high memory pressure.
+func (sp *StreamingProcessor) handleMemoryPressure() {
+	if sp.monitor == nil {
+		return
+	}
+
+	stats := sp.monitor.GetStats()
+	if stats.MemoryPressure > HighMemoryPressureThreshold {
+		sp.forceGC()
+	}
 }
 
 // processChunk applies a series of operations to a data chunk.

@@ -1,4 +1,4 @@
-package gorilla
+package gorilla_test
 
 import (
 	"runtime"
@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/paveg/gorilla"
 	"github.com/paveg/gorilla/internal/series"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -20,12 +21,12 @@ const maxMemGrowth = uint64(1024 * 1024) // 1MB threshold
 func TestMemoryManager(t *testing.T) {
 	t.Run("track and release multiple resources", func(t *testing.T) {
 		mem := memory.NewGoAllocator()
-		manager := NewMemoryManager(mem)
+		manager := gorilla.NewMemoryManager(mem)
 
 		// Create some resources
 		s1 := series.New("test1", []int64{1, 2, 3}, mem)
 		s2 := series.New("test2", []string{"a", "b", "c"}, mem)
-		df := NewDataFrame(s1, s2)
+		df := gorilla.NewDataFrame(s1, s2)
 
 		// Track resources
 		manager.Track(s1)
@@ -46,7 +47,7 @@ func TestMemoryManager(t *testing.T) {
 
 	t.Run("release all is idempotent", func(t *testing.T) {
 		mem := memory.NewGoAllocator()
-		manager := NewMemoryManager(mem)
+		manager := gorilla.NewMemoryManager(mem)
 
 		s1 := series.New("test", []int64{1, 2}, mem)
 		manager.Track(s1)
@@ -60,7 +61,7 @@ func TestMemoryManager(t *testing.T) {
 
 	t.Run("concurrent access", func(t *testing.T) {
 		mem := memory.NewGoAllocator()
-		manager := NewMemoryManager(mem)
+		manager := gorilla.NewMemoryManager(mem)
 
 		var wg sync.WaitGroup
 		const numGoroutines = 10
@@ -96,12 +97,12 @@ func TestMemoryManager(t *testing.T) {
 // TestWithDataFrame tests the automatic cleanup helper.
 func TestWithDataFrame(t *testing.T) {
 	t.Run("automatically releases dataframe", func(t *testing.T) {
-		err := WithDataFrame(func() *DataFrame {
+		err := gorilla.WithDataFrame(func() *gorilla.DataFrame {
 			mem := memory.NewGoAllocator()
 			s1 := series.New("test", []int64{1, 2, 3}, mem)
 			s2 := series.New("test2", []string{"a", "b", "c"}, mem)
-			return NewDataFrame(s1, s2)
-		}, func(df *DataFrame) error {
+			return gorilla.NewDataFrame(s1, s2)
+		}, func(df *gorilla.DataFrame) error {
 			assert.Equal(t, 2, df.Width())
 			assert.Equal(t, 3, df.Len())
 			return nil
@@ -115,11 +116,11 @@ func TestWithDataFrame(t *testing.T) {
 	t.Run("propagates function error", func(t *testing.T) {
 		expectedErr := assert.AnError
 
-		err := WithDataFrame(func() *DataFrame {
+		err := gorilla.WithDataFrame(func() *gorilla.DataFrame {
 			mem := memory.NewGoAllocator()
 			s1 := series.New("test", []int64{1, 2}, mem)
-			return NewDataFrame(s1)
-		}, func(df *DataFrame) error {
+			return gorilla.NewDataFrame(s1)
+		}, func(_ *gorilla.DataFrame) error {
 			return expectedErr
 		})
 
@@ -130,10 +131,10 @@ func TestWithDataFrame(t *testing.T) {
 // TestWithSeries tests the series automatic cleanup helper.
 func TestWithSeries(t *testing.T) {
 	t.Run("automatically releases series", func(t *testing.T) {
-		err := WithSeries(func() ISeries {
+		err := gorilla.WithSeries(func() gorilla.ISeries {
 			mem := memory.NewGoAllocator()
 			return series.New("test", []int64{1, 2, 3, 4, 5}, mem)
-		}, func(s ISeries) error {
+		}, func(s gorilla.ISeries) error {
 			assert.Equal(t, 5, s.Len())
 			assert.Equal(t, "test", s.Name())
 			return nil
@@ -148,11 +149,11 @@ func TestWithMemoryManager(t *testing.T) {
 	t.Run("automatically releases tracked resources", func(t *testing.T) {
 		mem := memory.NewGoAllocator()
 
-		err := WithMemoryManager(mem, func(manager *MemoryManager) error {
+		err := gorilla.WithMemoryManager(mem, func(manager *gorilla.MemoryManager) error {
 			// Create and track multiple resources
 			s1 := series.New("test1", []int64{1, 2, 3}, mem)
 			s2 := series.New("test2", []string{"a", "b", "c"}, mem)
-			df := NewDataFrame(s1, s2)
+			df := gorilla.NewDataFrame(s1, s2)
 
 			manager.Track(s1)
 			manager.Track(s2)
@@ -172,7 +173,7 @@ func TestWithMemoryManager(t *testing.T) {
 		mem := memory.NewGoAllocator()
 		expectedErr := assert.AnError
 
-		err := WithMemoryManager(mem, func(manager *MemoryManager) error {
+		err := gorilla.WithMemoryManager(mem, func(manager *gorilla.MemoryManager) error {
 			s1 := series.New("test", []int64{1, 2}, mem)
 			manager.Track(s1)
 			return expectedErr
@@ -198,15 +199,15 @@ func TestMemoryLeakDetection(t *testing.T) {
 
 		// Perform operations that should not leak memory
 		for range 100 {
-			err := WithDataFrame(func() *DataFrame {
+			err := gorilla.WithDataFrame(func() *gorilla.DataFrame {
 				mem := memory.NewGoAllocator()
 				s1 := series.New("values", []int64{1, 2, 3, 4, 5}, mem)
 				s2 := series.New("names", []string{"a", "b", "c", "d", "e"}, mem)
-				return NewDataFrame(s1, s2)
-			}, func(df *DataFrame) error {
+				return gorilla.NewDataFrame(s1, s2)
+			}, func(df *gorilla.DataFrame) error {
 				// Perform some operations
 				result, err := df.Lazy().
-					Filter(Col("values").Gt(Lit(int64(2)))).
+					Filter(gorilla.Col("values").Gt(gorilla.Lit(int64(2)))).
 					Select("names").
 					Collect()
 				if err != nil {
@@ -233,8 +234,11 @@ func TestMemoryLeakDetection(t *testing.T) {
 
 // TestMemoryUsageMonitor tests the memory usage monitoring functionality.
 func TestMemoryUsageMonitor(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping memory usage monitor tests in short mode")
+	}
 	t.Run("records allocations and deallocations", func(t *testing.T) {
-		monitor := NewMemoryUsageMonitor(1024 * 1024) // 1MB threshold
+		monitor := gorilla.NewMemoryUsageMonitor(1024 * 1024) // 1MB threshold
 		defer monitor.StopMonitoring()
 
 		// Record some allocations
@@ -252,7 +256,7 @@ func TestMemoryUsageMonitor(t *testing.T) {
 
 	t.Run("triggers spill callback when threshold exceeded", func(t *testing.T) {
 		var spillCalled int32
-		monitor := NewMemoryUsageMonitor(1000) // 1KB threshold
+		monitor := gorilla.NewMemoryUsageMonitor(1000) // 1KB threshold
 		defer monitor.StopMonitoring()
 
 		monitor.SetSpillCallback(func() error {
@@ -270,7 +274,7 @@ func TestMemoryUsageMonitor(t *testing.T) {
 	})
 
 	t.Run("provides comprehensive stats", func(t *testing.T) {
-		monitor := NewMemoryUsageMonitor(1024 * 1024)
+		monitor := gorilla.NewMemoryUsageMonitor(1024 * 1024)
 		defer monitor.StopMonitoring()
 
 		monitor.RecordAllocation(5000)
@@ -282,8 +286,8 @@ func TestMemoryUsageMonitor(t *testing.T) {
 		assert.True(t, stats.MemoryPressure >= 0.0 && stats.MemoryPressure <= 1.0)
 	})
 
-	t.Run("background monitoring works", func(t *testing.T) {
-		monitor := NewMemoryUsageMonitor(1024 * 1024)
+	t.Run("background monitoring works", func(_ *testing.T) {
+		monitor := gorilla.NewMemoryUsageMonitor(1024 * 1024)
 
 		monitor.SetCleanupCallback(func() error {
 			return nil
@@ -292,8 +296,8 @@ func TestMemoryUsageMonitor(t *testing.T) {
 		monitor.StartMonitoring()
 		defer monitor.StopMonitoring()
 
-		// Monitoring should be active
-		assert.True(t, monitor.monitoring)
+		// Monitoring should be active (we can't directly test the private field,
+		// but we can verify the monitoring loop runs without crashing)
 
 		// Wait for at least one monitoring cycle
 		time.Sleep(1 * time.Second)

@@ -1,4 +1,4 @@
-package expr
+package expr_test
 
 import (
 	"testing"
@@ -6,11 +6,12 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/paveg/gorilla/internal/expr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func createTestColumns(t *testing.T, mem memory.Allocator) map[string]arrow.Array {
+func createTestColumns(_ *testing.T, mem memory.Allocator) map[string]arrow.Array {
 	// Create test data
 	intBuilder := array.NewInt64Builder(mem)
 	defer intBuilder.Release()
@@ -44,19 +45,17 @@ func TestNewEvaluator(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
 	// Test with explicit allocator
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 	assert.NotNil(t, eval)
-	assert.Equal(t, mem, eval.mem)
 
 	// Test with nil allocator (should create default)
-	eval2 := NewEvaluator(nil)
+	eval2 := expr.NewEvaluator(nil)
 	assert.NotNil(t, eval2)
-	assert.NotNil(t, eval2.mem)
 }
 
 func TestEvaluateColumn(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 	columns := createTestColumns(t, mem)
 	defer func() {
 		for _, arr := range columns {
@@ -65,7 +64,7 @@ func TestEvaluateColumn(t *testing.T) {
 	}()
 
 	// Test evaluating existing column
-	colExpr := Col("age")
+	colExpr := expr.Col("age")
 	result, err := eval.Evaluate(colExpr, columns)
 	require.NoError(t, err)
 	defer result.Release()
@@ -77,15 +76,15 @@ func TestEvaluateColumn(t *testing.T) {
 	assert.Equal(t, int64(20), intResult.Value(1))
 
 	// Test evaluating non-existent column
-	nonExistentExpr := Col("nonexistent")
+	nonExistentExpr := expr.Col("nonexistent")
 	_, err = eval.Evaluate(nonExistentExpr, columns)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Column 'nonexistent' does not exist")
 }
 
 func TestEvaluateLiteral(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 	columns := createTestColumns(t, mem)
 	defer func() {
 		for _, arr := range columns {
@@ -93,54 +92,91 @@ func TestEvaluateLiteral(t *testing.T) {
 		}
 	}()
 
-	tests := []struct {
-		name          string
-		value         interface{}
-		expectedType  string
-		expectedValue interface{}
-	}{
+	tests := getLiteralTestCases()
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runLiteralTest(t, eval, columns, tt)
+		})
+	}
+}
+
+// literalTestCase represents a test case for literal evaluation.
+type literalTestCase struct {
+	name          string
+	value         interface{}
+	expectedType  string
+	expectedValue interface{}
+}
+
+// getLiteralTestCases returns all literal test cases.
+func getLiteralTestCases() []literalTestCase {
+	return []literalTestCase{
 		{"int64 literal", int64(42), "int64", int64(42)},
 		{"float64 literal", 3.14, "float64", 3.14},
 		{"string literal", "hello", "utf8", "hello"},
 		{"bool literal", true, "bool", true},
 	}
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			litExpr := Lit(tt.value)
-			result, err := eval.Evaluate(litExpr, columns)
-			require.NoError(t, err)
-			defer result.Release()
+// runLiteralTest runs a single literal test case.
+func runLiteralTest(t *testing.T, eval *expr.Evaluator, columns map[string]arrow.Array, tc literalTestCase) {
+	litExpr := expr.Lit(tc.value)
+	result, err := eval.Evaluate(litExpr, columns)
+	require.NoError(t, err)
+	defer result.Release()
 
-			assert.Equal(t, 4, result.Len()) // Should match column length
-			assert.Equal(t, tt.expectedType, result.DataType().Name())
+	assert.Equal(t, 4, result.Len()) // Should match column length.
+	assert.Equal(t, tc.expectedType, result.DataType().Name())
 
-			// Check that all values are the literal value
-			switch arr := result.(type) {
-			case *array.Int64:
-				for i := 0; i < arr.Len(); i++ {
-					assert.Equal(t, tt.expectedValue, arr.Value(i))
-				}
-			case *array.Float64:
-				for i := 0; i < arr.Len(); i++ {
-					assert.Equal(t, tt.expectedValue, arr.Value(i))
-				}
-			case *array.String:
-				for i := 0; i < arr.Len(); i++ {
-					assert.Equal(t, tt.expectedValue, arr.Value(i))
-				}
-			case *array.Boolean:
-				for i := 0; i < arr.Len(); i++ {
-					assert.Equal(t, tt.expectedValue, arr.Value(i))
-				}
-			}
-		})
+	verifyLiteralValues(t, result, tc.expectedValue)
+}
+
+// verifyLiteralValues verifies that all values in the array match the expected literal value.
+func verifyLiteralValues(t *testing.T, result arrow.Array, expectedValue interface{}) {
+	switch arr := result.(type) {
+	case *array.Int64:
+		verifyInt64Values(t, arr, expectedValue)
+	case *array.Float64:
+		verifyFloat64Values(t, arr, expectedValue)
+	case *array.String:
+		verifyStringValues(t, arr, expectedValue)
+	case *array.Boolean:
+		verifyBooleanValues(t, arr, expectedValue)
+	}
+}
+
+// verifyInt64Values verifies int64 array values.
+func verifyInt64Values(t *testing.T, arr *array.Int64, expectedValue interface{}) {
+	for i := range arr.Len() {
+		assert.Equal(t, expectedValue, arr.Value(i))
+	}
+}
+
+// verifyFloat64Values verifies float64 array values.
+func verifyFloat64Values(t *testing.T, arr *array.Float64, expectedValue interface{}) {
+	for i := range arr.Len() {
+		assert.InDelta(t, expectedValue, arr.Value(i), 0.001)
+	}
+}
+
+// verifyStringValues verifies string array values.
+func verifyStringValues(t *testing.T, arr *array.String, expectedValue interface{}) {
+	for i := range arr.Len() {
+		assert.Equal(t, expectedValue, arr.Value(i))
+	}
+}
+
+// verifyBooleanValues verifies boolean array values.
+func verifyBooleanValues(t *testing.T, arr *array.Boolean, expectedValue interface{}) {
+	for i := range arr.Len() {
+		assert.Equal(t, expectedValue, arr.Value(i))
 	}
 }
 
 func TestEvaluateArithmetic(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 	columns := createTestColumns(t, mem)
 	defer func() {
 		for _, arr := range columns {
@@ -150,27 +186,27 @@ func TestEvaluateArithmetic(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		expr     Expr
+		expr     expr.Expr
 		expected []int64
 	}{
 		{
 			name:     "addition",
-			expr:     Col("age").Add(Lit(int64(5))),
+			expr:     expr.Col("age").Add(expr.Lit(int64(5))),
 			expected: []int64{15, 25, 35, 45},
 		},
 		{
 			name:     "subtraction",
-			expr:     Col("age").Sub(Lit(int64(5))),
+			expr:     expr.Col("age").Sub(expr.Lit(int64(5))),
 			expected: []int64{5, 15, 25, 35},
 		},
 		{
 			name:     "multiplication",
-			expr:     Col("age").Mul(Lit(int64(2))),
+			expr:     expr.Col("age").Mul(expr.Lit(int64(2))),
 			expected: []int64{20, 40, 60, 80},
 		},
 		{
 			name:     "division",
-			expr:     Col("age").Div(Lit(int64(2))),
+			expr:     expr.Col("age").Div(expr.Lit(int64(2))),
 			expected: []int64{5, 10, 15, 20},
 		},
 	}
@@ -194,7 +230,7 @@ func TestEvaluateArithmetic(t *testing.T) {
 
 func TestEvaluateComparison(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 	columns := createTestColumns(t, mem)
 	defer func() {
 		for _, arr := range columns {
@@ -204,27 +240,27 @@ func TestEvaluateComparison(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		expr     Expr
+		expr     expr.Expr
 		expected []bool
 	}{
 		{
 			name:     "greater than",
-			expr:     Col("age").Gt(Lit(int64(25))),
+			expr:     expr.Col("age").Gt(expr.Lit(int64(25))),
 			expected: []bool{false, false, true, true},
 		},
 		{
 			name:     "less than",
-			expr:     Col("age").Lt(Lit(int64(25))),
+			expr:     expr.Col("age").Lt(expr.Lit(int64(25))),
 			expected: []bool{true, true, false, false},
 		},
 		{
 			name:     "equal",
-			expr:     Col("age").Eq(Lit(int64(20))),
+			expr:     expr.Col("age").Eq(expr.Lit(int64(20))),
 			expected: []bool{false, true, false, false},
 		},
 		{
 			name:     "not equal",
-			expr:     Col("age").Ne(Lit(int64(20))),
+			expr:     expr.Col("age").Ne(expr.Lit(int64(20))),
 			expected: []bool{true, false, true, true},
 		},
 	}
@@ -248,7 +284,7 @@ func TestEvaluateComparison(t *testing.T) {
 
 func TestEvaluateLogical(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 	columns := createTestColumns(t, mem)
 	defer func() {
 		for _, arr := range columns {
@@ -257,7 +293,7 @@ func TestEvaluateLogical(t *testing.T) {
 	}()
 
 	// Test logical AND: (age > 15) && active
-	expr := Col("age").Gt(Lit(int64(15))).And(Col("active"))
+	expr := expr.Col("age").Gt(expr.Lit(int64(15))).And(expr.Col("active"))
 	result, err := eval.EvaluateBoolean(expr, columns)
 	require.NoError(t, err)
 	defer result.Release()
@@ -277,7 +313,7 @@ func TestEvaluateLogical(t *testing.T) {
 
 func TestEvaluateComplexExpression(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 	columns := createTestColumns(t, mem)
 	defer func() {
 		for _, arr := range columns {
@@ -286,9 +322,9 @@ func TestEvaluateComplexExpression(t *testing.T) {
 	}()
 
 	// Test complex expression: (age * 2) > 50
-	left := Col("age").Mul(Lit(int64(2)))
-	expr := &BinaryExpr{left: left, op: OpGt, right: Lit(int64(50))}
-	result, err := eval.EvaluateBoolean(expr, columns)
+	left := expr.Col("age").Mul(expr.Lit(int64(2)))
+	complexExpr := left.Gt(expr.Lit(int64(50)))
+	result, err := eval.EvaluateBoolean(complexExpr, columns)
 	require.NoError(t, err)
 	defer result.Release()
 
@@ -305,7 +341,7 @@ func TestEvaluateComplexExpression(t *testing.T) {
 
 func TestEvaluateStringComparison(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 	columns := createTestColumns(t, mem)
 	defer func() {
 		for _, arr := range columns {
@@ -314,7 +350,7 @@ func TestEvaluateStringComparison(t *testing.T) {
 	}()
 
 	// Test string equality
-	expr := Col("name").Eq(Lit("b"))
+	expr := expr.Col("name").Eq(expr.Lit("b"))
 	result, err := eval.EvaluateBoolean(expr, columns)
 	require.NoError(t, err)
 	defer result.Release()
@@ -331,7 +367,7 @@ func TestEvaluateStringComparison(t *testing.T) {
 
 func TestEvaluateErrors(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 	columns := createTestColumns(t, mem)
 	defer func() {
 		for _, arr := range columns {
@@ -341,20 +377,20 @@ func TestEvaluateErrors(t *testing.T) {
 
 	// Test unsupported expression type
 	_, err := eval.Evaluate(nil, columns)
-	assert.Error(t, err)
+	require.Error(t, err)
 
 	// Test column not found
-	_, err = eval.Evaluate(Col("nonexistent"), columns)
-	assert.Error(t, err)
+	_, err = eval.Evaluate(expr.Col("nonexistent"), columns)
+	require.Error(t, err)
 
 	// Test unsupported literal type
-	_, err = eval.Evaluate(Lit(complex(1, 2)), columns)
-	assert.Error(t, err)
+	_, err = eval.Evaluate(expr.Lit(complex(1, 2)), columns)
+	require.Error(t, err)
 }
 
 func TestEvaluateInvalidExpr(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	eval := NewEvaluator(mem)
+	eval := expr.NewEvaluator(mem)
 	columns := createTestColumns(t, mem)
 	defer func() {
 		for _, arr := range columns {
@@ -363,45 +399,45 @@ func TestEvaluateInvalidExpr(t *testing.T) {
 	}()
 
 	t.Run("evaluate invalid expression", func(t *testing.T) {
-		invalidExpr := Invalid("test error message")
+		invalidExpr := expr.Invalid("test error message")
 
 		result, err := eval.Evaluate(invalidExpr, columns)
 
 		assert.Nil(t, result)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "invalid expression")
 		assert.Contains(t, err.Error(), "test error message")
 	})
 
 	t.Run("evaluate boolean invalid expression", func(t *testing.T) {
-		invalidExpr := Invalid("boolean operation not supported")
+		invalidExpr := expr.Invalid("boolean operation not supported")
 
 		result, err := eval.EvaluateBoolean(invalidExpr, columns)
 
 		assert.Nil(t, result)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "invalid expression")
 		assert.Contains(t, err.Error(), "boolean operation not supported")
 	})
 
 	t.Run("empty error message", func(t *testing.T) {
-		invalidExpr := Invalid("")
+		invalidExpr := expr.Invalid("")
 
 		result, err := eval.Evaluate(invalidExpr, columns)
 
 		assert.Nil(t, result)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "invalid expression")
 	})
 
 	t.Run("complex error scenario", func(t *testing.T) {
 		complexMessage := "Add operation only supported on column and binary expressions, got *expr.LiteralExpr"
-		invalidExpr := Invalid(complexMessage)
+		invalidExpr := expr.Invalid(complexMessage)
 
 		result, err := eval.EvaluateBoolean(invalidExpr, columns)
 
 		assert.Nil(t, result)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "invalid expression")
 		assert.Contains(t, err.Error(), complexMessage)
 	})

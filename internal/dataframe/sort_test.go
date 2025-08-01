@@ -1,3 +1,4 @@
+//nolint:testpackage // requires internal access to unexported types and functions
 package dataframe
 
 import (
@@ -103,7 +104,7 @@ func TestLazyFrame_Sort(t *testing.T) {
 	defer sortedLazy.Release()
 
 	result, err := sortedLazy.Collect()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	defer result.Release()
 
 	// Should be sorted: 1.41, 2.71, 3.14

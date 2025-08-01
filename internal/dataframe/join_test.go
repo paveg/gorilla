@@ -1,3 +1,4 @@
+//nolint:testpackage // requires internal access to unexported types and functions
 package dataframe
 
 import (
@@ -97,7 +98,7 @@ func TestDataFrameLeftJoin(t *testing.T) {
 
 	// Find David's record (should be last)
 	found := false
-	for i := 0; i < result.Len(); i++ {
+	for i := range result.Len() {
 		if nameValues[i] == "David" {
 			assert.Equal(t, int64(4), idValues[i])
 			found = true
@@ -255,7 +256,7 @@ func TestJoinParallelExecution(t *testing.T) {
 }
 
 // Helper function to create test data for join operations.
-func createJoinTestData(t *testing.T) (*DataFrame, *DataFrame) {
+func createJoinTestData(_ *testing.T) (*DataFrame, *DataFrame) {
 	mem := memory.NewGoAllocator()
 
 	// Left DataFrame (users)

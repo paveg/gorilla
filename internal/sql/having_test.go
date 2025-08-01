@@ -1,8 +1,10 @@
+//nolint:testpackage // requires internal access to unexported types and functions
 package sql
 
 import (
 	"testing"
 
+	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/paveg/gorilla/internal/dataframe"
@@ -59,7 +61,7 @@ func TestHavingClauseTranslation(t *testing.T) {
 				defer deptArray.Release()
 
 				depts := make(map[string]bool)
-				for i := 0; i < deptArray.Len(); i++ {
+				for i := range deptArray.Len() {
 					depts[deptArray.(*array.String).Value(i)] = true
 				}
 
@@ -86,7 +88,7 @@ func TestHavingClauseTranslation(t *testing.T) {
 				deptArray := deptCol.Array()
 				defer deptArray.Release()
 
-				for i := 0; i < deptArray.Len(); i++ {
+				for i := range deptArray.Len() {
 					dept := deptArray.(*array.String).Value(i)
 					assert.True(t, dept == "Engineering" || dept == "Sales")
 				}
@@ -143,7 +145,7 @@ func TestHavingClauseTranslation(t *testing.T) {
 				defer deptArray.Release()
 
 				depts := make(map[string]bool)
-				for i := 0; i < deptArray.Len(); i++ {
+				for i := range deptArray.Len() {
 					depts[deptArray.(*array.String).Value(i)] = true
 				}
 
@@ -219,24 +221,39 @@ func TestHavingClauseTranslation(t *testing.T) {
 func TestHavingClauseComplexExpressions(t *testing.T) {
 	mem := memory.NewGoAllocator()
 	translator := NewSQLTranslator(mem)
-
-	// Create test data
-	categories := series.New("category", []string{"A", "B", "A", "B", "C", "C", "A", "B", "C"}, mem)
-	values := series.New("value", []int64{10, 20, 30, 40, 50, 60, 70, 80, 90}, mem)
-	scores := series.New("score", []float64{1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 9.5}, mem)
-
-	df := dataframe.New(categories, values, scores)
+	df := createComplexTestData(mem)
 	defer df.Release()
 
 	translator.RegisterTable("data", df)
+	testCases := getComplexHavingTestCases()
 
-	testCases := []struct {
-		name           string
-		query          string
-		expectErr      bool
-		errContains    string
-		validateResult func(*testing.T, *dataframe.DataFrame)
-	}{
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			runComplexHavingTest(t, translator, tc)
+		})
+	}
+}
+
+// complexHavingTestCase represents a test case for complex HAVING expressions.
+type complexHavingTestCase struct {
+	name           string
+	query          string
+	expectErr      bool
+	errContains    string
+	validateResult func(*testing.T, *dataframe.DataFrame)
+}
+
+// createComplexTestData creates test data for complex HAVING expressions.
+func createComplexTestData(mem memory.Allocator) *dataframe.DataFrame {
+	categories := series.New("category", []string{"A", "B", "A", "B", "C", "C", "A", "B", "C"}, mem)
+	values := series.New("value", []int64{10, 20, 30, 40, 50, 60, 70, 80, 90}, mem)
+	scores := series.New("score", []float64{1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 9.5}, mem)
+	return dataframe.New(categories, values, scores)
+}
+
+// getComplexHavingTestCases returns all complex HAVING test cases.
+func getComplexHavingTestCases() []complexHavingTestCase {
+	return []complexHavingTestCase{
 		{
 			name: "HAVING with arithmetic expression",
 			query: `
@@ -245,37 +262,14 @@ func TestHavingClauseComplexExpressions(t *testing.T) {
 				GROUP BY category
 				HAVING SUM(value) * 2 > 200
 			`,
-			expectErr:   true, // TODO: Arithmetic expressions not yet supported in parser
+			expectErr:   true, // TODO: Arithmetic expressions not yet supported in parser.
 			errContains: "unsupported expression type",
 		},
 		{
-			name: "HAVING with complex boolean logic",
-			query: `
-				SELECT category, MIN(value) as min_val, MAX(value) as max_val
-				FROM data
-				GROUP BY category
-				HAVING (MIN(value) < 20 AND MAX(value) > 60) OR (MIN(value) >= 40)
-			`,
-			expectErr: false,
-			validateResult: func(t *testing.T, result *dataframe.DataFrame) {
-				// A: min=10, max=70 (passes first condition)
-				// B: min=20, max=80 (fails both)
-				// C: min=50, max=90 (passes second condition)
-				assert.Equal(t, 2, result.Len())
-
-				catCol, _ := result.Column("category")
-				catArray := catCol.Array()
-				defer catArray.Release()
-
-				cats := make(map[string]bool)
-				for i := 0; i < catArray.Len(); i++ {
-					cats[catArray.(*array.String).Value(i)] = true
-				}
-
-				assert.True(t, cats["A"])
-				assert.True(t, cats["C"])
-				assert.False(t, cats["B"])
-			},
+			name:           "HAVING with complex boolean logic",
+			query:          getComplexBooleanQuery(),
+			expectErr:      false,
+			validateResult: validateComplexBooleanResult,
 		},
 		{
 			name: "HAVING with comparison between aggregations",
@@ -285,48 +279,85 @@ func TestHavingClauseComplexExpressions(t *testing.T) {
 				GROUP BY category
 				HAVING AVG(score) * 10 > AVG(value)
 			`,
-			expectErr:   true, // TODO: Arithmetic expressions with aggregations not yet supported in parser
+			expectErr:   true, // TODO: Arithmetic expressions with aggregations not yet supported in parser.
 			errContains: "unsupported expression type",
 		},
 	}
+}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			stmt, err := ParseSQL(tc.query)
-			if tc.expectErr {
-				// Check for parsing errors first
-				if err != nil {
-					require.Error(t, err)
-					if tc.errContains != "" {
-						assert.Contains(t, err.Error(), tc.errContains)
-					}
-					return
-				}
-				// If parsing succeeded, check translation errors
-				_, err = translator.TranslateStatement(stmt)
-				require.Error(t, err)
-				if tc.errContains != "" {
-					assert.Contains(t, err.Error(), tc.errContains)
-				}
-				return
-			}
+// getComplexBooleanQuery returns the complex boolean logic query.
+func getComplexBooleanQuery() string {
+	return `
+		SELECT category, MIN(value) as min_val, MAX(value) as max_val
+		FROM data
+		GROUP BY category
+		HAVING (MIN(value) < 20 AND MAX(value) > 60) OR (MIN(value) >= 40)
+	`
+}
 
-			require.NoError(t, err, "Failed to parse SQL")
-			lazy, err := translator.TranslateStatement(stmt)
+// validateComplexBooleanResult validates the complex boolean logic result.
+func validateComplexBooleanResult(t *testing.T, result *dataframe.DataFrame) {
+	// A: min=10, max=70 (passes first condition).
+	// B: min=20, max=80 (fails both).
+	// C: min=50, max=90 (passes second condition).
+	assert.Equal(t, 2, result.Len())
 
-			require.NoError(t, err)
-			require.NotNil(t, lazy)
+	catCol, _ := result.Column("category")
+	catArray := catCol.Array()
+	defer catArray.Release()
 
-			// Collect the result
-			result, err := lazy.Collect()
-			require.NoError(t, err)
-			defer result.Release()
+	cats := extractCategoryNames(catArray)
+	assert.True(t, cats["A"])
+	assert.True(t, cats["C"])
+	assert.False(t, cats["B"])
+}
 
-			// Validate the result
-			if tc.validateResult != nil {
-				tc.validateResult(t, result)
-			}
-		})
+// extractCategoryNames extracts category names from array into a map.
+func extractCategoryNames(catArray arrow.Array) map[string]bool {
+	cats := make(map[string]bool)
+	for i := range catArray.Len() {
+		cats[catArray.(*array.String).Value(i)] = true
+	}
+	return cats
+}
+
+// runComplexHavingTest runs a single complex HAVING test case.
+func runComplexHavingTest(t *testing.T, translator *SQLTranslator, tc complexHavingTestCase) {
+	stmt, err := ParseSQL(tc.query)
+	if tc.expectErr {
+		handleExpectedError(t, err, translator, stmt, tc)
+		return
+	}
+
+	require.NoError(t, err, "Failed to parse SQL")
+	lazy, err := translator.TranslateStatement(stmt)
+	require.NoError(t, err)
+	require.NotNil(t, lazy)
+
+	result, err := lazy.Collect()
+	require.NoError(t, err)
+	defer result.Release()
+
+	if tc.validateResult != nil {
+		tc.validateResult(t, result)
+	}
+}
+
+// handleExpectedError handles test cases that expect errors.
+func handleExpectedError(t *testing.T, err error, translator *SQLTranslator, stmt Statement, tc complexHavingTestCase) {
+	if err != nil {
+		require.Error(t, err)
+		if tc.errContains != "" {
+			assert.Contains(t, err.Error(), tc.errContains)
+		}
+		return
+	}
+
+	// If parsing succeeded, check translation errors.
+	_, err = translator.TranslateStatement(stmt)
+	require.Error(t, err)
+	if tc.errContains != "" {
+		assert.Contains(t, err.Error(), tc.errContains)
 	}
 }
 
@@ -364,14 +395,14 @@ func BenchmarkHavingClause(b *testing.B) {
 
 	b.ResetTimer()
 	for range b.N {
-		lazy, err := translator.TranslateStatement(stmt)
-		if err != nil {
-			b.Fatal(err)
+		lazy, translateErr := translator.TranslateStatement(stmt)
+		if translateErr != nil {
+			b.Fatal(translateErr)
 		}
 
-		result, err := lazy.Collect()
-		if err != nil {
-			b.Fatal(err)
+		result, collectErr := lazy.Collect()
+		if collectErr != nil {
+			b.Fatal(collectErr)
 		}
 		result.Release()
 	}

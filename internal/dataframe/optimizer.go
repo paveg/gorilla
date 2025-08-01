@@ -393,49 +393,95 @@ func (r *ProjectionPushdownRule) Apply(plan *ExecutionPlan) *ExecutionPlan {
 // analyzeRequiredColumns determines which columns are actually needed.
 func (r *ProjectionPushdownRule) analyzeRequiredColumns(operations []LazyOperation) []string {
 	required := make(map[string]bool)
+	hasExplicitSelect := r.processOperationsBackwards(operations, required)
+
+	if !hasExplicitSelect {
+		return nil // Signal that no projection pushdown should be applied.
+	}
+
+	return r.convertRequiredMapToSlice(required)
+}
+
+// processOperationsBackwards analyzes operations from end to start to find required columns.
+func (r *ProjectionPushdownRule) processOperationsBackwards(operations []LazyOperation, required map[string]bool) bool {
 	hasExplicitSelect := false
 
-	// Work backwards to find required columns
 	for i := len(operations) - 1; i >= 0; i-- {
 		op := operations[i]
-		deps := extractOperationDependencies(op)
-		for _, dep := range deps {
+		r.addOperationDependencies(op, required)
+
+		if r.handleSelectOperation(op, required) {
+			hasExplicitSelect = true
+		}
+
+		if r.handleGroupByOperation(op, required) {
+			hasExplicitSelect = true
+		}
+	}
+
+	return hasExplicitSelect
+}
+
+// addOperationDependencies adds column dependencies from an operation to the required set.
+func (r *ProjectionPushdownRule) addOperationDependencies(op LazyOperation, required map[string]bool) {
+	deps := extractOperationDependencies(op)
+	for _, dep := range deps {
+		required[dep] = true
+	}
+}
+
+// handleSelectOperation processes a select operation and updates required columns.
+func (r *ProjectionPushdownRule) handleSelectOperation(op LazyOperation, required map[string]bool) bool {
+	sel, ok := op.(*SelectOperation)
+	if !ok {
+		return false
+	}
+
+	// Reset required columns to only selected ones.
+	for key := range required {
+		delete(required, key)
+	}
+	for _, col := range sel.columns {
+		required[col] = true
+	}
+	return true
+}
+
+// handleGroupByOperation processes a group by operation and updates required columns.
+func (r *ProjectionPushdownRule) handleGroupByOperation(op LazyOperation, required map[string]bool) bool {
+	groupBy, ok := op.(*GroupByOperation)
+	if !ok {
+		return false
+	}
+
+	// Reset required columns to group by columns and aggregated columns.
+	for key := range required {
+		delete(required, key)
+	}
+	r.addGroupByColumns(groupBy, required)
+	r.addAggregationDependencies(groupBy, required)
+	return true
+}
+
+// addGroupByColumns adds group by columns to the required set.
+func (r *ProjectionPushdownRule) addGroupByColumns(groupBy *GroupByOperation, required map[string]bool) {
+	for _, col := range groupBy.groupByCols {
+		required[col] = true
+	}
+}
+
+// addAggregationDependencies adds aggregation column dependencies to the required set.
+func (r *ProjectionPushdownRule) addAggregationDependencies(groupBy *GroupByOperation, required map[string]bool) {
+	for _, agg := range groupBy.aggregations {
+		aggDeps := extractExpressionDependencies(agg.Column())
+		for _, dep := range aggDeps {
 			required[dep] = true
 		}
-
-		// If this is a select operation, it defines the final required columns
-		if sel, ok := op.(*SelectOperation); ok {
-			hasExplicitSelect = true
-			// Only need the selected columns
-			required = make(map[string]bool)
-			for _, col := range sel.columns {
-				required[col] = true
-			}
-		}
-
-		// GroupBy operations also define final columns (group columns + aggregated columns)
-		if groupBy, ok := op.(*GroupByOperation); ok {
-			hasExplicitSelect = true
-			// Only need the group by columns and aggregated columns
-			required = make(map[string]bool)
-			for _, col := range groupBy.groupByCols {
-				required[col] = true
-			}
-			for _, agg := range groupBy.aggregations {
-				aggDeps := extractExpressionDependencies(agg.Column())
-				for _, dep := range aggDeps {
-					required[dep] = true
-				}
-			}
-		}
 	}
+}
 
-	// If there's no explicit select operation, don't apply projection pushdown
-	// as all columns should be preserved in the final result
-	if !hasExplicitSelect {
-		return nil // Signal that no projection pushdown should be applied
-	}
-
+// convertRequiredMapToSlice converts the required columns map to a slice.
+func (r *ProjectionPushdownRule) convertRequiredMapToSlice(required map[string]bool) []string {
 	result := make([]string, 0, len(required))
 	for col := range required {
 		result = append(result, col)
@@ -945,17 +991,10 @@ func (r *ConstantFoldingRule) evaluateFunctionLiterals(funcName string, args []e
 	switch funcName {
 	case "abs":
 		if len(values) == 1 {
-			if intVal, ok := r.convertToInt64(values[0]); ok {
-				if intVal < 0 {
-					return expr.Lit(-intVal)
+			if result := r.evaluateAbsFunction(values[0]); result != nil {
+				if litExpr, ok := result.(*expr.LiteralExpr); ok {
+					return litExpr
 				}
-				return expr.Lit(intVal)
-			}
-			if floatVal, ok := r.convertToFloat64(values[0]); ok {
-				if floatVal < 0 {
-					return expr.Lit(-floatVal)
-				}
-				return expr.Lit(floatVal)
 			}
 		}
 	case "round":
@@ -1097,4 +1136,23 @@ func (r *ConstantFoldingRule) convertToFloat64(val interface{}) (float64, bool) 
 		return float64(v), true
 	}
 	return 0, false
+}
+
+// evaluateAbsFunction evaluates absolute value function with type checking.
+func (r *ConstantFoldingRule) evaluateAbsFunction(value interface{}) expr.Expr {
+	if intVal, ok := r.convertToInt64(value); ok {
+		if intVal < 0 {
+			return expr.Lit(-intVal)
+		}
+		return expr.Lit(intVal)
+	}
+
+	if floatVal, ok := r.convertToFloat64(value); ok {
+		if floatVal < 0 {
+			return expr.Lit(-floatVal)
+		}
+		return expr.Lit(floatVal)
+	}
+
+	return nil
 }

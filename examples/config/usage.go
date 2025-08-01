@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -11,6 +12,41 @@ import (
 	"github.com/paveg/gorilla/internal/dataframe"
 	"github.com/paveg/gorilla/internal/expr"
 	"github.com/paveg/gorilla/internal/series"
+)
+
+// Constants for demo configuration.
+const (
+	// Dataset sizes for different examples.
+	smallDatasetSize    = 1000
+	mediumDatasetSize   = 2000
+	largeDatasetSize    = 10000
+	smallDatasetRows    = 100
+	largeDatasetRows    = 1000000
+	largeDatasetColumns = 5
+	smallDatasetColumns = 50
+
+	// Filter thresholds and values.
+	valueFilterThreshold1 = 500.0
+	valueFilterThreshold2 = 250.0
+	valueFilterThreshold3 = 1500.0
+	idFilterThreshold1    = 1000
+	idFilterThreshold2    = 5000
+
+	// Memory and performance settings.
+	customChunkSize = 100
+	memoryLimitMB   = 1 // 1MB
+	bytesPerMB      = 1024 * 1024
+
+	// Configuration values.
+	workerPoolSize      = 4
+	parallelThreshold   = 1000
+	chunkSize           = 500
+	maxParallelism      = 8
+	gcPressureThreshold = 0.7
+	allocatorPoolSize   = 10
+
+	// Data generation multiplier.
+	dataMultiplier = 1.5
 )
 
 func main() {
@@ -43,6 +79,8 @@ func main() {
 }
 
 func demonstrateDefaultConfig() {
+	ctx := context.Background()
+	logger := slog.Default()
 	// Get the default global configuration
 	defaultConfig := config.GetGlobalConfig()
 	fmt.Printf("Default parallel threshold: %d\n", defaultConfig.ParallelThreshold)
@@ -52,15 +90,15 @@ func demonstrateDefaultConfig() {
 
 	// Create a simple DataFrame operation
 	mem := memory.NewGoAllocator()
-	df := createSampleDataFrame(mem, 1000)
+	df := createSampleDataFrame(mem, smallDatasetSize)
 	defer df.Release()
 
 	// Perform operation with default configuration
 	result, err := df.Lazy().
-		Filter(expr.Col("value").Gt(expr.Lit(500.0))).
+		Filter(expr.Col("value").Gt(expr.Lit(valueFilterThreshold1))).
 		Collect()
 	if err != nil {
-		slog.Error("Error", "err", err)
+		logger.ErrorContext(ctx, "Error", "err", err)
 		return
 	}
 	defer result.Release()
@@ -69,6 +107,8 @@ func demonstrateDefaultConfig() {
 }
 
 func demonstrateFileConfig() {
+	ctx := context.Background()
+	logger := slog.Default()
 	// Try to load configuration from YAML file
 	configPath := "examples/config/gorilla.yaml"
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
@@ -93,14 +133,14 @@ func demonstrateFileConfig() {
 
 	// Create DataFrame operation with file configuration
 	mem := memory.NewGoAllocator()
-	df := createSampleDataFrame(mem, 2000)
+	df := createSampleDataFrame(mem, mediumDatasetSize)
 	defer df.Release()
 
 	result, err := df.Lazy().
-		Filter(expr.Col("id").Lt(expr.Lit(int64(1000)))).
+		Filter(expr.Col("id").Lt(expr.Lit(int64(idFilterThreshold1)))).
 		Collect()
 	if err != nil {
-		slog.Error("Error", "err", err)
+		logger.ErrorContext(ctx, "Error", "err", err)
 		return
 	}
 	defer result.Release()
@@ -109,15 +149,17 @@ func demonstrateFileConfig() {
 }
 
 func demonstrateEnvConfig() {
+	ctx := context.Background()
+	logger := slog.Default()
 	// Set some environment variables
-	os.Setenv("GORILLA_PARALLEL_THRESHOLD", "500")
-	os.Setenv("GORILLA_WORKER_POOL_SIZE", "4")
-	os.Setenv("GORILLA_ENABLE_PROFILING", "true")
+	_ = os.Setenv("GORILLA_PARALLEL_THRESHOLD", "500")
+	_ = os.Setenv("GORILLA_WORKER_POOL_SIZE", "4")
+	_ = os.Setenv("GORILLA_ENABLE_PROFILING", "true")
 
 	defer func() {
-		os.Unsetenv("GORILLA_PARALLEL_THRESHOLD")
-		os.Unsetenv("GORILLA_WORKER_POOL_SIZE")
-		os.Unsetenv("GORILLA_ENABLE_PROFILING")
+		_ = os.Unsetenv("GORILLA_PARALLEL_THRESHOLD")
+		_ = os.Unsetenv("GORILLA_WORKER_POOL_SIZE")
+		_ = os.Unsetenv("GORILLA_ENABLE_PROFILING")
 	}()
 
 	// Load configuration from environment
@@ -133,14 +175,14 @@ func demonstrateEnvConfig() {
 
 	// Use the environment configuration
 	mem := memory.NewGoAllocator()
-	df := createSampleDataFrame(mem, 1000)
+	df := createSampleDataFrame(mem, smallDatasetSize)
 	defer df.Release()
 
 	result, err := df.Lazy().
-		Filter(expr.Col("value").Gt(expr.Lit(250.0))).
+		Filter(expr.Col("value").Gt(expr.Lit(valueFilterThreshold2))).
 		Collect()
 	if err != nil {
-		slog.Error("Error", "err", err)
+		logger.ErrorContext(ctx, "Error", "err", err)
 		return
 	}
 	defer result.Release()
@@ -149,25 +191,27 @@ func demonstrateEnvConfig() {
 }
 
 func demonstrateOperationConfig() {
+	ctx := context.Background()
+	logger := slog.Default()
 	mem := memory.NewGoAllocator()
-	df := createSampleDataFrame(mem, 2000)
+	df := createSampleDataFrame(mem, mediumDatasetSize)
 	defer df.Release()
 
 	// Create custom operation configuration
 	opConfig := config.OperationConfig{
-		ForceParallel:   true,        // Force parallel execution
-		CustomChunkSize: 100,         // Use small chunks
-		MaxMemoryUsage:  1024 * 1024, // 1MB limit
+		ForceParallel:   true,                       // Force parallel execution
+		CustomChunkSize: customChunkSize,            // Use small chunks
+		MaxMemoryUsage:  memoryLimitMB * bytesPerMB, // 1MB limit
 	}
 
 	// Apply the configuration to the DataFrame
 	configuredDF := df.WithConfig(opConfig)
 
 	result, err := configuredDF.Lazy().
-		Filter(expr.Col("id").Gt(expr.Lit(int64(1000)))).
+		Filter(expr.Col("id").Gt(expr.Lit(int64(idFilterThreshold1)))).
 		Collect()
 	if err != nil {
-		slog.Error("Error", "err", err)
+		logger.ErrorContext(ctx, "Error", "err", err)
 		return
 	}
 	defer result.Release()
@@ -182,10 +226,10 @@ func demonstrateOperationConfig() {
 
 	seqDF := df.WithConfig(seqConfig)
 	seqResult, err := seqDF.Lazy().
-		Filter(expr.Col("value").Lt(expr.Lit(1500.0))).
+		Filter(expr.Col("value").Lt(expr.Lit(valueFilterThreshold3))).
 		Collect()
 	if err != nil {
-		slog.Error("Error", "err", err)
+		logger.ErrorContext(ctx, "Error", "err", err)
 		return
 	}
 	defer seqResult.Release()
@@ -194,22 +238,24 @@ func demonstrateOperationConfig() {
 }
 
 func demonstratePerformanceTuning() {
+	ctx := context.Background()
+	logger := slog.Default()
 	globalConfig := config.GetGlobalConfig()
 	tuner := config.NewPerformanceTuner(&globalConfig)
 
 	// Optimize for a small dataset with many columns
-	smallDataConfig := tuner.OptimizeForDataset(100, 50)
+	smallDataConfig := tuner.OptimizeForDataset(smallDatasetRows, smallDatasetColumns)
 	fmt.Printf("Small dataset config - Parallel threshold: %d\n", smallDataConfig.ParallelThreshold)
 	fmt.Printf("Small dataset config - Chunk size: %d\n", smallDataConfig.ChunkSize)
 
 	// Optimize for a large dataset with few columns
-	largeDataConfig := tuner.OptimizeForDataset(1000000, 5)
+	largeDataConfig := tuner.OptimizeForDataset(largeDatasetRows, largeDatasetColumns)
 	fmt.Printf("Large dataset config - Parallel threshold: %d\n", largeDataConfig.ParallelThreshold)
 	fmt.Printf("Large dataset config - Chunk size: %d\n", largeDataConfig.ChunkSize)
 
 	// Apply optimized configuration
 	mem := memory.NewGoAllocator()
-	df := createSampleDataFrame(mem, 10000)
+	df := createSampleDataFrame(mem, largeDatasetSize)
 	defer df.Release()
 
 	opConfig := config.OperationConfig{
@@ -218,10 +264,10 @@ func demonstratePerformanceTuning() {
 
 	optimizedDF := df.WithConfig(opConfig)
 	result, err := optimizedDF.Lazy().
-		Filter(expr.Col("id").Gt(expr.Lit(int64(5000)))).
+		Filter(expr.Col("id").Gt(expr.Lit(int64(idFilterThreshold2)))).
 		Collect()
 	if err != nil {
-		slog.Error("Error", "err", err)
+		logger.ErrorContext(ctx, "Error", "err", err)
 		return
 	}
 	defer result.Release()
@@ -234,12 +280,12 @@ func demonstrateConfigValidation() {
 
 	// Test valid configuration
 	validConfig := config.Config{
-		ParallelThreshold:   1000,
-		WorkerPoolSize:      4,
-		ChunkSize:           500,
-		MaxParallelism:      8,
-		GCPressureThreshold: 0.7,
-		AllocatorPoolSize:   10,
+		ParallelThreshold:   parallelThreshold,
+		WorkerPoolSize:      workerPoolSize,
+		ChunkSize:           chunkSize,
+		MaxParallelism:      maxParallelism,
+		GCPressureThreshold: gcPressureThreshold,
+		AllocatorPoolSize:   allocatorPoolSize,
 	}
 
 	validated, warnings, err := validator.Validate(validConfig)
@@ -256,7 +302,7 @@ func demonstrateConfigValidation() {
 	// Test invalid configuration
 	invalidConfig := config.Config{
 		ParallelThreshold:   -1,  // Invalid
-		GCPressureThreshold: 1.5, // Invalid
+		GCPressureThreshold: 1.5, //nolint:mnd // Invalid value for demo
 	}
 
 	_, _, err = validator.Validate(invalidConfig)
@@ -271,7 +317,7 @@ func createSampleDataFrame(mem memory.Allocator, size int) *dataframe.DataFrame 
 
 	for i := range size {
 		ids[i] = int64(i)
-		values[i] = float64(i) * 1.5
+		values[i] = float64(i) * dataMultiplier
 	}
 
 	s1 := series.New("id", ids, mem)

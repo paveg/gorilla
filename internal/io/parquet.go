@@ -3,6 +3,7 @@ package io
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 
@@ -171,17 +172,41 @@ func (r *ParquetReader) convertArrowArrayToSeries(
 	//nolint:exhaustive // Only handling supported types for now
 	switch dataType.ID() {
 	case arrow.INT64:
-		return r.convertInt64Array(name, arr.(*array.Int64))
+		int64Array, ok := arr.(*array.Int64)
+		if !ok {
+			return nil, errors.New("failed to cast to int64 array")
+		}
+		return r.convertInt64Array(name, int64Array)
 	case arrow.INT32:
-		return r.convertInt32Array(name, arr.(*array.Int32))
+		int32Array, ok := arr.(*array.Int32)
+		if !ok {
+			return nil, errors.New("failed to cast to int32 array")
+		}
+		return r.convertInt32Array(name, int32Array)
 	case arrow.FLOAT64:
-		return r.convertFloat64Array(name, arr.(*array.Float64))
+		float64Array, ok := arr.(*array.Float64)
+		if !ok {
+			return nil, errors.New("failed to cast to float64 array")
+		}
+		return r.convertFloat64Array(name, float64Array)
 	case arrow.FLOAT32:
-		return r.convertFloat32Array(name, arr.(*array.Float32))
+		float32Array, ok := arr.(*array.Float32)
+		if !ok {
+			return nil, errors.New("failed to cast to float32 array")
+		}
+		return r.convertFloat32Array(name, float32Array)
 	case arrow.STRING:
-		return r.convertStringArray(name, arr.(*array.String))
+		stringArray, ok := arr.(*array.String)
+		if !ok {
+			return nil, errors.New("failed to cast to string array")
+		}
+		return r.convertStringArray(name, stringArray)
 	case arrow.BOOL:
-		return r.convertBoolArray(name, arr.(*array.Boolean))
+		boolArray, ok := arr.(*array.Boolean)
+		if !ok {
+			return nil, errors.New("failed to cast to boolean array")
+		}
+		return r.convertBoolArray(name, boolArray)
 	default:
 		return nil, fmt.Errorf("unsupported Arrow type: %s", dataType)
 	}
@@ -189,7 +214,7 @@ func (r *ParquetReader) convertArrowArrayToSeries(
 
 func (r *ParquetReader) convertInt64Array(name string, arr *array.Int64) (dataframe.ISeries, error) {
 	values := make([]int64, arr.Len())
-	for i := 0; i < arr.Len(); i++ {
+	for i := range arr.Len() {
 		values[i] = arr.Value(i)
 	}
 	return series.NewSafe(name, values, r.mem)
@@ -197,7 +222,7 @@ func (r *ParquetReader) convertInt64Array(name string, arr *array.Int64) (datafr
 
 func (r *ParquetReader) convertInt32Array(name string, arr *array.Int32) (dataframe.ISeries, error) {
 	values := make([]int32, arr.Len())
-	for i := 0; i < arr.Len(); i++ {
+	for i := range arr.Len() {
 		values[i] = arr.Value(i)
 	}
 	return series.NewSafe(name, values, r.mem)
@@ -205,7 +230,7 @@ func (r *ParquetReader) convertInt32Array(name string, arr *array.Int32) (datafr
 
 func (r *ParquetReader) convertFloat64Array(name string, arr *array.Float64) (dataframe.ISeries, error) {
 	values := make([]float64, arr.Len())
-	for i := 0; i < arr.Len(); i++ {
+	for i := range arr.Len() {
 		values[i] = arr.Value(i)
 	}
 	return series.NewSafe(name, values, r.mem)
@@ -213,7 +238,7 @@ func (r *ParquetReader) convertFloat64Array(name string, arr *array.Float64) (da
 
 func (r *ParquetReader) convertFloat32Array(name string, arr *array.Float32) (dataframe.ISeries, error) {
 	values := make([]float32, arr.Len())
-	for i := 0; i < arr.Len(); i++ {
+	for i := range arr.Len() {
 		values[i] = arr.Value(i)
 	}
 	return series.NewSafe(name, values, r.mem)
@@ -221,7 +246,7 @@ func (r *ParquetReader) convertFloat32Array(name string, arr *array.Float32) (da
 
 func (r *ParquetReader) convertStringArray(name string, arr *array.String) (dataframe.ISeries, error) {
 	values := make([]string, arr.Len())
-	for i := 0; i < arr.Len(); i++ {
+	for i := range arr.Len() {
 		values[i] = arr.Value(i)
 	}
 	return series.NewSafe(name, values, r.mem)
@@ -229,7 +254,7 @@ func (r *ParquetReader) convertStringArray(name string, arr *array.String) (data
 
 func (r *ParquetReader) convertBoolArray(name string, arr *array.Boolean) (dataframe.ISeries, error) {
 	values := make([]bool, arr.Len())
-	for i := 0; i < arr.Len(); i++ {
+	for i := range arr.Len() {
 		values[i] = arr.Value(i)
 	}
 	return series.NewSafe(name, values, r.mem)
@@ -281,60 +306,102 @@ func (w *ParquetWriter) seriesToArrowArray(s dataframe.ISeries, mem memory.Alloc
 
 	switch dataTypeName {
 	case "int64":
-		typed := s.(*series.Series[int64])
-		builder := array.NewInt64Builder(mem)
-		defer builder.Release()
-
-		values := typed.Values()
-		builder.AppendValues(values, nil)
-		return builder.NewArray(), nil
-
+		return w.convertInt64SeriesToArrow(s, mem)
 	case "int32":
-		typed := s.(*series.Series[int32])
-		builder := array.NewInt32Builder(mem)
-		defer builder.Release()
-
-		values := typed.Values()
-		builder.AppendValues(values, nil)
-		return builder.NewArray(), nil
-
+		return w.convertInt32SeriesToArrow(s, mem)
 	case "float64":
-		typed := s.(*series.Series[float64])
-		builder := array.NewFloat64Builder(mem)
-		defer builder.Release()
-
-		values := typed.Values()
-		builder.AppendValues(values, nil)
-		return builder.NewArray(), nil
-
+		return w.convertFloat64SeriesToArrow(s, mem)
 	case "float32":
-		typed := s.(*series.Series[float32])
-		builder := array.NewFloat32Builder(mem)
-		defer builder.Release()
-
-		values := typed.Values()
-		builder.AppendValues(values, nil)
-		return builder.NewArray(), nil
-
+		return w.convertFloat32SeriesToArrow(s, mem)
 	case "utf8":
-		typed := s.(*series.Series[string])
-		builder := array.NewStringBuilder(mem)
-		defer builder.Release()
-
-		values := typed.Values()
-		builder.AppendValues(values, nil)
-		return builder.NewArray(), nil
-
+		return w.convertStringSeriesToArrow(s, mem)
 	case "bool":
-		typed := s.(*series.Series[bool])
-		builder := array.NewBooleanBuilder(mem)
-		defer builder.Release()
-
-		values := typed.Values()
-		builder.AppendValues(values, nil)
-		return builder.NewArray(), nil
-
+		return w.convertBoolSeriesToArrow(s, mem)
 	default:
 		return nil, fmt.Errorf("unsupported series type: %s", dataTypeName)
 	}
+}
+
+// convertInt64SeriesToArrow converts an int64 series to Arrow array.
+func (w *ParquetWriter) convertInt64SeriesToArrow(s dataframe.ISeries, mem memory.Allocator) (arrow.Array, error) {
+	typed, ok := s.(*series.Series[int64])
+	if !ok {
+		return nil, errors.New("failed to cast to int64 series")
+	}
+	builder := array.NewInt64Builder(mem)
+	defer builder.Release()
+
+	values := typed.Values()
+	builder.AppendValues(values, nil)
+	return builder.NewArray(), nil
+}
+
+// convertInt32SeriesToArrow converts an int32 series to Arrow array.
+func (w *ParquetWriter) convertInt32SeriesToArrow(s dataframe.ISeries, mem memory.Allocator) (arrow.Array, error) {
+	typed, ok := s.(*series.Series[int32])
+	if !ok {
+		return nil, errors.New("failed to cast to int32 series")
+	}
+	builder := array.NewInt32Builder(mem)
+	defer builder.Release()
+
+	values := typed.Values()
+	builder.AppendValues(values, nil)
+	return builder.NewArray(), nil
+}
+
+// convertFloat64SeriesToArrow converts a float64 series to Arrow array.
+func (w *ParquetWriter) convertFloat64SeriesToArrow(s dataframe.ISeries, mem memory.Allocator) (arrow.Array, error) {
+	typed, ok := s.(*series.Series[float64])
+	if !ok {
+		return nil, errors.New("failed to cast to float64 series")
+	}
+	builder := array.NewFloat64Builder(mem)
+	defer builder.Release()
+
+	values := typed.Values()
+	builder.AppendValues(values, nil)
+	return builder.NewArray(), nil
+}
+
+// convertFloat32SeriesToArrow converts a float32 series to Arrow array.
+func (w *ParquetWriter) convertFloat32SeriesToArrow(s dataframe.ISeries, mem memory.Allocator) (arrow.Array, error) {
+	typed, ok := s.(*series.Series[float32])
+	if !ok {
+		return nil, errors.New("failed to cast to float32 series")
+	}
+	builder := array.NewFloat32Builder(mem)
+	defer builder.Release()
+
+	values := typed.Values()
+	builder.AppendValues(values, nil)
+	return builder.NewArray(), nil
+}
+
+// convertStringSeriesToArrow converts a string series to Arrow array.
+func (w *ParquetWriter) convertStringSeriesToArrow(s dataframe.ISeries, mem memory.Allocator) (arrow.Array, error) {
+	typed, ok := s.(*series.Series[string])
+	if !ok {
+		return nil, errors.New("failed to cast to string series")
+	}
+	builder := array.NewStringBuilder(mem)
+	defer builder.Release()
+
+	values := typed.Values()
+	builder.AppendValues(values, nil)
+	return builder.NewArray(), nil
+}
+
+// convertBoolSeriesToArrow converts a bool series to Arrow array.
+func (w *ParquetWriter) convertBoolSeriesToArrow(s dataframe.ISeries, mem memory.Allocator) (arrow.Array, error) {
+	typed, ok := s.(*series.Series[bool])
+	if !ok {
+		return nil, errors.New("failed to cast to bool series")
+	}
+	builder := array.NewBooleanBuilder(mem)
+	defer builder.Release()
+
+	values := typed.Values()
+	builder.AppendValues(values, nil)
+	return builder.NewArray(), nil
 }

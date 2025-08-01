@@ -1,4 +1,4 @@
-package config
+package config_test
 
 import (
 	"encoding/json"
@@ -6,12 +6,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/paveg/gorilla/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestConfig_DefaultValues(t *testing.T) {
-	config := NewConfig()
+	config := config.NewConfig()
 
 	// Test default values match expected constants
 	assert.Equal(t, 1000, config.ParallelThreshold)
@@ -19,7 +20,7 @@ func TestConfig_DefaultValues(t *testing.T) {
 	assert.Equal(t, 0, config.ChunkSize)      // 0 means auto-calculate
 	assert.Equal(t, 16, config.MaxParallelism)
 	assert.Equal(t, int64(0), config.MemoryThreshold)
-	assert.Equal(t, 0.8, config.GCPressureThreshold)
+	assert.InDelta(t, 0.8, config.GCPressureThreshold, 0.001)
 	assert.Equal(t, 10, config.AllocatorPoolSize)
 	assert.True(t, config.FilterFusion)
 	assert.True(t, config.PredicatePushdown)
@@ -32,12 +33,12 @@ func TestConfig_DefaultValues(t *testing.T) {
 func TestConfig_Validation(t *testing.T) {
 	tests := []struct {
 		name          string
-		config        Config
+		config        config.Config
 		expectedError string
 	}{
 		{
 			name: "valid config",
-			config: Config{
+			config: config.Config{
 				ParallelThreshold:   500,
 				WorkerPoolSize:      4,
 				ChunkSize:           100,
@@ -49,7 +50,7 @@ func TestConfig_Validation(t *testing.T) {
 		},
 		{
 			name: "negative parallel threshold",
-			config: Config{
+			config: config.Config{
 				ParallelThreshold:   -1,
 				MaxParallelism:      8,
 				GCPressureThreshold: 0.7,
@@ -59,7 +60,7 @@ func TestConfig_Validation(t *testing.T) {
 		},
 		{
 			name: "negative worker pool size",
-			config: Config{
+			config: config.Config{
 				ParallelThreshold:   1000,
 				WorkerPoolSize:      -1,
 				MaxParallelism:      8,
@@ -70,7 +71,7 @@ func TestConfig_Validation(t *testing.T) {
 		},
 		{
 			name: "negative chunk size",
-			config: Config{
+			config: config.Config{
 				ParallelThreshold:   1000,
 				ChunkSize:           -1,
 				MaxParallelism:      8,
@@ -81,7 +82,7 @@ func TestConfig_Validation(t *testing.T) {
 		},
 		{
 			name: "invalid GC pressure threshold",
-			config: Config{
+			config: config.Config{
 				ParallelThreshold:   1000,
 				GCPressureThreshold: 1.5,
 				MaxParallelism:      8,
@@ -113,7 +114,7 @@ func TestConfig_LoadFromJSON(t *testing.T) {
 		"enable_profiling": true
 	}`
 
-	config, err := LoadFromJSON([]byte(jsonData))
+	config, err := config.LoadFromJSON([]byte(jsonData))
 	require.NoError(t, err)
 
 	assert.Equal(t, 2000, config.ParallelThreshold)
@@ -140,7 +141,7 @@ func TestConfig_LoadFromFile(t *testing.T) {
 	require.NoError(t, err)
 	_ = tmpFile.Close()
 
-	config, err := LoadFromFile(tmpFile.Name())
+	config, err := config.LoadFromFile(tmpFile.Name())
 	require.NoError(t, err)
 
 	assert.Equal(t, 1500, config.ParallelThreshold)
@@ -155,18 +156,18 @@ func TestConfig_LoadFromEnv(t *testing.T) {
 	originalProfiling := os.Getenv("GORILLA_ENABLE_PROFILING")
 
 	// Set test environment variables
-	_ = os.Setenv("GORILLA_PARALLEL_THRESHOLD", "3000")
-	_ = os.Setenv("GORILLA_WORKER_POOL_SIZE", "12")
-	_ = os.Setenv("GORILLA_ENABLE_PROFILING", "true")
+	t.Setenv("GORILLA_PARALLEL_THRESHOLD", "3000")
+	t.Setenv("GORILLA_WORKER_POOL_SIZE", "12")
+	t.Setenv("GORILLA_ENABLE_PROFILING", "true")
 
 	// Restore environment after test
 	defer func() {
-		_ = os.Setenv("GORILLA_PARALLEL_THRESHOLD", originalThreshold)
-		_ = os.Setenv("GORILLA_WORKER_POOL_SIZE", originalWorkerPool)
-		_ = os.Setenv("GORILLA_ENABLE_PROFILING", originalProfiling)
+		t.Setenv("GORILLA_PARALLEL_THRESHOLD", originalThreshold)
+		t.Setenv("GORILLA_WORKER_POOL_SIZE", originalWorkerPool)
+		t.Setenv("GORILLA_ENABLE_PROFILING", originalProfiling)
 	}()
 
-	config := LoadFromEnv()
+	config := config.LoadFromEnv()
 
 	assert.Equal(t, 3000, config.ParallelThreshold)
 	assert.Equal(t, 12, config.WorkerPoolSize)
@@ -174,7 +175,7 @@ func TestConfig_LoadFromEnv(t *testing.T) {
 }
 
 func TestConfig_WithDefaults(t *testing.T) {
-	config := Config{
+	config := config.Config{
 		ParallelThreshold: 2000,
 		// Other fields left as zero values
 	}
@@ -190,19 +191,19 @@ func TestConfig_WithDefaults(t *testing.T) {
 
 func TestGlobalConfig_SetAndGet(t *testing.T) {
 	// Save original global config
-	originalConfig := GetGlobalConfig()
+	originalConfig := config.GetGlobalConfig()
 
 	// Restore after test
-	defer SetGlobalConfig(originalConfig)
+	defer config.SetGlobalConfig(originalConfig)
 
-	newConfig := Config{
+	newConfig := config.Config{
 		ParallelThreshold: 5000,
 		WorkerPoolSize:    16,
 		EnableProfiling:   true,
 	}
 
-	SetGlobalConfig(newConfig)
-	retrievedConfig := GetGlobalConfig()
+	config.SetGlobalConfig(newConfig)
+	retrievedConfig := config.GetGlobalConfig()
 
 	assert.Equal(t, 5000, retrievedConfig.ParallelThreshold)
 	assert.Equal(t, 16, retrievedConfig.WorkerPoolSize)
@@ -210,7 +211,7 @@ func TestGlobalConfig_SetAndGet(t *testing.T) {
 }
 
 func TestOperationConfig_Defaults(t *testing.T) {
-	opConfig := OperationConfig{}
+	opConfig := config.OperationConfig{}
 
 	assert.False(t, opConfig.ForceParallel)
 	assert.False(t, opConfig.DisableParallel)
@@ -219,27 +220,27 @@ func TestOperationConfig_Defaults(t *testing.T) {
 }
 
 func TestConfig_ToJSON(t *testing.T) {
-	config := Config{
+	cfg := config.Config{
 		ParallelThreshold: 1500,
 		WorkerPoolSize:    8,
 		EnableProfiling:   true,
 	}
 
-	data, err := json.Marshal(config)
+	data, err := json.Marshal(cfg)
 	require.NoError(t, err)
 
 	// Verify we can unmarshal it back
-	var unmarshaledConfig Config
+	var unmarshaledConfig config.Config
 	err = json.Unmarshal(data, &unmarshaledConfig)
 	require.NoError(t, err)
 
-	assert.Equal(t, config.ParallelThreshold, unmarshaledConfig.ParallelThreshold)
-	assert.Equal(t, config.WorkerPoolSize, unmarshaledConfig.WorkerPoolSize)
-	assert.Equal(t, config.EnableProfiling, unmarshaledConfig.EnableProfiling)
+	assert.Equal(t, cfg.ParallelThreshold, unmarshaledConfig.ParallelThreshold)
+	assert.Equal(t, cfg.WorkerPoolSize, unmarshaledConfig.WorkerPoolSize)
+	assert.Equal(t, cfg.EnableProfiling, unmarshaledConfig.EnableProfiling)
 }
 
 func TestConfig_PerformanceDefaults(t *testing.T) {
-	config := NewConfig()
+	config := config.NewConfig()
 
 	// Test that performance-related defaults are sensible
 	assert.Positive(t, config.ParallelThreshold)
@@ -253,7 +254,7 @@ func TestConfig_PerformanceDefaults(t *testing.T) {
 }
 
 func TestConfig_BooleanDefaults(t *testing.T) {
-	config := NewConfig()
+	config := config.NewConfig()
 
 	// Test optimization defaults (should be enabled)
 	assert.True(t, config.FilterFusion)
@@ -275,8 +276,8 @@ func TestConfig_UnsupportedFileFormat(t *testing.T) {
 	_, _ = tmpFile.WriteString("some content")
 	_ = tmpFile.Close()
 
-	_, err = LoadFromFile(tmpFile.Name())
-	assert.Error(t, err)
+	_, err = config.LoadFromFile(tmpFile.Name())
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported config file format")
 }
 
@@ -286,17 +287,17 @@ func TestConfig_InvalidJSON(t *testing.T) {
 		"worker_pool_size": 8
 	}`
 
-	_, err := LoadFromJSON([]byte(invalidJSON))
+	_, err := config.LoadFromJSON([]byte(invalidJSON))
 	assert.Error(t, err)
 }
 
 func TestConfig_LoadFromNonExistentFile(t *testing.T) {
-	_, err := LoadFromFile("/nonexistent/config.json")
+	_, err := config.LoadFromFile("/nonexistent/config.json")
 	assert.Error(t, err)
 }
 
 func TestConfig_MemoryCalculations(t *testing.T) {
-	config := Config{
+	config := config.Config{
 		MemoryThreshold: 1024 * 1024 * 100, // 100MB
 	}
 
@@ -306,9 +307,9 @@ func TestConfig_MemoryCalculations(t *testing.T) {
 
 func TestConfig_EnvironmentVariableParsing(t *testing.T) {
 	// Test invalid environment variable values
-	_ = os.Setenv("GORILLA_PARALLEL_THRESHOLD", "invalid_number")
-	_ = os.Setenv("GORILLA_WORKER_POOL_SIZE", "not_a_number")
-	_ = os.Setenv("GORILLA_ENABLE_PROFILING", "invalid_bool")
+	t.Setenv("GORILLA_PARALLEL_THRESHOLD", "invalid_number")
+	t.Setenv("GORILLA_WORKER_POOL_SIZE", "not_a_number")
+	t.Setenv("GORILLA_ENABLE_PROFILING", "invalid_bool")
 
 	defer func() {
 		_ = os.Unsetenv("GORILLA_PARALLEL_THRESHOLD")
@@ -317,14 +318,14 @@ func TestConfig_EnvironmentVariableParsing(t *testing.T) {
 	}()
 
 	// Should not panic and should use defaults for invalid values
-	config := LoadFromEnv()
+	config := config.LoadFromEnv()
 	assert.Equal(t, 1000, config.ParallelThreshold) // Default value
 	assert.Equal(t, 0, config.WorkerPoolSize)       // Default value
 	assert.False(t, config.EnableProfiling)         // Default value
 }
 
 func TestConfig_SystemInfo(t *testing.T) {
-	info := GetSystemInfo()
+	info := config.GetSystemInfo()
 
 	assert.Positive(t, info.CPUCount)
 	assert.Positive(t, info.MemorySize)
@@ -333,9 +334,9 @@ func TestConfig_SystemInfo(t *testing.T) {
 }
 
 func TestConfig_ValidationRecommendations(t *testing.T) {
-	validator := NewConfigValidator()
+	validator := config.NewConfigValidator()
 
-	config := Config{
+	config := config.Config{
 		ParallelThreshold:   500,
 		WorkerPoolSize:      0, // Should auto-detect
 		ChunkSize:           0, // Should auto-calculate
@@ -369,7 +370,7 @@ enable_profiling: false
 	require.NoError(t, err)
 	_ = tmpFile.Close()
 
-	config, err := LoadFromFile(tmpFile.Name())
+	config, err := config.LoadFromFile(tmpFile.Name())
 	require.NoError(t, err)
 
 	assert.Equal(t, 2000, config.ParallelThreshold)
@@ -380,8 +381,8 @@ enable_profiling: false
 }
 
 func TestConfig_PerformanceTuner(t *testing.T) {
-	config := NewConfig()
-	tuner := NewPerformanceTuner(&config)
+	cfg := config.NewConfig()
+	tuner := config.NewPerformanceTuner(&cfg)
 
 	// Test optimization for small dataset
 	optimized := tuner.OptimizeForDataset(50, 5)
@@ -393,7 +394,7 @@ func TestConfig_PerformanceTuner(t *testing.T) {
 }
 
 func TestConfig_ConfigWithTimeout(t *testing.T) {
-	config := NewConfig()
+	config := config.NewConfig()
 
 	// Test that the config can be loaded within reasonable time
 	start := time.Now()

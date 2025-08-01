@@ -1,3 +1,4 @@
+//nolint:testpackage // requires internal access to unexported types and functions
 package sql
 
 import (

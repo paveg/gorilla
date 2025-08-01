@@ -1,3 +1,4 @@
+//nolint:testpackage // requires internal access to unexported types and functions
 package dataframe
 
 import (
@@ -522,7 +523,7 @@ func TestGroupByOperationComplexHaving(t *testing.T) {
 		teamCol, exists := result.Column("team")
 		require.True(t, exists)
 		teamResults := make([]string, 0)
-		for i := 0; i < teamCol.Len(); i++ {
+		for i := range teamCol.Len() {
 			teamResults = append(teamResults, teamCol.GetAsString(i))
 		}
 		assert.Contains(t, teamResults, "A")
@@ -780,7 +781,7 @@ func TestGroupByOperationErrorHandling(t *testing.T) {
 		)
 
 		_, err := operation.Apply(df)
-		assert.Error(t, err)
+		require.Error(t, err)
 		// The error should indicate either HAVING validation or column not found
 		// Both are valid error cases for invalid predicates
 		errorContainsExpected := strings.Contains(err.Error(), "HAVING clause must contain aggregation functions") ||
@@ -803,7 +804,7 @@ func TestGroupByOperationErrorHandling(t *testing.T) {
 		)
 
 		_, err := operation.Apply(df)
-		assert.Error(t, err)
+		require.Error(t, err)
 		// Error should mention the missing column in aggregation context
 	})
 
@@ -898,7 +899,7 @@ func TestGroupByOperationLazyIntegration(t *testing.T) {
 		productCol, exists := result.Column("product")
 		require.True(t, exists)
 		productResults := make([]string, 0)
-		for i := 0; i < productCol.Len(); i++ {
+		for i := range productCol.Len() {
 			productResults = append(productResults, productCol.GetAsString(i))
 		}
 		assert.Contains(t, productResults, "A")

@@ -1,8 +1,10 @@
+//nolint:testpackage // requires internal access to unexported types and functions
 package dataframe
 
 import (
 	"encoding/json"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -39,6 +41,7 @@ func TestDebugConfig(t *testing.T) {
 			OutputFormat: OutputFormatJSON,
 		}
 
+		assert.True(t, config.Enabled)
 		assert.Equal(t, LogLevelTrace, config.LogLevel)
 		assert.Equal(t, OutputFormatJSON, config.OutputFormat)
 	})
@@ -71,11 +74,11 @@ func TestQueryAnalyzer(t *testing.T) {
 		analyzer := NewQueryAnalyzer(config)
 
 		// Trace a simple operation
-		result, err := analyzer.TraceOperation("filter", df, func() (*DataFrame, error) {
+		result, traceErr := analyzer.TraceOperation("filter", df, func() (*DataFrame, error) {
 			return df.Lazy().Filter(expr.Col("age").Gt(expr.Lit(30))).Collect()
 		})
 
-		require.NoError(t, err)
+		require.NoError(t, traceErr)
 		defer result.Release()
 
 		assert.Equal(t, 3, result.Len()) // Bob, Charlie, David, Eve should pass filter
@@ -98,15 +101,15 @@ func TestQueryAnalyzer(t *testing.T) {
 		analyzer := NewQueryAnalyzer(config)
 
 		// Trace multiple operations
-		_, err := analyzer.TraceOperation("filter", df, func() (*DataFrame, error) {
+		_, traceErr1 := analyzer.TraceOperation("filter", df, func() (*DataFrame, error) {
 			return df.Lazy().Filter(expr.Col("age").Gt(expr.Lit(30))).Collect()
 		})
-		require.NoError(t, err)
+		require.NoError(t, traceErr1)
 
-		_, err = analyzer.TraceOperation("select", df, func() (*DataFrame, error) {
+		_, traceErr2 := analyzer.TraceOperation("select", df, func() (*DataFrame, error) {
 			return df.Select("name"), nil
 		})
-		require.NoError(t, err)
+		require.NoError(t, traceErr2)
 
 		report := analyzer.GenerateReport()
 
@@ -124,22 +127,22 @@ func TestQueryAnalyzer(t *testing.T) {
 		analyzer := NewQueryAnalyzer(config)
 
 		// Simulate a slow operation
-		_, err := analyzer.TraceOperation("slow_operation", df, func() (*DataFrame, error) {
+		_, slowErr := analyzer.TraceOperation("slow_operation", df, func() (*DataFrame, error) {
 			time.Sleep(100 * time.Millisecond)
 			return df.Select("name"), nil
 		})
-		require.NoError(t, err)
+		require.NoError(t, slowErr)
 
 		// Add a fast operation
-		_, err = analyzer.TraceOperation("fast_operation", df, func() (*DataFrame, error) {
+		_, fastErr := analyzer.TraceOperation("fast_operation", df, func() (*DataFrame, error) {
 			return df.Select("age"), nil
 		})
-		require.NoError(t, err)
+		require.NoError(t, fastErr)
 
 		report := analyzer.GenerateReport()
 
 		// The slow operation should be identified as a bottleneck
-		assert.Positive(t, len(report.Bottlenecks))
+		assert.NotEmpty(t, report.Bottlenecks)
 		assert.Contains(t, report.Bottlenecks[0].Operation, "slow_operation")
 	})
 
@@ -156,15 +159,15 @@ func TestQueryAnalyzer(t *testing.T) {
 		defer largeDF.Release()
 
 		// Trace operation on large dataset
-		_, err := analyzer.TraceOperation("large_filter", largeDF, func() (*DataFrame, error) {
+		_, largeErr := analyzer.TraceOperation("large_filter", largeDF, func() (*DataFrame, error) {
 			return largeDF.Lazy().Filter(expr.Col("age").Gt(expr.Lit(30))).Collect()
 		})
-		require.NoError(t, err)
+		require.NoError(t, largeErr)
 
 		report := analyzer.GenerateReport()
 
 		// Should suggest parallelization for large operations
-		assert.Positive(t, len(report.Suggestions))
+		assert.NotEmpty(t, report.Suggestions)
 		assert.Contains(t, report.Suggestions[0], "Consider parallelizing")
 	})
 
@@ -175,11 +178,11 @@ func TestQueryAnalyzer(t *testing.T) {
 
 		analyzer := NewQueryAnalyzer(config)
 
-		result, err := analyzer.TraceOperation("filter", df, func() (*DataFrame, error) {
+		result, disabledErr := analyzer.TraceOperation("filter", df, func() (*DataFrame, error) {
 			return df.Lazy().Filter(expr.Col("age").Gt(expr.Lit(30))).Collect()
 		})
 
-		require.NoError(t, err)
+		require.NoError(t, disabledErr)
 		defer result.Release()
 
 		// Should not have recorded any operations
@@ -228,7 +231,7 @@ func TestDebugExecutionPlan(t *testing.T) {
 		plan := lazyFrame.Explain()
 
 		assert.NotNil(t, plan.RootNode)
-		assert.Positive(t, len(plan.RootNode.Children))
+		assert.NotEmpty(t, plan.RootNode.Children)
 
 		// Walk through the plan tree to verify structure
 		current := plan.RootNode
@@ -249,8 +252,8 @@ func TestDebugExecutionPlan(t *testing.T) {
 			Filter(expr.Col("age").Gt(expr.Lit(30))).
 			Select("name")
 
-		plan, err := lazyFrame.ExplainAnalyze()
-		require.NoError(t, err)
+		plan, explainErr := lazyFrame.ExplainAnalyze()
+		require.NoError(t, explainErr)
 
 		assert.NotNil(t, plan.RootNode)
 		assert.Positive(t, plan.Actual.TotalDuration)
@@ -315,12 +318,12 @@ func TestDebugExecutionPlanRendering(t *testing.T) {
 			Select("name")
 
 		plan := lazyFrame.Explain()
-		jsonBytes, err := plan.RenderJSON()
-		require.NoError(t, err)
+		jsonBytes, renderErr := plan.RenderJSON()
+		require.NoError(t, renderErr)
 
 		var jsonPlan map[string]interface{}
-		err = json.Unmarshal(jsonBytes, &jsonPlan)
-		require.NoError(t, err)
+		unmarshalErr := json.Unmarshal(jsonBytes, &jsonPlan)
+		require.NoError(t, unmarshalErr)
 
 		assert.Contains(t, jsonPlan, "root")
 		assert.Contains(t, jsonPlan, "estimated")
@@ -332,8 +335,8 @@ func TestDebugExecutionPlanRendering(t *testing.T) {
 			Filter(expr.Col("age").Gt(expr.Lit(30))).
 			Select("name")
 
-		plan, err := lazyFrame.ExplainAnalyze()
-		require.NoError(t, err)
+		plan, analyzeErr := lazyFrame.ExplainAnalyze()
+		require.NoError(t, analyzeErr)
 
 		textPlan := plan.RenderText()
 
@@ -408,10 +411,7 @@ func createLargeTestDataFrame(mem memory.Allocator, size int) *DataFrame {
 func TestPlanNodeTree(t *testing.T) {
 	t.Run("creates proper node hierarchy", func(t *testing.T) {
 		root := &PlanNode{
-			ID:          "root",
-			Type:        "LazyFrame",
-			Description: "Root operation",
-			Properties:  make(map[string]string),
+			ID: "root",
 		}
 
 		filterNode := &PlanNode{
@@ -487,13 +487,112 @@ func TestMemoryStats(t *testing.T) {
 	})
 }
 
-func TestTraceIDGeneration(t *testing.T) {
+func TestDebugContext(t *testing.T) {
+	t.Run("creates new debug context", func(t *testing.T) {
+		debugCtx := NewDebugContext()
+		assert.NotNil(t, debugCtx)
+		// Note: traceCounter and contextID are private fields, so we test functionality instead
+		// by verifying that trace ID generation works
+		id := debugCtx.GenerateTraceID()
+		assert.True(t, strings.HasPrefix(id, "trace_"))
+	})
+
 	t.Run("generates unique trace IDs", func(t *testing.T) {
-		id1 := generateTraceID()
-		id2 := generateTraceID()
+		debugCtx := NewDebugContext()
+		id1 := debugCtx.GenerateTraceID()
+		id2 := debugCtx.GenerateTraceID()
 
 		assert.NotEqual(t, id1, id2)
 		assert.True(t, strings.HasPrefix(id1, "trace_"))
 		assert.True(t, strings.HasPrefix(id2, "trace_"))
+	})
+
+	t.Run("generates unique trace IDs across different contexts", func(t *testing.T) {
+		debugCtx1 := NewDebugContext()
+		debugCtx2 := NewDebugContext()
+
+		id1 := debugCtx1.GenerateTraceID()
+		id2 := debugCtx2.GenerateTraceID()
+		id3 := debugCtx1.GenerateTraceID()
+
+		assert.NotEqual(t, id1, id2)
+		assert.NotEqual(t, id1, id3)
+		assert.NotEqual(t, id2, id3)
+		assert.True(t, strings.HasPrefix(id1, "trace_"))
+		assert.True(t, strings.HasPrefix(id2, "trace_"))
+		assert.True(t, strings.HasPrefix(id3, "trace_"))
+	})
+
+	t.Run("thread safety of trace ID generation", func(t *testing.T) {
+		debugCtx := NewDebugContext()
+		const numGoroutines = 100
+		const numIDsPerGoroutine = 10
+
+		var wg sync.WaitGroup
+		idChannel := make(chan string, numGoroutines*numIDsPerGoroutine)
+
+		// Launch goroutines to generate trace IDs concurrently
+		for range numGoroutines {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for range numIDsPerGoroutine {
+					id := debugCtx.GenerateTraceID()
+					idChannel <- id
+				}
+			}()
+		}
+
+		wg.Wait()
+		close(idChannel)
+
+		// Collect all IDs and check for uniqueness
+		ids := make(map[string]bool)
+		count := 0
+		for id := range idChannel {
+			assert.False(t, ids[id], "Duplicate trace ID found: %s", id)
+			assert.True(t, strings.HasPrefix(id, "trace_"))
+			ids[id] = true
+			count++
+		}
+
+		assert.Equal(t, numGoroutines*numIDsPerGoroutine, count)
+		assert.Len(t, ids, numGoroutines*numIDsPerGoroutine)
+	})
+}
+
+func TestTraceIDGeneration(t *testing.T) {
+	t.Run("generates unique trace IDs", func(t *testing.T) {
+		debugCtx := NewDebugContext()
+		id1 := debugCtx.GenerateTraceID()
+		id2 := debugCtx.GenerateTraceID()
+
+		assert.NotEqual(t, id1, id2)
+		assert.True(t, strings.HasPrefix(id1, "trace_"))
+		assert.True(t, strings.HasPrefix(id2, "trace_"))
+	})
+
+	t.Run("generates unique trace IDs across different contexts", func(t *testing.T) {
+		debugCtx1 := NewDebugContext()
+		debugCtx2 := NewDebugContext()
+
+		// Generate multiple IDs from each context to ensure internal counters work
+		ids := make([]string, 0, 6)
+		ids = append(ids, debugCtx1.GenerateTraceID())
+		ids = append(ids, debugCtx2.GenerateTraceID())
+		ids = append(ids, debugCtx1.GenerateTraceID())
+		ids = append(ids, debugCtx2.GenerateTraceID())
+		ids = append(ids, debugCtx1.GenerateTraceID())
+		ids = append(ids, debugCtx2.GenerateTraceID())
+
+		// Verify all IDs are unique
+		uniqueIDs := make(map[string]bool)
+		for _, id := range ids {
+			assert.False(t, uniqueIDs[id], "Duplicate ID found: %s", id)
+			assert.True(t, strings.HasPrefix(id, "trace_"))
+			uniqueIDs[id] = true
+		}
+
+		assert.Len(t, uniqueIDs, len(ids))
 	})
 }

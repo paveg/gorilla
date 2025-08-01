@@ -1,14 +1,15 @@
-package errors
+package errors_test
 
 import (
 	"testing"
 
+	"github.com/paveg/gorilla/internal/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestEnhancedDataFrameError_WithContext(t *testing.T) {
-	err := NewColumnNotFoundError("Filter", "missing_col")
+	err := errors.NewColumnNotFoundError("Filter", "missing_col")
 	enhanced := err.WithContext(map[string]string{
 		"available_columns": "name, age, salary",
 		"total_columns":     "3",
@@ -16,12 +17,12 @@ func TestEnhancedDataFrameError_WithContext(t *testing.T) {
 
 	assert.Contains(t, enhanced.Error(), "missing_col")
 	// Context should appear in debug format
-	debugMsg := enhanced.Format(ErrorLevelDebug)
+	debugMsg := enhanced.Format(errors.ErrorLevelDebug)
 	assert.Contains(t, debugMsg, "available_columns: name, age, salary")
 }
 
 func TestEnhancedDataFrameError_WithHint(t *testing.T) {
-	err := NewColumnNotFoundError("Select", "nam")
+	err := errors.NewColumnNotFoundError("Select", "nam")
 	enhanced := err.WithHint("Did you mean 'name'? Available columns: [name, age, salary]")
 
 	errorMsg := enhanced.Error()
@@ -29,13 +30,13 @@ func TestEnhancedDataFrameError_WithHint(t *testing.T) {
 }
 
 func TestEnhancedDataFrameError_WithDataFrameInfo(t *testing.T) {
-	info := DataFrameInfo{
+	info := errors.DataFrameInfo{
 		Rows:    1000,
 		Columns: []string{"name", "age", "salary"},
 		Types:   map[string]string{"name": "string", "age": "int64", "salary": "float64"},
 	}
 
-	err := NewColumnNotFoundError("GroupBy", "department")
+	err := errors.NewColumnNotFoundError("GroupBy", "department")
 	enhanced := err.WithDataFrameInfo(info)
 
 	errorMsg := enhanced.Error()
@@ -45,7 +46,7 @@ func TestEnhancedDataFrameError_WithDataFrameInfo(t *testing.T) {
 
 func TestColumnNotFoundErrorWithSuggestions(t *testing.T) {
 	availableColumns := []string{"customer_name", "customer_age", "customer_email"}
-	err := NewColumnNotFoundErrorWithSuggestions("Filter", "custmer_name", availableColumns)
+	err := errors.NewColumnNotFoundErrorWithSuggestions("Filter", "custmer_name", availableColumns)
 
 	errorMsg := err.Error()
 	assert.Contains(t, errorMsg, "Column 'custmer_name' does not exist")
@@ -54,7 +55,7 @@ func TestColumnNotFoundErrorWithSuggestions(t *testing.T) {
 }
 
 func TestTypeMismatchErrorWithDetails(t *testing.T) {
-	err := NewTypeMismatchError("Add", "age", "int64", "string")
+	err := errors.NewTypeMismatchError("Add", "age", "int64", "string")
 
 	errorMsg := err.Error()
 	assert.Contains(t, errorMsg, "Type mismatch in column 'age'")
@@ -63,7 +64,7 @@ func TestTypeMismatchErrorWithDetails(t *testing.T) {
 }
 
 func TestIndexOutOfBoundsErrorWithDetails(t *testing.T) {
-	err := NewIndexOutOfBoundsError("Slice", 15, 10)
+	err := errors.NewIndexOutOfBoundsError("Slice", 15, 10)
 
 	errorMsg := err.Error()
 	assert.Contains(t, errorMsg, "Index 15 is out of bounds")
@@ -71,13 +72,13 @@ func TestIndexOutOfBoundsErrorWithDetails(t *testing.T) {
 }
 
 func TestErrorWithProgressiveDisclosure(t *testing.T) {
-	info := DataFrameInfo{
+	info := errors.DataFrameInfo{
 		Rows:    500,
 		Columns: []string{"id", "name", "score"},
 		Types:   map[string]string{"id": "int64", "name": "string", "score": "float64"},
 	}
 
-	err := NewColumnNotFoundError("Sort", "points").
+	err := errors.NewColumnNotFoundError("Sort", "points").
 		WithHint("Did you mean 'score'?").
 		WithDataFrameInfo(info).
 		WithContext(map[string]string{
@@ -86,21 +87,21 @@ func TestErrorWithProgressiveDisclosure(t *testing.T) {
 		})
 
 	t.Run("Simple format", func(t *testing.T) {
-		simple := err.Format(ErrorLevelSimple)
+		simple := err.Format(errors.ErrorLevelSimple)
 		assert.Contains(t, simple, "column does not exist")
 		assert.NotContains(t, simple, "Hint:")
 		assert.NotContains(t, simple, "Available columns:")
 	})
 
 	t.Run("Detailed format", func(t *testing.T) {
-		detailed := err.Format(ErrorLevelDetailed)
+		detailed := err.Format(errors.ErrorLevelDetailed)
 		assert.Contains(t, detailed, "column does not exist")
 		assert.Contains(t, detailed, "Hint: Did you mean 'score'?")
 		assert.Contains(t, detailed, "Available columns: [id, name, score]")
 	})
 
 	t.Run("Debug format", func(t *testing.T) {
-		debug := err.Format(ErrorLevelDebug)
+		debug := err.Format(errors.ErrorLevelDebug)
 		assert.Contains(t, debug, "column does not exist")
 		assert.Contains(t, debug, "operation_step: 2/3")
 		assert.Contains(t, debug, "query_id: sort_query_001")
@@ -109,17 +110,17 @@ func TestErrorWithProgressiveDisclosure(t *testing.T) {
 }
 
 func TestOperationContextError(t *testing.T) {
-	ctx := OperationContext{
+	ctx := errors.OperationContext{
 		Operation:  "complex_query",
 		Step:       2,
 		TotalSteps: 5,
-		DataInfo: DataFrameInfo{
+		DataInfo: errors.DataFrameInfo{
 			Rows:    1000,
 			Columns: []string{"user_id", "timestamp", "value"},
 		},
 	}
 
-	originalErr := NewColumnNotFoundError("Filter", "user_name")
+	originalErr := errors.NewColumnNotFoundError("Filter", "user_name")
 	wrappedErr := ctx.WrapError(originalErr)
 
 	errorMsg := wrappedErr.Error()
@@ -129,8 +130,8 @@ func TestOperationContextError(t *testing.T) {
 }
 
 func TestErrorChaining(t *testing.T) {
-	err1 := NewColumnNotFoundError("Join", "user_id")
-	err2 := NewInvalidInputError("Pipeline", "join operation failed")
+	err1 := errors.NewColumnNotFoundError("Join", "user_id")
+	err2 := errors.NewInvalidInputError("Pipeline", "join operation failed")
 
 	chained := err2.WithCause(err1)
 
@@ -141,13 +142,13 @@ func TestErrorChaining(t *testing.T) {
 }
 
 func TestValidationErrorWithDataFrameContext(t *testing.T) {
-	info := DataFrameInfo{
+	info := errors.DataFrameInfo{
 		Rows:    0,
 		Columns: []string{},
 		Types:   map[string]string{},
 	}
 
-	err := NewValidationError("Sort", "", "cannot sort empty DataFrame").
+	err := errors.NewValidationError("Sort", "", "cannot sort empty DataFrame").
 		WithDataFrameInfo(info).
 		WithHint("Add data to the DataFrame before sorting")
 
@@ -192,8 +193,10 @@ func TestSimilarColumnSuggestions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			suggestions := findSimilarColumns(tt.searchColumn, tt.availableColumns)
-			assert.Contains(t, suggestions, tt.expectedSuggestion)
+			// Test through the public API by creating a column not found error with suggestions
+			err := errors.NewColumnNotFoundErrorWithSuggestions("Test", tt.searchColumn, tt.availableColumns)
+			errorMessage := err.Error()
+			assert.Contains(t, errorMessage, tt.expectedSuggestion)
 		})
 	}
 }

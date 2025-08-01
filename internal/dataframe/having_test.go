@@ -1,3 +1,4 @@
+//nolint:testpackage // requires internal access to unexported types and functions
 package dataframe
 
 import (
@@ -133,7 +134,7 @@ func TestHavingOperation_ErrorHandling(t *testing.T) {
 		lazy := df.Lazy().GroupBy("col1").Having(havingPredicate)
 		_, err := lazy.Collect(context.Background())
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "HAVING clause must contain aggregation functions")
 	})
 
@@ -152,7 +153,7 @@ func TestHavingOperation_ErrorHandling(t *testing.T) {
 		lazy := df.Lazy().GroupBy("group").Having(havingPredicate)
 		_, err := lazy.Collect(ctx)
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "context canceled")
 	})
 
@@ -169,7 +170,7 @@ func TestHavingOperation_ErrorHandling(t *testing.T) {
 		lazy := df.Lazy().GroupBy("group").Having(havingPredicate)
 		_, err := lazy.Collect(context.Background())
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "sum_nonexistent")
 	})
 }
@@ -291,7 +292,7 @@ func TestHavingOperation_Integration(t *testing.T) {
 		productCol, exists := result.Column("product")
 		require.True(t, exists)
 		products := make([]string, 0)
-		for i := 0; i < productCol.Len(); i++ {
+		for i := range productCol.Len() {
 			products = append(products, productCol.GetAsString(i))
 		}
 

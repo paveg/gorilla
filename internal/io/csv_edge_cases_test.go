@@ -1,4 +1,4 @@
-package io
+package io_test
 
 import (
 	"strings"
@@ -6,6 +6,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/paveg/gorilla/internal/dataframe"
+	"github.com/paveg/gorilla/internal/io"
 	"github.com/paveg/gorilla/internal/series"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,7 +20,7 @@ func TestCSVEdgeCases(t *testing.T) {
 "John Doe","A person with, comma in description"
 "Jane Smith","Another person, also with comma"`
 
-		reader := NewCSVReader(strings.NewReader(csvData), DefaultCSVOptions(), mem)
+		reader := io.NewCSVReader(strings.NewReader(csvData), io.DefaultCSVOptions(), mem)
 		df, err := reader.Read()
 		require.NoError(t, err)
 		defer df.Release()
@@ -34,7 +35,7 @@ func TestCSVEdgeCases(t *testing.T) {
 newline in description"
 "Jane Smith","Normal description"`
 
-		reader := NewCSVReader(strings.NewReader(csvData), DefaultCSVOptions(), mem)
+		reader := io.NewCSVReader(strings.NewReader(csvData), io.DefaultCSVOptions(), mem)
 		df, err := reader.Read()
 		require.NoError(t, err)
 		defer df.Release()
@@ -48,7 +49,7 @@ newline in description"
 "John Doe","He said ""Hello"" to me"
 "Jane Smith","She said ""Goodbye"""`
 
-		reader := NewCSVReader(strings.NewReader(csvData), DefaultCSVOptions(), mem)
+		reader := io.NewCSVReader(strings.NewReader(csvData), io.DefaultCSVOptions(), mem)
 		df, err := reader.Read()
 		require.NoError(t, err)
 		defer df.Release()
@@ -63,7 +64,7 @@ Alice,,50000
 ,30,
 Bob,25,`
 
-		reader := NewCSVReader(strings.NewReader(csvData), DefaultCSVOptions(), mem)
+		reader := io.NewCSVReader(strings.NewReader(csvData), io.DefaultCSVOptions(), mem)
 		df, err := reader.Read()
 		require.NoError(t, err)
 		defer df.Release()
@@ -78,10 +79,10 @@ Alice,25,50000
 Bob,30
 Charlie,35,70000,extra`
 
-		reader := NewCSVReader(strings.NewReader(csvData), DefaultCSVOptions(), mem)
+		reader := io.NewCSVReader(strings.NewReader(csvData), io.DefaultCSVOptions(), mem)
 		_, err := reader.Read()
 		// The Go CSV parser is strict about field counts, so this should return an error
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("handles whitespace with skip initial space", func(t *testing.T) {
@@ -89,10 +90,10 @@ Charlie,35,70000,extra`
 Alice, 25, 50000
 Bob, 30, 60000`
 
-		options := DefaultCSVOptions()
+		options := io.DefaultCSVOptions()
 		options.SkipInitialSpace = true
 
-		reader := NewCSVReader(strings.NewReader(csvData), options, mem)
+		reader := io.NewCSVReader(strings.NewReader(csvData), options, mem)
 		df, err := reader.Read()
 		require.NoError(t, err)
 		defer df.Release()
@@ -109,10 +110,10 @@ Alice,25,50000
 # Another comment
 Bob,30,60000`
 
-		options := DefaultCSVOptions()
+		options := io.DefaultCSVOptions()
 		options.Comment = '#'
 
-		reader := NewCSVReader(strings.NewReader(csvData), options, mem)
+		reader := io.NewCSVReader(strings.NewReader(csvData), options, mem)
 		df, err := reader.Read()
 		require.NoError(t, err)
 		defer df.Release()
@@ -126,7 +127,7 @@ Bob,30,60000`
 Alice,9223372036854775807,1.7976931348623157e+308
 Bob,-9223372036854775808,2.2250738585072014e-308`
 
-		reader := NewCSVReader(strings.NewReader(csvData), DefaultCSVOptions(), mem)
+		reader := io.NewCSVReader(strings.NewReader(csvData), io.DefaultCSVOptions(), mem)
 		df, err := reader.Read()
 		require.NoError(t, err)
 		defer df.Release()
@@ -141,7 +142,7 @@ Alice,Tokyo,😀
 Bob,Москва,🚀
 Charlie,München,🎉`
 
-		reader := NewCSVReader(strings.NewReader(csvData), DefaultCSVOptions(), mem)
+		reader := io.NewCSVReader(strings.NewReader(csvData), io.DefaultCSVOptions(), mem)
 		df, err := reader.Read()
 		require.NoError(t, err)
 		defer df.Release()
@@ -156,9 +157,9 @@ Alice,25,50000
 Bob,30,60000,extra,fields
 Charlie,"unclosed quote`
 
-		reader := NewCSVReader(strings.NewReader(csvData), DefaultCSVOptions(), mem)
+		reader := io.NewCSVReader(strings.NewReader(csvData), io.DefaultCSVOptions(), mem)
 		_, err := reader.Read()
-		assert.Error(t, err) // Should return an error for malformed CSV
+		require.Error(t, err) // Should return an error for malformed CSV
 	})
 
 	t.Run("handles very long fields", func(t *testing.T) {
@@ -167,7 +168,7 @@ Charlie,"unclosed quote`
 Alice,` + longString + `
 Bob,short`
 
-		reader := NewCSVReader(strings.NewReader(csvData), DefaultCSVOptions(), mem)
+		reader := io.NewCSVReader(strings.NewReader(csvData), io.DefaultCSVOptions(), mem)
 		df, err := reader.Read()
 		require.NoError(t, err)
 		defer df.Release()
@@ -191,7 +192,7 @@ func TestCSVWriterEdgeCases(t *testing.T) {
 		defer df.Release()
 
 		var output strings.Builder
-		writer := NewCSVWriter(&output, DefaultCSVOptions())
+		writer := io.NewCSVWriter(&output, io.DefaultCSVOptions())
 		err := writer.Write(df)
 		require.NoError(t, err)
 
@@ -210,7 +211,7 @@ func TestCSVWriterEdgeCases(t *testing.T) {
 		defer df.Release()
 
 		var output strings.Builder
-		writer := NewCSVWriter(&output, DefaultCSVOptions())
+		writer := io.NewCSVWriter(&output, io.DefaultCSVOptions())
 		err := writer.Write(df)
 		require.NoError(t, err)
 
@@ -225,7 +226,7 @@ func TestCSVWriterEdgeCases(t *testing.T) {
 		defer df.Release()
 
 		var output strings.Builder
-		writer := NewCSVWriter(&output, DefaultCSVOptions())
+		writer := io.NewCSVWriter(&output, io.DefaultCSVOptions())
 		err := writer.Write(df)
 		require.NoError(t, err)
 
@@ -240,7 +241,7 @@ func TestCSVWriterEdgeCases(t *testing.T) {
 		defer df.Release()
 
 		var output strings.Builder
-		writer := NewCSVWriter(&output, DefaultCSVOptions())
+		writer := io.NewCSVWriter(&output, io.DefaultCSVOptions())
 		err := writer.Write(df)
 		require.NoError(t, err)
 
@@ -258,7 +259,7 @@ func TestCSVTypeInferenceEdgeCases(t *testing.T) {
 abc
 456`
 
-		reader := NewCSVReader(strings.NewReader(csvData), DefaultCSVOptions(), mem)
+		reader := io.NewCSVReader(strings.NewReader(csvData), io.DefaultCSVOptions(), mem)
 		df, err := reader.Read()
 		require.NoError(t, err)
 		defer df.Release()
@@ -275,7 +276,7 @@ abc
 4.56e-5
 789`
 
-		reader := NewCSVReader(strings.NewReader(csvData), DefaultCSVOptions(), mem)
+		reader := io.NewCSVReader(strings.NewReader(csvData), io.DefaultCSVOptions(), mem)
 		df, err := reader.Read()
 		require.NoError(t, err)
 		defer df.Release()
@@ -293,7 +294,7 @@ false
 True
 False`
 
-		reader := NewCSVReader(strings.NewReader(csvData), DefaultCSVOptions(), mem)
+		reader := io.NewCSVReader(strings.NewReader(csvData), io.DefaultCSVOptions(), mem)
 		df, err := reader.Read()
 		require.NoError(t, err)
 		defer df.Release()
@@ -311,7 +312,7 @@ False`
 ""
 ""`
 
-		reader := NewCSVReader(strings.NewReader(csvData), DefaultCSVOptions(), mem)
+		reader := io.NewCSVReader(strings.NewReader(csvData), io.DefaultCSVOptions(), mem)
 		df, err := reader.Read()
 		require.NoError(t, err)
 		defer df.Release()

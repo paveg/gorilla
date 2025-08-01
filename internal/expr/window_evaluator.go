@@ -370,9 +370,8 @@ func (e *Evaluator) compareRows(
 		if cmp != 0 {
 			if order.ascending {
 				return cmp > 0, nil
-			} else {
-				return cmp < 0, nil
 			}
+			return cmp < 0, nil
 		}
 	}
 	return false, nil
@@ -636,41 +635,65 @@ func (e *Evaluator) buildTypedArrayResult(
 ) (arrow.Array, error) {
 	switch arrayType {
 	case typeInt64:
-		builder := array.NewInt64Builder(e.mem)
-		defer builder.Release()
-		for i := range dataLength {
-			if result[i] == nil {
-				builder.AppendNull()
-			} else {
-				builder.Append(result[i].(int64))
-			}
-		}
-		return builder.NewArray(), nil
+		return e.buildInt64Array(result, dataLength)
 	case "string":
-		builder := array.NewStringBuilder(e.mem)
-		defer builder.Release()
-		for i := range dataLength {
-			if result[i] == nil {
-				builder.AppendNull()
-			} else {
-				builder.Append(result[i].(string))
-			}
-		}
-		return builder.NewArray(), nil
+		return e.buildStringArray(result, dataLength)
 	case typeFloat64:
-		builder := array.NewFloat64Builder(e.mem)
-		defer builder.Release()
-		for i := range dataLength {
-			if result[i] == nil {
-				builder.AppendNull()
-			} else {
-				builder.Append(result[i].(float64))
-			}
-		}
-		return builder.NewArray(), nil
+		return e.buildFloat64Array(result, dataLength)
 	default:
 		return nil, fmt.Errorf("unsupported array type: %s", arrayType)
 	}
+}
+
+// buildInt64Array builds an Int64 array from interface{} slice.
+func (e *Evaluator) buildInt64Array(result []interface{}, dataLength int) (arrow.Array, error) {
+	builder := array.NewInt64Builder(e.mem)
+	defer builder.Release()
+
+	for i := range dataLength {
+		if result[i] == nil {
+			builder.AppendNull()
+		} else if int64Val, ok := result[i].(int64); ok {
+			builder.Append(int64Val)
+		} else {
+			builder.AppendNull() // Fallback for type assertion failure.
+		}
+	}
+	return builder.NewArray(), nil
+}
+
+// buildStringArray builds a String array from interface{} slice.
+func (e *Evaluator) buildStringArray(result []interface{}, dataLength int) (arrow.Array, error) {
+	builder := array.NewStringBuilder(e.mem)
+	defer builder.Release()
+
+	for i := range dataLength {
+		if result[i] == nil {
+			builder.AppendNull()
+		} else if stringVal, ok := result[i].(string); ok {
+			builder.Append(stringVal)
+		} else {
+			builder.AppendNull() // Fallback for type assertion failure.
+		}
+	}
+	return builder.NewArray(), nil
+}
+
+// buildFloat64Array builds a Float64 array from interface{} slice.
+func (e *Evaluator) buildFloat64Array(result []interface{}, dataLength int) (arrow.Array, error) {
+	builder := array.NewFloat64Builder(e.mem)
+	defer builder.Release()
+
+	for i := range dataLength {
+		if result[i] == nil {
+			builder.AppendNull()
+		} else if float64Val, ok := result[i].(float64); ok {
+			builder.Append(float64Val)
+		} else {
+			builder.AppendNull() // Fallback for type assertion failure.
+		}
+	}
+	return builder.NewArray(), nil
 }
 
 // createInt64AggregationResult creates aggregation result for Int64 arrays.
@@ -818,37 +841,9 @@ func (e *Evaluator) evaluatePercentRank(
 
 	// Handle partitioning
 	if len(window.partitionBy) > 0 {
-		// Process each partition separately
-		partitions := e.buildPartitions(window.partitionBy, columns, dataLength)
-
-		for _, partition := range partitions {
-			ranks := e.calculateRanksForPartition(partition, window, columns)
-
-			// Convert ranks to percent ranks
-			partitionSize := len(partition)
-			for _, rank := range ranks {
-				var percentRank float64
-				if partitionSize <= 1 {
-					percentRank = 0.0
-				} else {
-					percentRank = float64(rank-1) / float64(partitionSize-1)
-				}
-				builder.Append(percentRank)
-			}
-		}
+		e.processPartitionedPercentRank(builder, window, columns, dataLength)
 	} else {
-		// No partitioning - calculate for entire dataset
-		ranks := e.calculateRanks(window, columns, dataLength)
-
-		for _, rank := range ranks {
-			var percentRank float64
-			if dataLength <= 1 {
-				percentRank = 0.0
-			} else {
-				percentRank = float64(rank-1) / float64(dataLength-1)
-			}
-			builder.Append(percentRank)
-		}
+		e.processUnpartitionedPercentRank(builder, window, columns, dataLength)
 	}
 
 	return builder.NewArray(), nil
@@ -907,22 +902,54 @@ func (e *Evaluator) evaluateNthValue(
 	columns map[string]arrow.Array,
 	dataLength int,
 ) (arrow.Array, error) {
-	if len(expr.args) < nthValueMinArgs {
-		return nil, errors.New("NTH_VALUE requires two arguments")
+	n, column, err := e.validateAndExtractNthValueArgs(expr, columns)
+	if err != nil {
+		return nil, err
 	}
 
-	// Get the N value (which position to get)
-	nLit, ok := expr.args[1].(*LiteralExpr)
-	if !ok {
-		return nil, errors.New("NTH_VALUE second argument must be a literal")
+	return e.buildNthValueResult(column, n, dataLength)
+}
+
+// validateAndExtractNthValueArgs validates NTH_VALUE arguments and extracts n and column.
+func (e *Evaluator) validateAndExtractNthValueArgs(
+	expr *WindowFunctionExpr,
+	columns map[string]arrow.Array,
+) (int, arrow.Array, error) {
+	if len(expr.args) < nthValueMinArgs {
+		return 0, nil, errors.New("NTH_VALUE requires two arguments")
 	}
+
+	n, err := e.extractNthValuePosition(expr.args[1])
+	if err != nil {
+		return 0, nil, err
+	}
+
+	column, err := e.extractNthValueColumn(expr.args[0], columns)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	return n, column, nil
+}
+
+// extractNthValuePosition extracts and validates the position argument.
+func (e *Evaluator) extractNthValuePosition(arg Expr) (int, error) {
+	nLit, ok := arg.(*LiteralExpr)
+	if !ok {
+		return 0, errors.New("NTH_VALUE second argument must be a literal")
+	}
+
 	n, ok := nLit.value.(int)
 	if !ok || n <= 0 {
-		return nil, errors.New("NTH_VALUE second argument must be a positive integer")
+		return 0, errors.New("NTH_VALUE second argument must be a positive integer")
 	}
 
-	// Get the column to evaluate
-	colExpr, ok := expr.args[0].(*ColumnExpr)
+	return n, nil
+}
+
+// extractNthValueColumn extracts and validates the column argument.
+func (e *Evaluator) extractNthValueColumn(arg Expr, columns map[string]arrow.Array) (arrow.Array, error) {
+	colExpr, ok := arg.(*ColumnExpr)
 	if !ok {
 		return nil, errors.New("NTH_VALUE first argument must be a column")
 	}
@@ -932,38 +959,49 @@ func (e *Evaluator) evaluateNthValue(
 		return nil, fmt.Errorf("column %s not found", colExpr.name)
 	}
 
-	// Create result array based on column type
+	return column, nil
+}
+
+// buildNthValueResult builds the result array based on column type.
+func (e *Evaluator) buildNthValueResult(column arrow.Array, n, dataLength int) (arrow.Array, error) {
 	switch arr := column.(type) {
 	case *array.Int64:
-		builder := array.NewInt64Builder(e.mem)
-		defer builder.Release()
-
-		// Simplified logic: Get the nth value for each frame
-		for range dataLength {
-			if n <= arr.Len() && !arr.IsNull(n-1) {
-				builder.Append(arr.Value(n - 1))
-			} else {
-				builder.AppendNull()
-			}
-		}
-		return builder.NewArray(), nil
-
+		return e.buildNthValueInt64Result(arr, n, dataLength)
 	case *array.String:
-		builder := array.NewStringBuilder(e.mem)
-		defer builder.Release()
-
-		for range dataLength {
-			if n <= arr.Len() && !arr.IsNull(n-1) {
-				builder.Append(arr.Value(n - 1))
-			} else {
-				builder.AppendNull()
-			}
-		}
-		return builder.NewArray(), nil
-
+		return e.buildNthValueStringResult(arr, n, dataLength)
 	default:
 		return nil, fmt.Errorf("unsupported column type for NTH_VALUE: %T", column)
 	}
+}
+
+// buildNthValueInt64Result builds Int64 result for NTH_VALUE.
+func (e *Evaluator) buildNthValueInt64Result(arr *array.Int64, n, dataLength int) (arrow.Array, error) {
+	builder := array.NewInt64Builder(e.mem)
+	defer builder.Release()
+
+	for range dataLength {
+		if n <= arr.Len() && !arr.IsNull(n-1) {
+			builder.Append(arr.Value(n - 1))
+		} else {
+			builder.AppendNull()
+		}
+	}
+	return builder.NewArray(), nil
+}
+
+// buildNthValueStringResult builds String result for NTH_VALUE.
+func (e *Evaluator) buildNthValueStringResult(arr *array.String, n, dataLength int) (arrow.Array, error) {
+	builder := array.NewStringBuilder(e.mem)
+	defer builder.Release()
+
+	for range dataLength {
+		if n <= arr.Len() && !arr.IsNull(n-1) {
+			builder.Append(arr.Value(n - 1))
+		} else {
+			builder.AppendNull()
+		}
+	}
+	return builder.NewArray(), nil
 }
 
 // evaluateNtile implements NTILE() window function.
@@ -1036,7 +1074,7 @@ func (e *Evaluator) calculateRanksForPartition(
 	_ map[string]arrow.Array,
 ) []int {
 	ranks := make([]int, len(partition))
-	for i := range len(partition) {
+	for i := range partition {
 		ranks[i] = i + 1
 	}
 	return ranks
@@ -1095,4 +1133,50 @@ func (e *Evaluator) buildPartitions(
 		partition[i] = i
 	}
 	return [][]int{partition}
+}
+
+// processPartitionedPercentRank processes percent rank for partitioned data.
+func (e *Evaluator) processPartitionedPercentRank(
+	builder *array.Float64Builder,
+	window *WindowSpec,
+	columns map[string]arrow.Array,
+	dataLength int,
+) {
+	partitions := e.buildPartitions(window.partitionBy, columns, dataLength)
+
+	for _, partition := range partitions {
+		ranks := e.calculateRanksForPartition(partition, window, columns)
+
+		// Convert ranks to percent ranks
+		partitionSize := len(partition)
+		for _, rank := range ranks {
+			var percentRank float64
+			if partitionSize <= 1 {
+				percentRank = 0.0
+			} else {
+				percentRank = float64(rank-1) / float64(partitionSize-1)
+			}
+			builder.Append(percentRank)
+		}
+	}
+}
+
+// processUnpartitionedPercentRank processes percent rank for unpartitioned data.
+func (e *Evaluator) processUnpartitionedPercentRank(
+	builder *array.Float64Builder,
+	window *WindowSpec,
+	columns map[string]arrow.Array,
+	dataLength int,
+) {
+	ranks := e.calculateRanks(window, columns, dataLength)
+
+	for _, rank := range ranks {
+		var percentRank float64
+		if dataLength <= 1 {
+			percentRank = 0.0
+		} else {
+			percentRank = float64(rank-1) / float64(dataLength-1)
+		}
+		builder.Append(percentRank)
+	}
 }

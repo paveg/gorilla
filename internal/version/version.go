@@ -18,6 +18,10 @@ const (
 )
 
 // Build-time variables set by ldflags.
+// These global variables are required for build-time injection via ldflags.
+// Refactoring these to non-global would break the Makefile's -ldflags -X functionality.
+//
+//nolint:gochecknoglobals // Required for ldflags build-time injection
 var (
 	Version   = "dev"
 	BuildDate = unknownValue

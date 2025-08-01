@@ -8,19 +8,19 @@ import (
 	"github.com/paveg/gorilla/internal/expr"
 )
 
-// SQLStatementType represents the type of SQL statement.
-type SQLStatementType int
+// StatementType represents the type of SQL statement.
+type StatementType int
 
 const (
-	SelectStatementType SQLStatementType = iota
+	SelectStatementType StatementType = iota
 	InsertStatementType
 	UpdateStatementType
 	DeleteStatementType
 )
 
-// SQLStatement interface for all SQL statement types.
-type SQLStatement interface {
-	StatementType() SQLStatementType
+// Statement interface for all SQL statement types.
+type Statement interface {
+	StatementType() StatementType
 	String() string
 }
 
@@ -35,7 +35,7 @@ type SelectStatement struct {
 	LimitClause   *LimitClause
 }
 
-func (s *SelectStatement) StatementType() SQLStatementType {
+func (s *SelectStatement) StatementType() StatementType {
 	return SelectStatementType
 }
 
@@ -259,13 +259,13 @@ func (l *LimitClause) String() string {
 	return result
 }
 
-// SQLFunction represents a SQL function call.
-type SQLFunction struct {
+// Function represents a SQL function call.
+type Function struct {
 	Name string
 	Args []expr.Expr
 }
 
-func (f *SQLFunction) String() string {
+func (f *Function) String() string {
 	argStrings := make([]string, len(f.Args))
 	for i, arg := range f.Args {
 		argStrings[i] = arg.String()

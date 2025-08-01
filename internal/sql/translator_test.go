@@ -1,3 +1,4 @@
+//nolint:testpackage // requires internal access to unexported types and functions
 package sql
 
 import (
@@ -22,7 +23,7 @@ func createTestDataFrame(mem memory.Allocator) *dataframe.DataFrame {
 }
 
 func TestSQLTranslatorBasic(t *testing.T) {
-	t.Skip("TODO: Fix SQL parser issues before enabling these tests")
+	// Re-enabled: Testing basic SQL translation functionality
 	mem := memory.NewGoAllocator()
 	translator := NewSQLTranslator(mem)
 
@@ -50,7 +51,7 @@ func TestSQLTranslatorBasic(t *testing.T) {
 }
 
 func TestSQLTranslatorWildcard(t *testing.T) {
-	t.Skip("TODO: Fix SQL parser issues before enabling these tests")
+	// Re-enabled: Testing wildcard SELECT translation
 	mem := memory.NewGoAllocator()
 	translator := NewSQLTranslator(mem)
 
@@ -76,7 +77,7 @@ func TestSQLTranslatorWildcard(t *testing.T) {
 }
 
 func TestSQLTranslatorWhere(t *testing.T) {
-	t.Skip("TODO: Fix SQL parser issues before enabling these tests")
+	// Re-enabled: Testing WHERE clause translation
 	mem := memory.NewGoAllocator()
 	translator := NewSQLTranslator(mem)
 
@@ -102,7 +103,7 @@ func TestSQLTranslatorWhere(t *testing.T) {
 }
 
 func TestSQLTranslatorGroupBy(t *testing.T) {
-	t.Skip("TODO: Fix SQL parser issues before enabling these tests")
+	t.Skip("TODO: COUNT(*) aggregation not properly included in result columns")
 	mem := memory.NewGoAllocator()
 	translator := NewSQLTranslator(mem)
 
@@ -129,7 +130,7 @@ func TestSQLTranslatorGroupBy(t *testing.T) {
 }
 
 func TestSQLTranslatorOrderBy(t *testing.T) {
-	t.Skip("TODO: Fix SQL parser issues before enabling these tests")
+	// Re-enabled: Testing ORDER BY translation
 	mem := memory.NewGoAllocator()
 	translator := NewSQLTranslator(mem)
 
@@ -155,7 +156,7 @@ func TestSQLTranslatorOrderBy(t *testing.T) {
 }
 
 func TestSQLTranslatorComputedColumns(t *testing.T) {
-	t.Skip("TODO: Fix SQL parser issues before enabling these tests")
+	// Re-enabled: Testing computed column translation
 	mem := memory.NewGoAllocator()
 	translator := NewSQLTranslator(mem)
 
@@ -251,29 +252,29 @@ func TestSQLTranslatorValidation(t *testing.T) {
 			err = translator.ValidateSQLSyntax(stmt)
 
 			if tt.wantErr {
-				assert.Error(t, err)
+				require.Error(t, err)
 				if tt.errMsg != "" {
 					assert.Contains(t, err.Error(), tt.errMsg)
 				}
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 		})
 	}
 }
 
-func TestSQLFunctionTranslation(t *testing.T) {
+func TestFunctionTranslation(t *testing.T) {
 	mem := memory.NewGoAllocator()
 	translator := NewSQLTranslator(mem)
 
 	tests := []struct {
 		name     string
-		function *SQLFunction
+		function *Function
 		wantErr  bool
 	}{
 		{
 			name: "COUNT function",
-			function: &SQLFunction{
+			function: &Function{
 				Name: "COUNT",
 				Args: []expr.Expr{expr.Lit(1)},
 			},
@@ -281,7 +282,7 @@ func TestSQLFunctionTranslation(t *testing.T) {
 		},
 		{
 			name: "SUM function",
-			function: &SQLFunction{
+			function: &Function{
 				Name: "SUM",
 				Args: []expr.Expr{expr.Col("salary")},
 			},
@@ -289,7 +290,7 @@ func TestSQLFunctionTranslation(t *testing.T) {
 		},
 		{
 			name: "AVG function",
-			function: &SQLFunction{
+			function: &Function{
 				Name: "AVG",
 				Args: []expr.Expr{expr.Col("salary")},
 			},
@@ -297,7 +298,7 @@ func TestSQLFunctionTranslation(t *testing.T) {
 		},
 		{
 			name: "UPPER function",
-			function: &SQLFunction{
+			function: &Function{
 				Name: "UPPER",
 				Args: []expr.Expr{expr.Col("name")},
 			},
@@ -305,7 +306,7 @@ func TestSQLFunctionTranslation(t *testing.T) {
 		},
 		{
 			name: "Invalid SUM - too many args",
-			function: &SQLFunction{
+			function: &Function{
 				Name: "SUM",
 				Args: []expr.Expr{expr.Col("salary"), expr.Col("bonus")},
 			},
@@ -313,7 +314,7 @@ func TestSQLFunctionTranslation(t *testing.T) {
 		},
 		{
 			name: "Invalid UPPER - not a column",
-			function: &SQLFunction{
+			function: &Function{
 				Name: "UPPER",
 				Args: []expr.Expr{expr.Lit("constant")},
 			},
@@ -326,10 +327,10 @@ func TestSQLFunctionTranslation(t *testing.T) {
 			expr, err := translator.TranslateFunctionCall(tt.function)
 
 			if tt.wantErr {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Nil(t, expr)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.NotNil(t, expr)
 			}
 		})
@@ -362,7 +363,7 @@ func TestSQLTranslatorTableManagement(t *testing.T) {
 }
 
 func TestSQLTranslatorErrors(t *testing.T) {
-	t.Skip("TODO: Fix SQL parser issues before enabling these tests")
+	// Re-enabled: Testing error handling in translation
 	mem := memory.NewGoAllocator()
 	translator := NewSQLTranslator(mem)
 
@@ -371,7 +372,7 @@ func TestSQLTranslatorErrors(t *testing.T) {
 	require.NoError(t, err)
 
 	lazy, err := translator.TranslateStatement(stmt)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, lazy)
 	assert.Contains(t, err.Error(), "table not found")
 
@@ -384,13 +385,13 @@ func TestSQLTranslatorErrors(t *testing.T) {
 	selectStmt.FromClause = nil
 
 	lazy, err = translator.TranslateStatement(selectStmt)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, lazy)
 	assert.Contains(t, err.Error(), "FROM clause is required")
 }
 
 func TestComplexSQLTranslation(t *testing.T) {
-	t.Skip("TODO: Fix SQL parser issues before enabling these tests")
+	// Re-enabled: Testing complex SQL translation
 	mem := memory.NewGoAllocator()
 	translator := NewSQLTranslator(mem)
 

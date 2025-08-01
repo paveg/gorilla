@@ -9,6 +9,8 @@
 // The tests showcase realistic business scenarios where these comparison methods
 // would be used to filter grouped aggregations, effectively implementing the
 // functionality needed for SQL HAVING clauses in Gorilla DataFrames.
+//
+//nolint:testpackage // requires internal access to unexported types and functions
 package dataframe
 
 import (

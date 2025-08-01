@@ -261,7 +261,7 @@ func NewSafeDataFrame(data interface{}) *SafeDataFrame {
 
 // Clone creates an independent copy for safe parallel access
 // This will be implemented with actual DataFrame integration.
-func (sdf *SafeDataFrame) Clone(allocator memory.Allocator) (interface{}, error) {
+func (sdf *SafeDataFrame) Clone(_ memory.Allocator) (interface{}, error) {
 	sdf.mu.RLock()
 	defer sdf.mu.RUnlock()
 

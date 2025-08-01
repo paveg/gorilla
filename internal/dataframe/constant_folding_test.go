@@ -1,3 +1,4 @@
+//nolint:testpackage // requires internal access to unexported types and functions
 package dataframe
 
 import (
@@ -27,7 +28,7 @@ type mockBinaryExpr struct {
 	right expr.Expr
 }
 
-func (m *mockBinaryExpr) Type() expr.ExprType {
+func (m *mockBinaryExpr) Type() expr.Type {
 	return expr.ExprBinary
 }
 
@@ -53,7 +54,7 @@ type mockUnaryExpr struct {
 	operand expr.Expr
 }
 
-func (m *mockUnaryExpr) Type() expr.ExprType {
+func (m *mockUnaryExpr) Type() expr.Type {
 	return expr.ExprUnary
 }
 
@@ -75,7 +76,7 @@ type mockFunctionExpr struct {
 	args []expr.Expr
 }
 
-func (m *mockFunctionExpr) Type() expr.ExprType {
+func (m *mockFunctionExpr) Type() expr.Type {
 	return expr.ExprFunction
 }
 
@@ -434,7 +435,7 @@ func TestConstantFoldingRule_EdgeCases(t *testing.T) {
 		literal, ok := result.(*expr.LiteralExpr)
 		require.True(t, ok)
 		// Should return 0.0 for float division by zero
-		assert.Equal(t, 0.0, literal.Value()) // Should return 0.0 for division by zero
+		assert.InDelta(t, 0.0, literal.Value(), 0.001) // Should return 0.0 for division by zero
 	})
 
 	t.Run("Type coercion int to float", func(t *testing.T) {
@@ -443,7 +444,7 @@ func TestConstantFoldingRule_EdgeCases(t *testing.T) {
 
 		literal, ok := result.(*expr.LiteralExpr)
 		require.True(t, ok)
-		assert.Equal(t, 7.5, literal.Value()) // Should be coerced to float
+		assert.InDelta(t, 7.5, literal.Value(), 0.001) // Should be coerced to float
 	})
 }
 

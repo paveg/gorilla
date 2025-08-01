@@ -9,6 +9,12 @@ import (
 	"time"
 )
 
+// Constants for backoff management.
+const (
+	defaultMaxBackoffMs      = 10
+	defaultBackoffMultiplier = 2
+)
+
 // AdvancedWorkerPool provides dynamic scaling, work stealing, and resource management.
 type AdvancedWorkerPool struct {
 	config        AdvancedWorkerPoolConfig
@@ -131,14 +137,21 @@ func ProcessGeneric[T, R any](pool *AdvancedWorkerPool, items []T, worker func(T
 
 	// Wrap worker function
 	interfaceWorker := func(item interface{}) interface{} {
-		return worker(item.(T))
+		if typedItem, ok := item.(T); ok {
+			return worker(typedItem)
+		}
+		var zero R
+		return zero
 	}
 
 	// Process and convert results back
 	interfaceResults := pool.Process(interfaceItems, interfaceWorker)
 	results := make([]R, len(interfaceResults))
 	for i, result := range interfaceResults {
-		results[i] = result.(R)
+		if typedResult, ok := result.(R); ok {
+			results[i] = typedResult
+		}
+		// If type assertion fails, results[i] remains zero value
 	}
 
 	return results
@@ -180,7 +193,7 @@ func (pool *AdvancedWorkerPool) Process(items []interface{}, worker func(interfa
 
 	// Collect results
 	resultSlice := make([]interface{}, len(items))
-	for range len(items) {
+	for range items {
 		select {
 		case result := <-results:
 			resultSlice[result.index] = result.result
@@ -221,13 +234,20 @@ func (pool *AdvancedWorkerPool) ProcessWithPriority(tasks []PriorityTask, worker
 
 	// Process priority queue in order
 	for pool.priorityQueue.Len() > 0 {
-		item := heap.Pop(pool.priorityQueue).(*PriorityItem)
+		poppedItem := heap.Pop(pool.priorityQueue)
+		item, ok := poppedItem.(*PriorityItem)
+		if !ok {
+			continue // Skip invalid items
+		}
 
 		wi := workItem{
 			index: item.Index,
 			data:  item.Task,
 			worker: func(data interface{}) interface{} {
-				return item.Worker(data.(PriorityTask))
+				if task, taskOk := data.(PriorityTask); taskOk {
+					return item.Worker(task)
+				}
+				return nil
 			},
 			result: item.Result,
 		}
@@ -239,10 +259,13 @@ func (pool *AdvancedWorkerPool) ProcessWithPriority(tasks []PriorityTask, worker
 
 	// Collect results
 	resultSlice := make([]int, len(tasks))
-	for range len(tasks) {
+	for range tasks {
 		select {
 		case result := <-results:
-			resultSlice[result.index] = result.result.(int)
+			if intResult, ok := result.result.(int); ok {
+				resultSlice[result.index] = intResult
+			}
+			// If type assertion fails, resultSlice[result.index] remains 0
 		case <-pool.ctx.Done():
 			return nil
 		}
@@ -472,59 +495,93 @@ type advancedWorker struct {
 func (w *advancedWorker) run() {
 	defer w.pool.wg.Done()
 
-	idleBackoff := time.Millisecond
-	const (
-		maxBackoff        = 10 * time.Millisecond
-		backoffMultiplier = 2
-	)
+	backoffManager := w.createBackoffManager()
 
 	for {
-		// Try to get work in priority order:
-		// 1. Local queue (highest priority)
-		// 2. Global queue with timeout
-		// 3. Steal from other workers
-		var workItem *workItem
-
-		// Try local queue first if work stealing is enabled
-		if w.pool.workStealingEnabled && w.stealingQueue != nil {
-			workItem = w.stealingQueue.popLocal()
-		}
-
-		// If no local work, try global queue with blocking receive and timeout
+		workItem := w.findWork(backoffManager)
 		if workItem == nil {
-			select {
-			case <-w.ctx.Done():
-				return
-			case item, ok := <-w.pool.workQueue:
-				if !ok {
-					return
-				}
-				workItem = &item
-				// Reset backoff since we found work
-				idleBackoff = time.Millisecond
-			case <-time.After(idleBackoff):
-				// Timeout occurred, try work stealing
-				if w.pool.workStealingEnabled {
-					workItem = w.stealWork()
-				}
-
-				// If still no work, increase backoff (exponential backoff)
-				if workItem == nil {
-					idleBackoff = minDuration(idleBackoff*backoffMultiplier, maxBackoff)
-				} else {
-					// Reset backoff since we found work
-					idleBackoff = time.Millisecond
-				}
-			}
+			// Context was cancelled
+			return
 		}
 
-		// Process work if we found any
-		if workItem != nil {
-			w.processWork(*workItem)
-			// Reset backoff since we processed work
-			idleBackoff = time.Millisecond
-		}
+		w.processWork(*workItem)
+		backoffManager.reset()
 	}
+}
+
+// backoffManager manages exponential backoff for idle workers.
+type backoffManager struct {
+	current           time.Duration
+	maxBackoff        time.Duration
+	backoffMultiplier int
+}
+
+// createBackoffManager creates a new backoff manager with default settings.
+func (w *advancedWorker) createBackoffManager() *backoffManager {
+	return &backoffManager{
+		current:           time.Millisecond,
+		maxBackoff:        defaultMaxBackoffMs * time.Millisecond,
+		backoffMultiplier: defaultBackoffMultiplier,
+	}
+}
+
+// reset resets the backoff to initial value.
+func (bm *backoffManager) reset() {
+	bm.current = time.Millisecond
+}
+
+// increase increases the backoff duration exponentially.
+func (bm *backoffManager) increase() {
+	bm.current = minDuration(bm.current*time.Duration(bm.backoffMultiplier), bm.maxBackoff)
+}
+
+// findWork attempts to find work using various strategies with backoff.
+func (w *advancedWorker) findWork(backoffManager *backoffManager) *workItem {
+	// Try local queue first
+	if workItem := w.tryLocalQueue(); workItem != nil {
+		return workItem
+	}
+
+	// Try global queue with timeout and stealing
+	return w.tryGlobalQueueWithStealing(backoffManager)
+}
+
+// tryLocalQueue attempts to get work from local stealing queue.
+func (w *advancedWorker) tryLocalQueue() *workItem {
+	if w.pool.workStealingEnabled && w.stealingQueue != nil {
+		return w.stealingQueue.popLocal()
+	}
+	return nil
+}
+
+// tryGlobalQueueWithStealing tries global queue with timeout and stealing fallback.
+func (w *advancedWorker) tryGlobalQueueWithStealing(backoffManager *backoffManager) *workItem {
+	select {
+	case <-w.ctx.Done():
+		return nil
+	case item, ok := <-w.pool.workQueue:
+		if !ok {
+			return nil
+		}
+		return &item
+	case <-time.After(backoffManager.current):
+		return w.handleTimeout(backoffManager)
+	}
+}
+
+// handleTimeout handles timeout by trying work stealing and adjusting backoff.
+func (w *advancedWorker) handleTimeout(backoffManager *backoffManager) *workItem {
+	var workItem *workItem
+
+	if w.pool.workStealingEnabled {
+		workItem = w.stealWork()
+	}
+
+	if workItem == nil {
+		backoffManager.increase()
+	}
+
+	return workItem
 }
 
 func (w *advancedWorker) processWork(item workItem) {
@@ -643,6 +700,8 @@ func (c *cpuMonitor) recommendedWorkers() int {
 }
 
 // PriorityQueue implements a priority queue using a binary heap.
+//
+//nolint:recvcheck // Required by heap.Interface: Len/Less/Swap need value receivers, Push/Pop need pointer receivers
 type PriorityQueue []*PriorityItem
 
 type PriorityItem struct {
@@ -671,8 +730,9 @@ func (pq PriorityQueue) Swap(i, j int) {
 }
 
 func (pq *PriorityQueue) Push(x interface{}) {
-	item := x.(*PriorityItem)
-	*pq = append(*pq, item)
+	if item, ok := x.(*PriorityItem); ok {
+		*pq = append(*pq, item)
+	}
 }
 
 func (pq *PriorityQueue) Pop() interface{} {

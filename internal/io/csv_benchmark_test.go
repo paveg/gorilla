@@ -1,4 +1,4 @@
-package io
+package io_test
 
 import (
 	"bytes"
@@ -8,6 +8,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/paveg/gorilla/internal/dataframe"
+	"github.com/paveg/gorilla/internal/io"
 	"github.com/paveg/gorilla/internal/series"
 )
 
@@ -23,7 +24,7 @@ func BenchmarkCSVReader(b *testing.B) {
 
 			b.ResetTimer()
 			for range b.N {
-				reader := NewCSVReader(strings.NewReader(csvData), DefaultCSVOptions(), mem)
+				reader := io.NewCSVReader(strings.NewReader(csvData), io.DefaultCSVOptions(), mem)
 				df, err := reader.Read()
 				if err != nil {
 					b.Fatal(err)
@@ -47,7 +48,7 @@ func BenchmarkCSVWriter(b *testing.B) {
 			b.ResetTimer()
 			for range b.N {
 				var buf bytes.Buffer
-				writer := NewCSVWriter(&buf, DefaultCSVOptions())
+				writer := io.NewCSVWriter(&buf, io.DefaultCSVOptions())
 				err := writer.Write(df)
 				if err != nil {
 					b.Fatal(err)
@@ -70,7 +71,7 @@ func BenchmarkCSVRoundTrip(b *testing.B) {
 			b.ResetTimer()
 			for range b.N {
 				// Read CSV
-				reader := NewCSVReader(strings.NewReader(csvData), DefaultCSVOptions(), mem)
+				reader := io.NewCSVReader(strings.NewReader(csvData), io.DefaultCSVOptions(), mem)
 				df, err := reader.Read()
 				if err != nil {
 					b.Fatal(err)
@@ -78,7 +79,7 @@ func BenchmarkCSVRoundTrip(b *testing.B) {
 
 				// Write CSV
 				var buf bytes.Buffer
-				writer := NewCSVWriter(&buf, DefaultCSVOptions())
+				writer := io.NewCSVWriter(&buf, io.DefaultCSVOptions())
 				err = writer.Write(df)
 				if err != nil {
 					b.Fatal(err)
@@ -136,27 +137,26 @@ func BenchmarkCSVTypeInference(b *testing.B) {
 
 	// Test different data types
 	testCases := []struct {
-		name string
-		data []string
+		name    string
+		csvData string
 	}{
-		{"int_data", []string{"1", "2", "3", "4", "5"}},
-		{"float_data", []string{"1.5", "2.5", "3.5", "4.5", "5.5"}},
-		{"bool_data", []string{"true", "false", "true", "false", "true"}},
-		{"string_data", []string{"hello", "world", "foo", "bar", "baz"}},
-		{"mixed_data", []string{"1", "hello", "3.5", "true", "world"}},
+		{"int_data", "values\n1\n2\n3\n4\n5"},
+		{"float_data", "values\n1.5\n2.5\n3.5\n4.5\n5.5"},
+		{"bool_data", "values\ntrue\nfalse\ntrue\nfalse\ntrue"},
+		{"string_data", "values\nhello\nworld\nfoo\nbar\nbaz"},
+		{"mixed_data", "values\n1\nhello\n3.5\ntrue\nworld"},
 	}
 
 	for _, tc := range testCases {
 		b.Run(tc.name, func(b *testing.B) {
-			reader := NewCSVReader(strings.NewReader(""), DefaultCSVOptions(), mem)
-
 			b.ResetTimer()
 			for range b.N {
-				series, err := reader.createSeriesFromStrings("test", tc.data)
+				reader := io.NewCSVReader(strings.NewReader(tc.csvData), io.DefaultCSVOptions(), mem)
+				df, err := reader.Read()
 				if err != nil {
 					b.Fatal(err)
 				}
-				series.Release()
+				df.Release()
 			}
 		})
 	}
@@ -173,7 +173,7 @@ func BenchmarkCSVMemoryUsage(b *testing.B) {
 			b.ResetTimer()
 			for range b.N {
 				mem := memory.NewGoAllocator()
-				reader := NewCSVReader(strings.NewReader(csvData), DefaultCSVOptions(), mem)
+				reader := io.NewCSVReader(strings.NewReader(csvData), io.DefaultCSVOptions(), mem)
 				df, err := reader.Read()
 				if err != nil {
 					b.Fatal(err)

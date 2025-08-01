@@ -1,10 +1,13 @@
 package expr
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"strconv"
 	"time"
+
+	"golang.org/x/exp/constraints"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
@@ -265,6 +268,8 @@ func (e *Evaluator) evaluateBinaryBooleanWithContext(
 		return e.evaluateComparison(left, right, expr.op)
 	case OpAnd, OpOr:
 		return e.evaluateLogical(left, right, expr.op)
+	case OpAdd, OpSub, OpMul, OpDiv:
+		return nil, fmt.Errorf("arithmetic operation %v does not produce boolean result", expr.op)
 	default:
 		return nil, fmt.Errorf("binary operation %v does not produce boolean result", expr.op)
 	}
@@ -448,64 +453,21 @@ func (e *Evaluator) evaluateLiteral(expr *LiteralExpr, columns map[string]arrow.
 
 	switch val := expr.value.(type) {
 	case string:
-		builder := array.NewStringBuilder(e.mem)
-		defer builder.Release()
-		for range length {
-			builder.Append(val)
-		}
-		return builder.NewArray(), nil
+		return e.evaluateStringLiteral(val, length)
 	case int32:
-		builder := array.NewInt32Builder(e.mem)
-		defer builder.Release()
-		for range length {
-			builder.Append(val)
-		}
-		return builder.NewArray(), nil
+		return e.evaluateInt32Literal(val, length)
 	case int64:
-		builder := array.NewInt64Builder(e.mem)
-		defer builder.Release()
-		for range length {
-			builder.Append(val)
-		}
-		return builder.NewArray(), nil
+		return e.evaluateInt64Literal(val, length)
 	case int:
-		// Handle platform-dependent int type by converting to int64
-		builder := array.NewInt64Builder(e.mem)
-		defer builder.Release()
-		for range length {
-			builder.Append(int64(val))
-		}
-		return builder.NewArray(), nil
+		return e.evaluateIntLiteral(val, length)
 	case float32:
-		builder := array.NewFloat32Builder(e.mem)
-		defer builder.Release()
-		for range length {
-			builder.Append(val)
-		}
-		return builder.NewArray(), nil
+		return e.evaluateFloat32Literal(val, length)
 	case float64:
-		builder := array.NewFloat64Builder(e.mem)
-		defer builder.Release()
-		for range length {
-			builder.Append(val)
-		}
-		return builder.NewArray(), nil
+		return e.evaluateFloat64Literal(val, length)
 	case bool:
-		builder := array.NewBooleanBuilder(e.mem)
-		defer builder.Release()
-		for range length {
-			builder.Append(val)
-		}
-		return builder.NewArray(), nil
+		return e.evaluateBooleanLiteral(val, length)
 	case time.Time:
-		// Create a timestamp array from time.Time
-		timestampType := &arrow.TimestampType{Unit: arrow.Nanosecond}
-		builder := array.NewTimestampBuilder(e.mem, timestampType)
-		defer builder.Release()
-		for range length {
-			builder.Append(arrow.Timestamp(val.UnixNano()))
-		}
-		return builder.NewArray(), nil
+		return e.evaluateTimeLiteral(val, length)
 	default:
 		return nil, fmt.Errorf("unsupported literal type: %T", val)
 	}
@@ -550,6 +512,8 @@ func (e *Evaluator) evaluateBinaryBoolean(expr *BinaryExpr, columns map[string]a
 		return e.evaluateComparison(left, right, expr.op)
 	case OpAnd, OpOr:
 		return e.evaluateLogical(left, right, expr.op)
+	case OpAdd, OpSub, OpMul, OpDiv:
+		return nil, fmt.Errorf("arithmetic operation %v does not produce boolean result", expr.op)
 	default:
 		return nil, fmt.Errorf("binary operation %v does not produce boolean result", expr.op)
 	}
@@ -604,23 +568,54 @@ func (e *Evaluator) evaluateArithmetic(left, right arrow.Array, op BinaryOp) (ar
 	// Perform arithmetic on the promoted type
 	switch promotedType {
 	case typeInt32:
-		return e.evaluateInt32Arithmetic(leftConverted.(*array.Int32), rightConverted.(*array.Int32), op)
+		leftInt32, ok1 := leftConverted.(*array.Int32)
+		rightInt32, ok2 := rightConverted.(*array.Int32)
+		if !ok1 || !ok2 {
+			return nil, errors.New("type assertion failed for int32 arithmetic")
+		}
+		return e.evaluateInt32Arithmetic(leftInt32, rightInt32, op)
 	case typeInt64:
-		return e.evaluateInt64Arithmetic(leftConverted.(*array.Int64), rightConverted.(*array.Int64), op)
+		leftInt64, ok1 := leftConverted.(*array.Int64)
+		rightInt64, ok2 := rightConverted.(*array.Int64)
+		if !ok1 || !ok2 {
+			return nil, errors.New("type assertion failed for int64 arithmetic")
+		}
+		return e.evaluateInt64Arithmetic(leftInt64, rightInt64, op)
 	case typeFloat32:
-		return e.evaluateFloat32Arithmetic(leftConverted.(*array.Float32), rightConverted.(*array.Float32), op)
+		leftFloat32, ok1 := leftConverted.(*array.Float32)
+		rightFloat32, ok2 := rightConverted.(*array.Float32)
+		if !ok1 || !ok2 {
+			return nil, errors.New("type assertion failed for float32 arithmetic")
+		}
+		return e.evaluateFloat32Arithmetic(leftFloat32, rightFloat32, op)
 	case typeFloat64:
-		return e.evaluateFloat64Arithmetic(leftConverted.(*array.Float64), rightConverted.(*array.Float64), op)
+		leftFloat64, ok1 := leftConverted.(*array.Float64)
+		rightFloat64, ok2 := rightConverted.(*array.Float64)
+		if !ok1 || !ok2 {
+			return nil, errors.New("type assertion failed for float64 arithmetic")
+		}
+		return e.evaluateFloat64Arithmetic(leftFloat64, rightFloat64, op)
 	default:
 		return nil, fmt.Errorf("unsupported promoted type for arithmetic: %s", promotedType)
 	}
 }
 
 func (e *Evaluator) evaluateInt64Arithmetic(left, right *array.Int64, op BinaryOp) (arrow.Array, error) {
-	builder := array.NewInt64Builder(e.mem)
+	return evaluateArithmetic(e.mem, left, right, op, array.NewInt64Builder)
+}
+
+func (e *Evaluator) evaluateFloat64Arithmetic(left, right *array.Float64, op BinaryOp) (arrow.Array, error) {
+	return evaluateArithmetic(e.mem, left, right, op, array.NewFloat64Builder)
+}
+
+// evaluateArithmetic is a generic function for arithmetic operations on numeric arrays.
+func evaluateArithmetic[T constraints.Signed | constraints.Float, A ArithmeticArray[T], B ArithmeticBuilder[T]](
+	mem memory.Allocator, left, right A, op BinaryOp, newBuilder func(memory.Allocator) B,
+) (arrow.Array, error) {
+	builder := newBuilder(mem)
 	defer builder.Release()
 
-	for i := 0; i < left.Len(); i++ {
+	for i := range left.Len() {
 		if left.IsNull(i) || right.IsNull(i) {
 			builder.AppendNull()
 			continue
@@ -629,7 +624,7 @@ func (e *Evaluator) evaluateInt64Arithmetic(left, right *array.Int64, op BinaryO
 		l := left.Value(i)
 		r := right.Value(i)
 
-		var result int64
+		var result T
 		switch op {
 		case OpAdd:
 			result = l + r
@@ -638,11 +633,16 @@ func (e *Evaluator) evaluateInt64Arithmetic(left, right *array.Int64, op BinaryO
 		case OpMul:
 			result = l * r
 		case OpDiv:
+			// Handle division by zero for integer types
 			if r == 0 {
-				builder.AppendNull()
-				continue
+				if isIntegerType(result) {
+					builder.AppendNull()
+					continue
+				}
 			}
 			result = l / r
+		case OpEq, OpNe, OpLt, OpLe, OpGt, OpGe, OpAnd, OpOr:
+			return nil, fmt.Errorf("operation %v is not supported for arithmetic evaluation", op)
 		default:
 			return nil, fmt.Errorf("unsupported arithmetic operation: %v", op)
 		}
@@ -653,37 +653,28 @@ func (e *Evaluator) evaluateInt64Arithmetic(left, right *array.Int64, op BinaryO
 	return builder.NewArray(), nil
 }
 
-func (e *Evaluator) evaluateFloat64Arithmetic(left, right *array.Float64, op BinaryOp) (arrow.Array, error) {
-	builder := array.NewFloat64Builder(e.mem)
-	defer builder.Release()
+// ArithmeticArray defines interface for arrays supporting arithmetic operations.
+type ArithmeticArray[T any] interface {
+	Len() int
+	IsNull(int) bool
+	Value(int) T
+}
 
-	for i := 0; i < left.Len(); i++ {
-		if left.IsNull(i) || right.IsNull(i) {
-			builder.AppendNull()
-			continue
-		}
+type ArithmeticBuilder[T any] interface {
+	Release()
+	AppendNull()
+	Append(T)
+	NewArray() arrow.Array
+}
 
-		l := left.Value(i)
-		r := right.Value(i)
-
-		var result float64
-		switch op {
-		case OpAdd:
-			result = l + r
-		case OpSub:
-			result = l - r
-		case OpMul:
-			result = l * r
-		case OpDiv:
-			result = l / r // Division by zero results in +/-Inf, which is handled by Go
-		default:
-			return nil, fmt.Errorf("unsupported arithmetic operation: %v", op)
-		}
-
-		builder.Append(result)
+// Helper function to check if a type is integer.
+func isIntegerType[T any](val T) bool {
+	switch any(val).(type) {
+	case int32, int64:
+		return true
+	default:
+		return false
 	}
-
-	return builder.NewArray(), nil
 }
 
 func (e *Evaluator) evaluateComparison(left, right arrow.Array, op BinaryOp) (arrow.Array, error) {
@@ -744,15 +735,59 @@ func (e *Evaluator) evaluateNumericComparison(left, right arrow.Array, op Binary
 	// Perform comparison on the promoted type
 	switch promotedType {
 	case typeInt32:
-		return e.evaluateInt32Comparison(leftConverted.(*array.Int32), rightConverted.(*array.Int32), op)
+		leftInt32, ok1 := leftConverted.(*array.Int32)
+		rightInt32, ok2 := rightConverted.(*array.Int32)
+		if !ok1 || !ok2 {
+			return nil, errors.New("type assertion failed for int32 comparison")
+		}
+		return e.evaluateInt32Comparison(leftInt32, rightInt32, op)
 	case typeInt64:
-		return e.evaluateInt64Comparison(leftConverted.(*array.Int64), rightConverted.(*array.Int64), op)
+		leftInt64, ok1 := leftConverted.(*array.Int64)
+		rightInt64, ok2 := rightConverted.(*array.Int64)
+		if !ok1 || !ok2 {
+			return nil, errors.New("type assertion failed for int64 comparison")
+		}
+		return e.evaluateInt64Comparison(leftInt64, rightInt64, op)
 	case typeFloat32:
-		return e.evaluateFloat32Comparison(leftConverted.(*array.Float32), rightConverted.(*array.Float32), op)
+		leftFloat32, ok1 := leftConverted.(*array.Float32)
+		rightFloat32, ok2 := rightConverted.(*array.Float32)
+		if !ok1 || !ok2 {
+			return nil, errors.New("type assertion failed for float32 comparison")
+		}
+		return e.evaluateFloat32Comparison(leftFloat32, rightFloat32, op)
 	case "float64":
-		return e.evaluateFloat64Comparison(leftConverted.(*array.Float64), rightConverted.(*array.Float64), op)
+		leftFloat64, ok1 := leftConverted.(*array.Float64)
+		rightFloat64, ok2 := rightConverted.(*array.Float64)
+		if !ok1 || !ok2 {
+			return nil, errors.New("type assertion failed for float64 comparison")
+		}
+		return e.evaluateFloat64Comparison(leftFloat64, rightFloat64, op)
 	default:
 		return nil, fmt.Errorf("unsupported promoted type for comparison: %s", promotedType)
+	}
+}
+
+// compareValues performs comparison operation on two comparable values.
+func compareValues[T cmp.Ordered](left, right T, op BinaryOp) (bool, error) {
+	switch op {
+	case OpEq:
+		return left == right, nil
+	case OpNe:
+		return left != right, nil
+	case OpLt:
+		return left < right, nil
+	case OpLe:
+		return left <= right, nil
+	case OpGt:
+		return left > right, nil
+	case OpGe:
+		return left >= right, nil
+	case OpAdd, OpSub, OpMul, OpDiv:
+		return false, fmt.Errorf("operation %v is not supported for comparison evaluation", op)
+	case OpAnd, OpOr:
+		return false, fmt.Errorf("operation %v is not supported for comparison evaluation", op)
+	default:
+		return false, fmt.Errorf("unsupported comparison operation: %v", op)
 	}
 }
 
@@ -760,33 +795,16 @@ func (e *Evaluator) evaluateInt64Comparison(left, right *array.Int64, op BinaryO
 	builder := array.NewBooleanBuilder(e.mem)
 	defer builder.Release()
 
-	for i := 0; i < left.Len(); i++ {
+	for i := range left.Len() {
 		if left.IsNull(i) || right.IsNull(i) {
 			builder.AppendNull()
 			continue
 		}
 
-		l := left.Value(i)
-		r := right.Value(i)
-
-		var result bool
-		switch op {
-		case OpEq:
-			result = l == r
-		case OpNe:
-			result = l != r
-		case OpLt:
-			result = l < r
-		case OpLe:
-			result = l <= r
-		case OpGt:
-			result = l > r
-		case OpGe:
-			result = l >= r
-		default:
-			return nil, fmt.Errorf("unsupported comparison operation: %v", op)
+		result, err := compareValues(left.Value(i), right.Value(i), op)
+		if err != nil {
+			return nil, err
 		}
-
 		builder.Append(result)
 	}
 
@@ -797,33 +815,16 @@ func (e *Evaluator) evaluateFloat64Comparison(left, right *array.Float64, op Bin
 	builder := array.NewBooleanBuilder(e.mem)
 	defer builder.Release()
 
-	for i := 0; i < left.Len(); i++ {
+	for i := range left.Len() {
 		if left.IsNull(i) || right.IsNull(i) {
 			builder.AppendNull()
 			continue
 		}
 
-		l := left.Value(i)
-		r := right.Value(i)
-
-		var result bool
-		switch op {
-		case OpEq:
-			result = l == r
-		case OpNe:
-			result = l != r
-		case OpLt:
-			result = l < r
-		case OpLe:
-			result = l <= r
-		case OpGt:
-			result = l > r
-		case OpGe:
-			result = l >= r
-		default:
-			return nil, fmt.Errorf("unsupported comparison operation: %v", op)
+		result, err := compareValues(left.Value(i), right.Value(i), op)
+		if err != nil {
+			return nil, err
 		}
-
 		builder.Append(result)
 	}
 
@@ -834,33 +835,16 @@ func (e *Evaluator) evaluateStringComparison(left, right *array.String, op Binar
 	builder := array.NewBooleanBuilder(e.mem)
 	defer builder.Release()
 
-	for i := 0; i < left.Len(); i++ {
+	for i := range left.Len() {
 		if left.IsNull(i) || right.IsNull(i) {
 			builder.AppendNull()
 			continue
 		}
 
-		l := left.Value(i)
-		r := right.Value(i)
-
-		var result bool
-		switch op {
-		case OpEq:
-			result = l == r
-		case OpNe:
-			result = l != r
-		case OpLt:
-			result = l < r
-		case OpLe:
-			result = l <= r
-		case OpGt:
-			result = l > r
-		case OpGe:
-			result = l >= r
-		default:
-			return nil, fmt.Errorf("unsupported comparison operation: %v", op)
+		result, err := compareValues(left.Value(i), right.Value(i), op)
+		if err != nil {
+			return nil, err
 		}
-
 		builder.Append(result)
 	}
 
@@ -871,7 +855,7 @@ func (e *Evaluator) evaluateBooleanComparison(left, right *array.Boolean, op Bin
 	builder := array.NewBooleanBuilder(e.mem)
 	defer builder.Release()
 
-	for i := 0; i < left.Len(); i++ {
+	for i := range left.Len() {
 		if left.IsNull(i) || right.IsNull(i) {
 			builder.AppendNull()
 			continue
@@ -886,6 +870,12 @@ func (e *Evaluator) evaluateBooleanComparison(left, right *array.Boolean, op Bin
 			result = l == r
 		case OpNe:
 			result = l != r
+		case OpLt, OpLe, OpGt, OpGe:
+			return nil, fmt.Errorf("operation %v is not supported for boolean comparison", op)
+		case OpAdd, OpSub, OpMul, OpDiv:
+			return nil, fmt.Errorf("operation %v is not supported for boolean comparison", op)
+		case OpAnd, OpOr:
+			return nil, fmt.Errorf("operation %v is not supported for boolean comparison", op)
 		default:
 			return nil, fmt.Errorf("unsupported boolean comparison operation: %v", op)
 		}
@@ -907,7 +897,7 @@ func (e *Evaluator) evaluateLogical(left, right arrow.Array, op BinaryOp) (arrow
 	builder := array.NewBooleanBuilder(e.mem)
 	defer builder.Release()
 
-	for i := 0; i < left.Len(); i++ {
+	for i := range left.Len() {
 		if leftBool.IsNull(i) || rightBool.IsNull(i) {
 			builder.AppendNull()
 			continue
@@ -922,6 +912,10 @@ func (e *Evaluator) evaluateLogical(left, right arrow.Array, op BinaryOp) (arrow
 			result = l && r
 		case OpOr:
 			result = l || r
+		case OpAdd, OpSub, OpMul, OpDiv:
+			return nil, fmt.Errorf("operation %v is not supported for logical evaluation", op)
+		case OpEq, OpNe, OpLt, OpLe, OpGt, OpGe:
+			return nil, fmt.Errorf("operation %v is not supported for logical evaluation", op)
 		default:
 			return nil, fmt.Errorf("unsupported logical operation: %v", op)
 		}
@@ -929,6 +923,89 @@ func (e *Evaluator) evaluateLogical(left, right arrow.Array, op BinaryOp) (arrow
 		builder.Append(result)
 	}
 
+	return builder.NewArray(), nil
+}
+
+// evaluateStringLiteral creates a string array with the literal value repeated.
+func (e *Evaluator) evaluateStringLiteral(val string, length int) (arrow.Array, error) {
+	builder := array.NewStringBuilder(e.mem)
+	defer builder.Release()
+	for range length {
+		builder.Append(val)
+	}
+	return builder.NewArray(), nil
+}
+
+// evaluateInt32Literal creates an int32 array with the literal value repeated.
+func (e *Evaluator) evaluateInt32Literal(val int32, length int) (arrow.Array, error) {
+	builder := array.NewInt32Builder(e.mem)
+	defer builder.Release()
+	for range length {
+		builder.Append(val)
+	}
+	return builder.NewArray(), nil
+}
+
+// evaluateInt64Literal creates an int64 array with the literal value repeated.
+func (e *Evaluator) evaluateInt64Literal(val int64, length int) (arrow.Array, error) {
+	builder := array.NewInt64Builder(e.mem)
+	defer builder.Release()
+	for range length {
+		builder.Append(val)
+	}
+	return builder.NewArray(), nil
+}
+
+// evaluateIntLiteral creates an int64 array from a platform-dependent int value.
+func (e *Evaluator) evaluateIntLiteral(val int, length int) (arrow.Array, error) {
+	// Handle platform-dependent int type by converting to int64
+	builder := array.NewInt64Builder(e.mem)
+	defer builder.Release()
+	for range length {
+		builder.Append(int64(val))
+	}
+	return builder.NewArray(), nil
+}
+
+// evaluateFloat32Literal creates a float32 array with the literal value repeated.
+func (e *Evaluator) evaluateFloat32Literal(val float32, length int) (arrow.Array, error) {
+	builder := array.NewFloat32Builder(e.mem)
+	defer builder.Release()
+	for range length {
+		builder.Append(val)
+	}
+	return builder.NewArray(), nil
+}
+
+// evaluateFloat64Literal creates a float64 array with the literal value repeated.
+func (e *Evaluator) evaluateFloat64Literal(val float64, length int) (arrow.Array, error) {
+	builder := array.NewFloat64Builder(e.mem)
+	defer builder.Release()
+	for range length {
+		builder.Append(val)
+	}
+	return builder.NewArray(), nil
+}
+
+// evaluateBooleanLiteral creates a boolean array with the literal value repeated.
+func (e *Evaluator) evaluateBooleanLiteral(val bool, length int) (arrow.Array, error) {
+	builder := array.NewBooleanBuilder(e.mem)
+	defer builder.Release()
+	for range length {
+		builder.Append(val)
+	}
+	return builder.NewArray(), nil
+}
+
+// evaluateTimeLiteral creates a timestamp array from a time.Time value.
+func (e *Evaluator) evaluateTimeLiteral(val time.Time, length int) (arrow.Array, error) {
+	// Create a timestamp array from time.Time
+	timestampType := &arrow.TimestampType{Unit: arrow.Nanosecond}
+	builder := array.NewTimestampBuilder(e.mem, timestampType)
+	defer builder.Release()
+	for range length {
+		builder.Append(arrow.Timestamp(val.UnixNano()))
+	}
 	return builder.NewArray(), nil
 }
 
@@ -1007,97 +1084,135 @@ func (e *Evaluator) convertToType(arr arrow.Array, targetType string) (arrow.Arr
 	// Type conversion matrix
 	switch sourceType {
 	case typeInt32:
-		return e.convertInt32ToType(arr.(*array.Int32), targetType)
+		int32Array, ok := arr.(*array.Int32)
+		if !ok {
+			return nil, errors.New("type assertion failed for int32 conversion")
+		}
+		return e.convertInt32ToType(int32Array, targetType)
 	case typeInt64:
-		return e.convertInt64ToType(arr.(*array.Int64), targetType)
+		int64Array, ok := arr.(*array.Int64)
+		if !ok {
+			return nil, errors.New("type assertion failed for int64 conversion")
+		}
+		return e.convertInt64ToType(int64Array, targetType)
 	case typeFloat32:
-		return e.convertFloat32ToType(arr.(*array.Float32), targetType)
+		float32Array, ok := arr.(*array.Float32)
+		if !ok {
+			return nil, errors.New("type assertion failed for float32 conversion")
+		}
+		return e.convertFloat32ToType(float32Array, targetType)
 	case typeFloat64, typeDouble:
-		return e.convertFloat64ToType(arr.(*array.Float64), targetType)
+		float64Array, ok := arr.(*array.Float64)
+		if !ok {
+			return nil, errors.New("type assertion failed for float64 conversion")
+		}
+		return e.convertFloat64ToType(float64Array, targetType)
 	default:
 		return nil, fmt.Errorf("unsupported source type for conversion: %s", sourceType)
 	}
 }
 
 // Type conversion methods.
-func (e *Evaluator) convertInt32ToType(arr *array.Int32, targetType string) (arrow.Array, error) {
+
+// convertIntegerToType is a generic function to convert integer arrays to different numeric types.
+// T represents the source integer type (int32 or int64), and arr is the source array.
+func convertIntegerToType[T constraints.Signed](mem memory.Allocator, arr interface {
+	Len() int
+	IsNull(int) bool
+	Value(int) T
+}, sourceType, targetType string) (arrow.Array, error) {
 	switch targetType {
+	case typeInt32:
+		return convertToInt32Array(mem, arr)
 	case typeInt64:
-		builder := array.NewInt64Builder(e.mem)
-		defer builder.Release()
-		for i := 0; i < arr.Len(); i++ {
-			if arr.IsNull(i) {
-				builder.AppendNull()
-			} else {
-				builder.Append(int64(arr.Value(i)))
-			}
-		}
-		return builder.NewArray(), nil
+		return convertToInt64Array(mem, arr)
 	case typeFloat32:
-		builder := array.NewFloat32Builder(e.mem)
-		defer builder.Release()
-		for i := 0; i < arr.Len(); i++ {
-			if arr.IsNull(i) {
-				builder.AppendNull()
-			} else {
-				builder.Append(float32(arr.Value(i)))
-			}
-		}
-		return builder.NewArray(), nil
+		return convertToFloat32Array(mem, arr)
 	case typeFloat64, typeDouble:
-		builder := array.NewFloat64Builder(e.mem)
-		defer builder.Release()
-		for i := 0; i < arr.Len(); i++ {
-			if arr.IsNull(i) {
-				builder.AppendNull()
-			} else {
-				builder.Append(float64(arr.Value(i)))
-			}
-		}
-		return builder.NewArray(), nil
+		return convertToFloat64Array(mem, arr)
 	default:
-		return nil, fmt.Errorf("cannot convert int32 to %s", targetType)
+		return nil, fmt.Errorf("cannot convert %s to %s", sourceType, targetType)
 	}
 }
 
-func (e *Evaluator) convertInt64ToType(arr *array.Int64, targetType string) (arrow.Array, error) {
-	switch targetType {
-	case typeInt32:
-		builder := array.NewInt32Builder(e.mem)
-		defer builder.Release()
-		for i := 0; i < arr.Len(); i++ {
-			if arr.IsNull(i) {
-				builder.AppendNull()
-			} else {
-				builder.Append(int32(arr.Value(i))) // #nosec G115 Note: potential overflow is expected in type conversion
-			}
+// convertToInt32Array converts a generic integer array to int32 array.
+func convertToInt32Array[T constraints.Signed](mem memory.Allocator, arr interface {
+	Len() int
+	IsNull(int) bool
+	Value(int) T
+}) (arrow.Array, error) {
+	builder := array.NewInt32Builder(mem)
+	defer builder.Release()
+	for i := range arr.Len() {
+		if arr.IsNull(i) {
+			builder.AppendNull()
+		} else {
+			builder.Append(int32(arr.Value(i))) // #nosec G115 Note: potential overflow is expected in type conversion
 		}
-		return builder.NewArray(), nil
-	case typeFloat32:
-		builder := array.NewFloat32Builder(e.mem)
-		defer builder.Release()
-		for i := 0; i < arr.Len(); i++ {
-			if arr.IsNull(i) {
-				builder.AppendNull()
-			} else {
-				builder.Append(float32(arr.Value(i)))
-			}
-		}
-		return builder.NewArray(), nil
-	case typeFloat64, typeDouble:
-		builder := array.NewFloat64Builder(e.mem)
-		defer builder.Release()
-		for i := 0; i < arr.Len(); i++ {
-			if arr.IsNull(i) {
-				builder.AppendNull()
-			} else {
-				builder.Append(float64(arr.Value(i)))
-			}
-		}
-		return builder.NewArray(), nil
-	default:
-		return nil, fmt.Errorf("cannot convert int64 to %s", targetType)
 	}
+	return builder.NewArray(), nil
+}
+
+// convertToInt64Array converts a generic integer array to int64 array.
+func convertToInt64Array[T constraints.Signed](mem memory.Allocator, arr interface {
+	Len() int
+	IsNull(int) bool
+	Value(int) T
+}) (arrow.Array, error) {
+	builder := array.NewInt64Builder(mem)
+	defer builder.Release()
+	for i := range arr.Len() {
+		if arr.IsNull(i) {
+			builder.AppendNull()
+		} else {
+			builder.Append(int64(arr.Value(i)))
+		}
+	}
+	return builder.NewArray(), nil
+}
+
+// convertToFloat32Array converts a generic integer array to float32 array.
+func convertToFloat32Array[T constraints.Signed](mem memory.Allocator, arr interface {
+	Len() int
+	IsNull(int) bool
+	Value(int) T
+}) (arrow.Array, error) {
+	builder := array.NewFloat32Builder(mem)
+	defer builder.Release()
+	for i := range arr.Len() {
+		if arr.IsNull(i) {
+			builder.AppendNull()
+		} else {
+			builder.Append(float32(arr.Value(i)))
+		}
+	}
+	return builder.NewArray(), nil
+}
+
+// convertToFloat64Array converts a generic integer array to float64 array.
+func convertToFloat64Array[T constraints.Signed](mem memory.Allocator, arr interface {
+	Len() int
+	IsNull(int) bool
+	Value(int) T
+}) (arrow.Array, error) {
+	builder := array.NewFloat64Builder(mem)
+	defer builder.Release()
+	for i := range arr.Len() {
+		if arr.IsNull(i) {
+			builder.AppendNull()
+		} else {
+			builder.Append(float64(arr.Value(i)))
+		}
+	}
+	return builder.NewArray(), nil
+}
+
+func (e *Evaluator) convertInt32ToType(arr *array.Int32, targetType string) (arrow.Array, error) {
+	return convertIntegerToType(e.mem, arr, typeInt32, targetType)
+}
+
+func (e *Evaluator) convertInt64ToType(arr *array.Int64, targetType string) (arrow.Array, error) {
+	return convertIntegerToType(e.mem, arr, typeInt64, targetType)
 }
 
 func (e *Evaluator) convertFloat32ToType(arr *array.Float32, targetType string) (arrow.Array, error) {
@@ -1105,7 +1220,7 @@ func (e *Evaluator) convertFloat32ToType(arr *array.Float32, targetType string) 
 	case typeInt32:
 		builder := array.NewInt32Builder(e.mem)
 		defer builder.Release()
-		for i := 0; i < arr.Len(); i++ {
+		for i := range arr.Len() {
 			if arr.IsNull(i) {
 				builder.AppendNull()
 			} else {
@@ -1116,7 +1231,7 @@ func (e *Evaluator) convertFloat32ToType(arr *array.Float32, targetType string) 
 	case typeInt64:
 		builder := array.NewInt64Builder(e.mem)
 		defer builder.Release()
-		for i := 0; i < arr.Len(); i++ {
+		for i := range arr.Len() {
 			if arr.IsNull(i) {
 				builder.AppendNull()
 			} else {
@@ -1127,7 +1242,7 @@ func (e *Evaluator) convertFloat32ToType(arr *array.Float32, targetType string) 
 	case typeFloat64, typeDouble:
 		builder := array.NewFloat64Builder(e.mem)
 		defer builder.Release()
-		for i := 0; i < arr.Len(); i++ {
+		for i := range arr.Len() {
 			if arr.IsNull(i) {
 				builder.AppendNull()
 			} else {
@@ -1145,7 +1260,7 @@ func (e *Evaluator) convertFloat64ToType(arr *array.Float64, targetType string) 
 	case typeInt32:
 		builder := array.NewInt32Builder(e.mem)
 		defer builder.Release()
-		for i := 0; i < arr.Len(); i++ {
+		for i := range arr.Len() {
 			if arr.IsNull(i) {
 				builder.AppendNull()
 			} else {
@@ -1156,7 +1271,7 @@ func (e *Evaluator) convertFloat64ToType(arr *array.Float64, targetType string) 
 	case typeInt64:
 		builder := array.NewInt64Builder(e.mem)
 		defer builder.Release()
-		for i := 0; i < arr.Len(); i++ {
+		for i := range arr.Len() {
 			if arr.IsNull(i) {
 				builder.AppendNull()
 			} else {
@@ -1167,7 +1282,7 @@ func (e *Evaluator) convertFloat64ToType(arr *array.Float64, targetType string) 
 	case typeFloat32:
 		builder := array.NewFloat32Builder(e.mem)
 		defer builder.Release()
-		for i := 0; i < arr.Len(); i++ {
+		for i := range arr.Len() {
 			if arr.IsNull(i) {
 				builder.AppendNull()
 			} else {
@@ -1182,73 +1297,11 @@ func (e *Evaluator) convertFloat64ToType(arr *array.Float64, targetType string) 
 
 // Additional arithmetic methods for int32 and float32.
 func (e *Evaluator) evaluateInt32Arithmetic(left, right *array.Int32, op BinaryOp) (arrow.Array, error) {
-	builder := array.NewInt32Builder(e.mem)
-	defer builder.Release()
-
-	for i := 0; i < left.Len(); i++ {
-		if left.IsNull(i) || right.IsNull(i) {
-			builder.AppendNull()
-			continue
-		}
-
-		l := left.Value(i)
-		r := right.Value(i)
-
-		var result int32
-		switch op {
-		case OpAdd:
-			result = l + r
-		case OpSub:
-			result = l - r
-		case OpMul:
-			result = l * r
-		case OpDiv:
-			if r == 0 {
-				builder.AppendNull()
-				continue
-			}
-			result = l / r
-		default:
-			return nil, fmt.Errorf("unsupported arithmetic operation: %v", op)
-		}
-
-		builder.Append(result)
-	}
-
-	return builder.NewArray(), nil
+	return evaluateArithmetic(e.mem, left, right, op, array.NewInt32Builder)
 }
 
 func (e *Evaluator) evaluateFloat32Arithmetic(left, right *array.Float32, op BinaryOp) (arrow.Array, error) {
-	builder := array.NewFloat32Builder(e.mem)
-	defer builder.Release()
-
-	for i := 0; i < left.Len(); i++ {
-		if left.IsNull(i) || right.IsNull(i) {
-			builder.AppendNull()
-			continue
-		}
-
-		l := left.Value(i)
-		r := right.Value(i)
-
-		var result float32
-		switch op {
-		case OpAdd:
-			result = l + r
-		case OpSub:
-			result = l - r
-		case OpMul:
-			result = l * r
-		case OpDiv:
-			result = l / r // Division by zero results in +/-Inf, which is handled by Go
-		default:
-			return nil, fmt.Errorf("unsupported arithmetic operation: %v", op)
-		}
-
-		builder.Append(result)
-	}
-
-	return builder.NewArray(), nil
+	return evaluateArithmetic(e.mem, left, right, op, array.NewFloat32Builder)
 }
 
 // Additional comparison methods for int32 and float32.
@@ -1256,7 +1309,7 @@ func (e *Evaluator) evaluateInt32Comparison(left, right *array.Int32, op BinaryO
 	builder := array.NewBooleanBuilder(e.mem)
 	defer builder.Release()
 
-	for i := 0; i < left.Len(); i++ {
+	for i := range left.Len() {
 		if left.IsNull(i) || right.IsNull(i) {
 			builder.AppendNull()
 			continue
@@ -1265,22 +1318,9 @@ func (e *Evaluator) evaluateInt32Comparison(left, right *array.Int32, op BinaryO
 		l := left.Value(i)
 		r := right.Value(i)
 
-		var result bool
-		switch op {
-		case OpEq:
-			result = l == r
-		case OpNe:
-			result = l != r
-		case OpLt:
-			result = l < r
-		case OpLe:
-			result = l <= r
-		case OpGt:
-			result = l > r
-		case OpGe:
-			result = l >= r
-		default:
-			return nil, fmt.Errorf("unsupported comparison operation: %v", op)
+		result, err := compareValues(l, r, op)
+		if err != nil {
+			return nil, err
 		}
 
 		builder.Append(result)
@@ -1293,7 +1333,7 @@ func (e *Evaluator) evaluateFloat32Comparison(left, right *array.Float32, op Bin
 	builder := array.NewBooleanBuilder(e.mem)
 	defer builder.Release()
 
-	for i := 0; i < left.Len(); i++ {
+	for i := range left.Len() {
 		if left.IsNull(i) || right.IsNull(i) {
 			builder.AppendNull()
 			continue
@@ -1302,22 +1342,9 @@ func (e *Evaluator) evaluateFloat32Comparison(left, right *array.Float32, op Bin
 		l := left.Value(i)
 		r := right.Value(i)
 
-		var result bool
-		switch op {
-		case OpEq:
-			result = l == r
-		case OpNe:
-			result = l != r
-		case OpLt:
-			result = l < r
-		case OpLe:
-			result = l <= r
-		case OpGt:
-			result = l > r
-		case OpGe:
-			result = l >= r
-		default:
-			return nil, fmt.Errorf("unsupported comparison operation: %v", op)
+		result, err := compareValues(l, r, op)
+		if err != nil {
+			return nil, err
 		}
 
 		builder.Append(result)
@@ -1410,7 +1437,7 @@ func (e *Evaluator) evaluateDateTimeFunction(
 	builder := array.NewInt64Builder(e.mem)
 	defer builder.Release()
 
-	for i := 0; i < timestampArr.Len(); i++ {
+	for i := range timestampArr.Len() {
 		if timestampArr.IsNull(i) {
 			builder.AppendNull()
 			continue
@@ -1431,71 +1458,27 @@ func (e *Evaluator) evaluateDateTimeFunction(
 
 // evaluateDateAdd evaluates DATE_ADD function to add interval to date/time.
 func (e *Evaluator) evaluateDateAdd(expr *FunctionExpr, columns map[string]arrow.Array) (arrow.Array, error) {
-	if len(expr.args) != dateAddArgsCount {
-		return nil, fmt.Errorf(
-			"date_add function requires exactly %d arguments, got %d",
-			dateAddArgsCount,
-			len(expr.args),
-		)
-	}
-
-	// Evaluate the date argument
-	dateArg, err := e.Evaluate(expr.args[0], columns)
-	if err != nil {
-		return nil, fmt.Errorf("evaluating date argument for date_add: %w", err)
-	}
-	defer dateArg.Release()
-
-	// Check if the date argument is a timestamp array
-	timestampArr, ok := dateArg.(*array.Timestamp)
-	if !ok {
-		return nil, fmt.Errorf("date_add function requires a timestamp argument, got %T", dateArg)
-	}
-
-	// Get the interval argument - should be an IntervalExpr
-	intervalArg := expr.args[1]
-	intervalExpr, ok := intervalArg.(*IntervalExpr)
-	if !ok {
-		return nil, fmt.Errorf("date_add function requires an interval argument, got %T", intervalArg)
-	}
-
-	// Validate the interval type is supported
-	if !e.isValidIntervalType(intervalExpr.IntervalType()) {
-		return nil, fmt.Errorf("date_add function unsupported interval type: %v", intervalExpr.IntervalType())
-	}
-
-	// Build the result array
-	builder := array.NewTimestampBuilder(e.mem, &arrow.TimestampType{Unit: arrow.Nanosecond})
-	defer builder.Release()
-
-	for i := 0; i < timestampArr.Len(); i++ {
-		if timestampArr.IsNull(i) {
-			builder.AppendNull()
-			continue
-		}
-
-		// Convert Arrow timestamp to Go time.Time
-		tsValue := timestampArr.Value(i)
-		nanos := int64(tsValue)
-		t := time.Unix(nanos/nanosPerSecond, nanos%nanosPerSecond).UTC()
-
-		// Add the interval
-		result := e.addInterval(t, intervalExpr)
-
-		// Convert back to nanoseconds and append
-		resultNanos := result.UnixNano()
-		builder.Append(arrow.Timestamp(resultNanos))
-	}
-
-	return builder.NewArray(), nil
+	return e.evaluateDateArithmetic(expr, columns, "date_add", dateAddArgsCount, true)
 }
 
 // evaluateDateSub evaluates DATE_SUB function to subtract interval from date/time.
 func (e *Evaluator) evaluateDateSub(expr *FunctionExpr, columns map[string]arrow.Array) (arrow.Array, error) {
-	if len(expr.args) != dateSubArgsCount {
+	return e.evaluateDateArithmetic(expr, columns, "date_sub", dateSubArgsCount, false)
+}
+
+// evaluateDateArithmetic provides generic date arithmetic logic for add/subtract operations.
+func (e *Evaluator) evaluateDateArithmetic(
+	expr *FunctionExpr,
+	columns map[string]arrow.Array,
+	funcName string,
+	expectedArgCount int,
+	isAdd bool,
+) (arrow.Array, error) {
+	if len(expr.args) != expectedArgCount {
 		return nil, fmt.Errorf(
-			"date_sub function requires exactly %d arguments, got %d",
-			dateSubArgsCount,
+			"%s function requires exactly %d arguments, got %d",
+			funcName,
+			expectedArgCount,
 			len(expr.args),
 		)
 	}
@@ -1503,33 +1486,33 @@ func (e *Evaluator) evaluateDateSub(expr *FunctionExpr, columns map[string]arrow
 	// Evaluate the date argument
 	dateArg, err := e.Evaluate(expr.args[0], columns)
 	if err != nil {
-		return nil, fmt.Errorf("evaluating date argument for date_sub: %w", err)
+		return nil, fmt.Errorf("evaluating date argument for %s: %w", funcName, err)
 	}
 	defer dateArg.Release()
 
 	// Check if the date argument is a timestamp array
 	timestampArr, ok := dateArg.(*array.Timestamp)
 	if !ok {
-		return nil, fmt.Errorf("date_sub function requires a timestamp argument, got %T", dateArg)
+		return nil, fmt.Errorf("%s function requires a timestamp argument, got %T", funcName, dateArg)
 	}
 
 	// Get the interval argument - should be an IntervalExpr
 	intervalArg := expr.args[1]
 	intervalExpr, ok := intervalArg.(*IntervalExpr)
 	if !ok {
-		return nil, fmt.Errorf("date_sub function requires an interval argument, got %T", intervalArg)
+		return nil, fmt.Errorf("%s function requires an interval argument, got %T", funcName, intervalArg)
 	}
 
 	// Validate the interval type is supported
 	if !e.isValidIntervalType(intervalExpr.IntervalType()) {
-		return nil, fmt.Errorf("date_sub function unsupported interval type: %v", intervalExpr.IntervalType())
+		return nil, fmt.Errorf("%s function unsupported interval type: %v", funcName, intervalExpr.IntervalType())
 	}
 
 	// Build the result array
 	builder := array.NewTimestampBuilder(e.mem, &arrow.TimestampType{Unit: arrow.Nanosecond})
 	defer builder.Release()
 
-	for i := 0; i < timestampArr.Len(); i++ {
+	for i := range timestampArr.Len() {
 		if timestampArr.IsNull(i) {
 			builder.AppendNull()
 			continue
@@ -1540,8 +1523,13 @@ func (e *Evaluator) evaluateDateSub(expr *FunctionExpr, columns map[string]arrow
 		nanos := int64(tsValue)
 		t := time.Unix(nanos/nanosPerSecond, nanos%nanosPerSecond).UTC()
 
-		// Subtract the interval (add negative)
-		result := e.subtractInterval(t, intervalExpr)
+		// Apply the interval operation
+		var result time.Time
+		if isAdd {
+			result = e.addInterval(t, intervalExpr)
+		} else {
+			result = e.subtractInterval(t, intervalExpr)
+		}
 
 		// Convert back to nanoseconds and append
 		resultNanos := result.UnixNano()
@@ -1614,7 +1602,7 @@ func (e *Evaluator) evaluateDateDiff(expr *FunctionExpr, columns map[string]arro
 	builder := array.NewInt64Builder(e.mem)
 	defer builder.Release()
 
-	for i := 0; i < startTimestampArr.Len(); i++ {
+	for i := range startTimestampArr.Len() {
 		if startTimestampArr.IsNull(i) || endTimestampArr.IsNull(i) {
 			builder.AppendNull()
 			continue
@@ -1967,9 +1955,9 @@ func (e *Evaluator) getPartitionKey(
 
 // evaluateCaseWithContext evaluates a CASE expression.
 func (e *Evaluator) evaluateCaseWithContext(
-	expr *CaseExpr,
-	columns map[string]arrow.Array,
-	ctx EvaluationContext,
+	_ *CaseExpr,
+	_ map[string]arrow.Array,
+	_ EvaluationContext,
 ) (arrow.Array, error) {
 	return nil, errors.New("CASE expressions not yet implemented")
 }
@@ -2014,6 +2002,7 @@ func (e *Evaluator) evaluateIfFunction(expr *FunctionExpr, columns map[string]ar
 
 	// For now, implement simple case where both then and else are same type
 	// This is enough for basic HAVING clause functionality
+	//nolint:exhaustive // We only support a subset of Arrow types for IF function
 	switch thenValue.DataType().ID() {
 	case arrow.FLOAT64:
 		return e.evaluateIfFloat64Simple(conditionBool, thenValue, elseValue)
@@ -2031,9 +2020,6 @@ func (e *Evaluator) evaluateIfFloat64Simple(
 	condition *array.Boolean,
 	thenValue, elseValue arrow.Array,
 ) (arrow.Array, error) {
-	builder := array.NewFloat64Builder(e.mem)
-	defer builder.Release()
-
 	thenFloat, ok := thenValue.(*array.Float64)
 	if !ok {
 		return nil, fmt.Errorf("expected thenValue to be *array.Float64, got %T", thenValue)
@@ -2043,25 +2029,7 @@ func (e *Evaluator) evaluateIfFloat64Simple(
 		return nil, fmt.Errorf("expected elseValue to be *array.Float64, got %T", elseValue)
 	}
 
-	for i := 0; i < condition.Len(); i++ {
-		if condition.IsNull(i) {
-			builder.AppendNull()
-		} else if condition.Value(i) {
-			if thenFloat.IsNull(i) {
-				builder.AppendNull()
-			} else {
-				builder.Append(thenFloat.Value(i))
-			}
-		} else {
-			if elseFloat.IsNull(i) {
-				builder.AppendNull()
-			} else {
-				builder.Append(elseFloat.Value(i))
-			}
-		}
-	}
-
-	return builder.NewArray(), nil
+	return e.buildIfFloat64(condition, thenFloat, elseFloat), nil
 }
 
 // evaluateIfInt64Simple evaluates IF function with int64 result.
@@ -2069,9 +2037,6 @@ func (e *Evaluator) evaluateIfInt64Simple(
 	condition *array.Boolean,
 	thenValue, elseValue arrow.Array,
 ) (arrow.Array, error) {
-	builder := array.NewInt64Builder(e.mem)
-	defer builder.Release()
-
 	thenInt, ok := thenValue.(*array.Int64)
 	if !ok {
 		return nil, fmt.Errorf("expected thenValue to be *array.Int64, got %T", thenValue)
@@ -2081,25 +2046,7 @@ func (e *Evaluator) evaluateIfInt64Simple(
 		return nil, fmt.Errorf("expected elseValue to be *array.Int64, got %T", elseValue)
 	}
 
-	for i := 0; i < condition.Len(); i++ {
-		if condition.IsNull(i) {
-			builder.AppendNull()
-		} else if condition.Value(i) {
-			if thenInt.IsNull(i) {
-				builder.AppendNull()
-			} else {
-				builder.Append(thenInt.Value(i))
-			}
-		} else {
-			if elseInt.IsNull(i) {
-				builder.AppendNull()
-			} else {
-				builder.Append(elseInt.Value(i))
-			}
-		}
-	}
-
-	return builder.NewArray(), nil
+	return e.buildIfInt64(condition, thenInt, elseInt), nil
 }
 
 // evaluateIfStringSimple evaluates IF function with string result.
@@ -2107,9 +2054,6 @@ func (e *Evaluator) evaluateIfStringSimple(
 	condition *array.Boolean,
 	thenValue, elseValue arrow.Array,
 ) (arrow.Array, error) {
-	builder := array.NewStringBuilder(e.mem)
-	defer builder.Release()
-
 	thenStr, ok := thenValue.(*array.String)
 	if !ok {
 		return nil, fmt.Errorf("expected thenValue to be *array.String, got %T", thenValue)
@@ -2119,25 +2063,136 @@ func (e *Evaluator) evaluateIfStringSimple(
 		return nil, fmt.Errorf("expected elseValue to be *array.String, got %T", elseValue)
 	}
 
-	for i := 0; i < condition.Len(); i++ {
-		if condition.IsNull(i) {
-			builder.AppendNull()
-		} else if condition.Value(i) {
-			if thenStr.IsNull(i) {
-				builder.AppendNull()
-			} else {
-				builder.Append(thenStr.Value(i))
-			}
-		} else {
-			if elseStr.IsNull(i) {
-				builder.AppendNull()
-			} else {
-				builder.Append(elseStr.Value(i))
-			}
-		}
+	return e.buildIfString(condition, thenStr, elseStr), nil
+}
+
+// buildIfFloat64 builds a float64 array based on IF condition logic.
+func (e *Evaluator) buildIfFloat64(
+	condition *array.Boolean,
+	thenValue, elseValue *array.Float64,
+) arrow.Array {
+	builder := array.NewFloat64Builder(e.mem)
+	defer builder.Release()
+
+	for i := range condition.Len() {
+		e.appendIfFloat64Value(builder, condition, thenValue, elseValue, i)
 	}
 
-	return builder.NewArray(), nil
+	return builder.NewArray()
+}
+
+// appendIfFloat64Value appends a float64 value based on IF condition logic.
+func (e *Evaluator) appendIfFloat64Value(
+	builder *array.Float64Builder,
+	condition *array.Boolean,
+	thenValue, elseValue *array.Float64,
+	i int,
+) {
+	if condition.IsNull(i) {
+		builder.AppendNull()
+		return
+	}
+
+	if condition.Value(i) {
+		if thenValue.IsNull(i) {
+			builder.AppendNull()
+		} else {
+			builder.Append(thenValue.Value(i))
+		}
+		return
+	}
+
+	if elseValue.IsNull(i) {
+		builder.AppendNull()
+	} else {
+		builder.Append(elseValue.Value(i))
+	}
+}
+
+// appendIfInt64Value appends an int64 value based on IF condition logic.
+func (e *Evaluator) appendIfInt64Value(
+	builder *array.Int64Builder,
+	condition *array.Boolean,
+	thenValue, elseValue *array.Int64,
+	i int,
+) {
+	if condition.IsNull(i) {
+		builder.AppendNull()
+		return
+	}
+
+	if condition.Value(i) {
+		if thenValue.IsNull(i) {
+			builder.AppendNull()
+		} else {
+			builder.Append(thenValue.Value(i))
+		}
+		return
+	}
+
+	if elseValue.IsNull(i) {
+		builder.AppendNull()
+	} else {
+		builder.Append(elseValue.Value(i))
+	}
+}
+
+// appendIfStringValue appends a string value based on IF condition logic.
+func (e *Evaluator) appendIfStringValue(
+	builder *array.StringBuilder,
+	condition *array.Boolean,
+	thenValue, elseValue *array.String,
+	i int,
+) {
+	if condition.IsNull(i) {
+		builder.AppendNull()
+		return
+	}
+
+	if condition.Value(i) {
+		if thenValue.IsNull(i) {
+			builder.AppendNull()
+		} else {
+			builder.Append(thenValue.Value(i))
+		}
+		return
+	}
+
+	if elseValue.IsNull(i) {
+		builder.AppendNull()
+	} else {
+		builder.Append(elseValue.Value(i))
+	}
+}
+
+// buildIfInt64 builds an int64 array based on IF condition logic.
+func (e *Evaluator) buildIfInt64(
+	condition *array.Boolean,
+	thenValue, elseValue *array.Int64,
+) arrow.Array {
+	builder := array.NewInt64Builder(e.mem)
+	defer builder.Release()
+
+	for i := range condition.Len() {
+		e.appendIfInt64Value(builder, condition, thenValue, elseValue, i)
+	}
+
+	return builder.NewArray()
+}
+
+// buildIfString builds a string array based on IF condition logic.
+func (e *Evaluator) buildIfString(
+	condition *array.Boolean,
+	thenValue, elseValue *array.String,
+) arrow.Array {
+	builder := array.NewStringBuilder(e.mem)
+	defer builder.Release()
+
+	for i := range condition.Len() {
+		e.appendIfStringValue(builder, condition, thenValue, elseValue, i)
+	}
+
+	return builder.NewArray()
 }
 
 // evaluateConcatFunction evaluates a CONCAT function.
@@ -2147,53 +2202,67 @@ func (e *Evaluator) evaluateConcatFunction(expr *FunctionExpr, columns map[strin
 	}
 
 	// Evaluate all arguments
-	argArrays := make([]arrow.Array, len(expr.args))
-	for i, arg := range expr.args {
+	argArrays, err := e.evaluateConcatArguments(expr.args, columns)
+	if err != nil {
+		return nil, err
+	}
+	defer e.releaseConcatArguments(argArrays)
+
+	// Validate all arrays have the same length
+	if validationErr := e.validateConcatArrayLengths(argArrays); validationErr != nil {
+		return nil, validationErr
+	}
+
+	// Build result
+	return e.buildConcatResult(argArrays)
+}
+
+// evaluateConcatArguments evaluates all arguments for CONCAT function.
+func (e *Evaluator) evaluateConcatArguments(args []Expr, columns map[string]arrow.Array) ([]arrow.Array, error) {
+	argArrays := make([]arrow.Array, len(args))
+	for i, arg := range args {
 		arr, err := e.Evaluate(arg, columns)
 		if err != nil {
 			return nil, fmt.Errorf("evaluating CONCAT argument %d: %w", i, err)
 		}
 		argArrays[i] = arr
-		defer arr.Release()
+	}
+	return argArrays, nil
+}
+
+// releaseConcatArguments releases all argument arrays.
+func (e *Evaluator) releaseConcatArguments(argArrays []arrow.Array) {
+	for _, arr := range argArrays {
+		arr.Release()
+	}
+}
+
+// validateConcatArrayLengths validates that all arrays have the same length.
+func (e *Evaluator) validateConcatArrayLengths(argArrays []arrow.Array) error {
+	if len(argArrays) == 0 {
+		return nil
 	}
 
-	// Validate all arrays have the same length
-	if len(argArrays) > 0 {
-		expectedLen := argArrays[0].Len()
-		for i, arr := range argArrays[1:] {
-			if arr.Len() != expectedLen {
-				return nil, fmt.Errorf("CONCAT argument %d has length %d, expected %d", i+1, arr.Len(), expectedLen)
-			}
+	expectedLen := argArrays[0].Len()
+	for i, arr := range argArrays[1:] {
+		if arr.Len() != expectedLen {
+			return fmt.Errorf("CONCAT argument %d has length %d, expected %d", i+1, arr.Len(), expectedLen)
 		}
 	}
+	return nil
+}
 
-	// Build result
+// buildConcatResult builds the final concatenated string array.
+func (e *Evaluator) buildConcatResult(argArrays []arrow.Array) (arrow.Array, error) {
+	if len(argArrays) == 0 {
+		return nil, errors.New("no arguments provided for CONCAT")
+	}
+
 	builder := array.NewStringBuilder(e.mem)
 	defer builder.Release()
 
-	for row := 0; row < argArrays[0].Len(); row++ {
-		var result string
-		hasNull := false
-
-		for _, arr := range argArrays {
-			if arr.IsNull(row) {
-				hasNull = true
-				break
-			}
-
-			// Convert to string based on type
-			switch typedArr := arr.(type) {
-			case *array.String:
-				result += typedArr.Value(row)
-			case *array.Int64:
-				result += strconv.FormatInt(typedArr.Value(row), 10)
-			case *array.Float64:
-				result += fmt.Sprintf("%g", typedArr.Value(row))
-			default:
-				return nil, fmt.Errorf("unsupported array type: %T", arr)
-			}
-		}
-
+	for row := range argArrays[0].Len() {
+		result, hasNull := e.concatenateRowValues(argArrays, row)
 		if hasNull {
 			builder.AppendNull()
 		} else {
@@ -2202,4 +2271,35 @@ func (e *Evaluator) evaluateConcatFunction(expr *FunctionExpr, columns map[strin
 	}
 
 	return builder.NewArray(), nil
+}
+
+// concatenateRowValues concatenates values from all arrays for a specific row.
+func (e *Evaluator) concatenateRowValues(argArrays []arrow.Array, row int) (string, bool) {
+	var result string
+	for _, arr := range argArrays {
+		if arr.IsNull(row) {
+			return "", true // hasNull = true
+		}
+
+		strValue, err := e.convertArrayValueToString(arr, row)
+		if err != nil {
+			return "", true // Treat conversion error as null
+		}
+		result += strValue
+	}
+	return result, false // hasNull = false
+}
+
+// convertArrayValueToString converts an array value at a specific row to string.
+func (e *Evaluator) convertArrayValueToString(arr arrow.Array, row int) (string, error) {
+	switch typedArr := arr.(type) {
+	case *array.String:
+		return typedArr.Value(row), nil
+	case *array.Int64:
+		return strconv.FormatInt(typedArr.Value(row), 10), nil
+	case *array.Float64:
+		return fmt.Sprintf("%g", typedArr.Value(row)), nil
+	default:
+		return "", fmt.Errorf("unsupported array type: %T", arr)
+	}
 }

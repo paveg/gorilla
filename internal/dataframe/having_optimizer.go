@@ -297,7 +297,11 @@ func NewHavingMemoryPool(allocator memory.Allocator) *HavingMemoryPool {
 
 // GetBooleanBuilder gets a boolean array builder from the pool.
 func (p *HavingMemoryPool) GetBooleanBuilder() *array.BooleanBuilder {
-	return p.booleanArrays.Get().(*array.BooleanBuilder)
+	if builder, ok := p.booleanArrays.Get().(*array.BooleanBuilder); ok {
+		return builder
+	}
+	// Return a new builder if pool returns invalid type
+	return array.NewBooleanBuilder(memory.NewGoAllocator())
 }
 
 // PutBooleanBuilder returns a boolean array builder to the pool.
@@ -558,7 +562,10 @@ func (c *CompiledHavingEvaluator) evaluateArithmeticOp(
 ) (interface{}, error) {
 	switch l := left.(type) {
 	case float64:
-		r := right.(float64)
+		r, ok := right.(float64)
+		if !ok {
+			return nil, fmt.Errorf("right operand is not float64, got %T", right)
+		}
 		switch op { //nolint:exhaustive // Only arithmetic operations handled here
 		case expr.OpAdd:
 			return l + r, nil
@@ -575,7 +582,10 @@ func (c *CompiledHavingEvaluator) evaluateArithmeticOp(
 			return nil, fmt.Errorf("unsupported float64 arithmetic operation: %v", op)
 		}
 	case int64:
-		r := right.(int64)
+		r, ok := right.(int64)
+		if !ok {
+			return nil, fmt.Errorf("right operand is not int64, got %T", right)
+		}
 		switch op { //nolint:exhaustive // Only arithmetic operations handled here
 		case expr.OpAdd:
 			return l + r, nil
@@ -601,7 +611,10 @@ func (c *CompiledHavingEvaluator) evaluateComparisonOp(
 ) (interface{}, error) {
 	switch l := left.(type) {
 	case float64:
-		r := right.(float64)
+		r, ok := right.(float64)
+		if !ok {
+			return nil, fmt.Errorf("right operand is not float64, got %T", right)
+		}
 		switch op { //nolint:exhaustive // Only comparison operations handled here
 		case expr.OpGt:
 			return l > r, nil
@@ -619,7 +632,10 @@ func (c *CompiledHavingEvaluator) evaluateComparisonOp(
 			return nil, fmt.Errorf("unsupported float64 comparison operation: %v", op)
 		}
 	case int64:
-		r := right.(int64)
+		r, ok := right.(int64)
+		if !ok {
+			return nil, fmt.Errorf("right operand is not int64, got %T", right)
+		}
 		switch op { //nolint:exhaustive // Only comparison operations handled here
 		case expr.OpGt:
 			return l > r, nil

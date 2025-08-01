@@ -106,8 +106,8 @@ type DebugPlanMetadata struct {
 type OperationTrace struct {
 	ID          string            `json:"id"`
 	Operation   string            `json:"operation"`
-	Input       DataFrameStats    `json:"input"`
-	Output      DataFrameStats    `json:"output"`
+	Input       Stats             `json:"input"`
+	Output      Stats             `json:"output"`
 	Duration    time.Duration     `json:"duration"`
 	Memory      MemoryStats       `json:"memory"`
 	Parallel    bool              `json:"parallel"`
@@ -115,8 +115,8 @@ type OperationTrace struct {
 	Properties  map[string]string `json:"properties"`
 }
 
-// DataFrameStats contains statistics about a DataFrame.
-type DataFrameStats struct {
+// Stats contains statistics about a DataFrame.
+type Stats struct {
 	Rows    int      `json:"rows"`
 	Columns int      `json:"columns"`
 	Memory  int64    `json:"memory"`
@@ -130,17 +130,44 @@ type MemoryStats struct {
 	Delta  int64 `json:"delta"`
 }
 
+// DebugContext manages debug-related state and provides thread-safe utilities.
+type DebugContext struct {
+	traceCounter int64
+	contextID    int64
+}
+
+// contextIDCounter is used to assign unique IDs to each debug context.
+//
+//nolint:gochecknoglobals // This global counter is necessary for ensuring unique context IDs across all debug contexts.
+var contextIDCounter int64
+
+// NewDebugContext creates a new debug context.
+func NewDebugContext() *DebugContext {
+	return &DebugContext{
+		contextID: atomic.AddInt64(&contextIDCounter, 1),
+	}
+}
+
+// GenerateTraceID generates a unique trace ID using atomic operations for thread safety.
+func (dc *DebugContext) GenerateTraceID() string {
+	// Use context ID + local counter to ensure uniqueness across all contexts
+	counter := atomic.AddInt64(&dc.traceCounter, 1)
+	return fmt.Sprintf("trace_%d_%d_%d", time.Now().UnixNano(), dc.contextID, counter)
+}
+
 // QueryAnalyzer analyzes and traces query execution.
 type QueryAnalyzer struct {
-	operations []OperationTrace
-	config     DebugConfig
+	operations   []OperationTrace
+	config       DebugConfig
+	debugContext *DebugContext
 }
 
 // NewQueryAnalyzer creates a new query analyzer.
 func NewQueryAnalyzer(config DebugConfig) *QueryAnalyzer {
 	return &QueryAnalyzer{
-		operations: make([]OperationTrace, 0),
-		config:     config,
+		operations:   make([]OperationTrace, 0),
+		config:       config,
+		debugContext: NewDebugContext(),
 	}
 }
 
@@ -153,7 +180,7 @@ func (qa *QueryAnalyzer) TraceOperation(
 	}
 
 	trace := OperationTrace{
-		ID:        generateTraceID(),
+		ID:        qa.debugContext.GenerateTraceID(),
 		Operation: op,
 		Input:     qa.captureStats(input),
 	}
@@ -187,12 +214,12 @@ func (qa *QueryAnalyzer) TraceOperation(
 }
 
 // captureStats captures DataFrame statistics.
-func (qa *QueryAnalyzer) captureStats(df *DataFrame) DataFrameStats {
+func (qa *QueryAnalyzer) captureStats(df *DataFrame) Stats {
 	if df == nil {
-		return DataFrameStats{}
+		return Stats{}
 	}
 
-	stats := DataFrameStats{
+	stats := Stats{
 		Rows:    df.Len(),
 		Columns: df.Width(),
 		Schema:  df.Columns(),
@@ -303,15 +330,6 @@ type Bottleneck struct {
 	Reason    string        `json:"reason"`
 }
 
-var traceCounter int64
-
-// generateTraceID generates a unique trace ID.
-func generateTraceID() string {
-	// Use atomic counter to ensure uniqueness even when called rapidly
-	counter := atomic.AddInt64(&traceCounter, 1)
-	return fmt.Sprintf("trace_%d_%d", time.Now().UnixNano(), counter)
-}
-
 // convertMemoryStats safely converts uint64 to int64 for memory statistics.
 func convertMemoryStats(val uint64) int64 {
 	const maxInt64 = int64(^uint64(0) >> 1)
@@ -334,7 +352,7 @@ func (df *DataFrame) Debug() *DataFrame {
 }
 
 // WithDebugConfig sets the debug configuration for the DataFrame.
-func (df *DataFrame) WithDebugConfig(config DebugConfig) *DataFrame {
+func (df *DataFrame) WithDebugConfig(_ DebugConfig) *DataFrame {
 	// Create a new DataFrame with debug config
 	// In a real implementation, we would add a debug field to DataFrame
 	// For now, we'll store it in a context or similar mechanism

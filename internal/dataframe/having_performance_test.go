@@ -1,3 +1,4 @@
+//nolint:testpackage // requires internal access to unexported types and functions
 package dataframe
 
 import (
@@ -466,7 +467,7 @@ func TestHavingConcurrentSafety(t *testing.T) {
 
 		// Check for any errors
 		for err := range errChan {
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		}
 	})
 }

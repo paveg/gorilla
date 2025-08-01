@@ -1,4 +1,4 @@
-package gorilla
+package gorilla_test
 
 import (
 	"runtime"
@@ -6,7 +6,9 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/paveg/gorilla"
 	"github.com/paveg/gorilla/internal/config"
+	"github.com/paveg/gorilla/internal/expr"
 	"github.com/paveg/gorilla/internal/parallel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -17,12 +19,12 @@ func TestDataFrameWithConfig(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
 	// Create test data
-	names := NewSeries("name", []string{"Alice", "Bob", "Charlie"}, mem)
-	ages := NewSeries("age", []int64{25, 30, 35}, mem)
+	names := gorilla.NewSeries("name", []string{"Alice", "Bob", "Charlie"}, mem)
+	ages := gorilla.NewSeries("age", []int64{25, 30, 35}, mem)
 	defer names.Release()
 	defer ages.Release()
 
-	df := NewDataFrame(names, ages)
+	df := gorilla.NewDataFrame(names, ages)
 	defer df.Release()
 
 	// Test WithConfig method exists and works
@@ -42,7 +44,7 @@ func TestDataFrameWithConfig(t *testing.T) {
 
 	// Verify lazy operations work with configuration
 	result, err := configuredDF.Lazy().
-		Filter(Col("age").Gt(Lit(int64(25)))).
+		Filter(gorilla.Col("age").Gt(gorilla.Lit(int64(25)))).
 		Collect()
 	require.NoError(t, err)
 	defer result.Release()
@@ -55,14 +57,14 @@ func TestConfigurationInheritance(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
 	// Create test data
-	names := NewSeries("name", []string{"Alice", "Bob", "Charlie", "Diana"}, mem)
-	ages := NewSeries("age", []int64{25, 30, 35, 40}, mem)
-	salaries := NewSeries("salary", []int64{50000, 60000, 70000, 80000}, mem)
+	names := gorilla.NewSeries("name", []string{"Alice", "Bob", "Charlie", "Diana"}, mem)
+	ages := gorilla.NewSeries("age", []int64{25, 30, 35, 40}, mem)
+	salaries := gorilla.NewSeries("salary", []int64{50000, 60000, 70000, 80000}, mem)
 	defer names.Release()
 	defer ages.Release()
 	defer salaries.Release()
 
-	df := NewDataFrame(names, ages, salaries)
+	df := gorilla.NewDataFrame(names, ages, salaries)
 	defer df.Release()
 
 	// Configure with ForceParallel to test inheritance
@@ -76,8 +78,8 @@ func TestConfigurationInheritance(t *testing.T) {
 
 	// Perform multiple chained operations
 	result, err := configuredDF.Lazy().
-		Filter(Col("age").Gt(Lit(int64(25)))).
-		WithColumn("bonus", Col("salary").Mul(Lit(float64(0.1)))).
+		Filter(expr.Col("age").Gt(expr.Lit(int64(25)))).
+		WithColumn("bonus", expr.Col("salary").Mul(expr.Lit(float64(0.1)))).
 		Select("name", "salary", "bonus").
 		Collect()
 	require.NoError(t, err)
@@ -124,7 +126,7 @@ func TestConfigLoadFromFile(t *testing.T) {
 	assert.Equal(t, 2000, yamlConfig.ParallelThreshold)
 	assert.Equal(t, 8, yamlConfig.WorkerPoolSize)
 	assert.Equal(t, int64(1073741824), yamlConfig.MemoryThreshold) // 1GB
-	assert.Equal(t, 0.75, yamlConfig.GCPressureThreshold)
+	assert.InDelta(t, 0.75, yamlConfig.GCPressureThreshold, 0.001)
 
 	// Load from JSON example
 	jsonConfig, err := config.LoadFromFile("examples/config/gorilla.json")
@@ -142,8 +144,8 @@ func TestReadmeExample(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
 	// Create test data
-	names := NewSeries("name", []string{"Alice", "Bob", "Charlie"}, mem)
-	ages := NewSeries("age", []int64{25, 30, 35}, mem)
+	names := gorilla.NewSeries("name", []string{"Alice", "Bob", "Charlie"}, mem)
+	ages := gorilla.NewSeries("age", []int64{25, 30, 35}, mem)
 	defer names.Release()
 	defer ages.Release()
 
@@ -154,12 +156,12 @@ func TestReadmeExample(t *testing.T) {
 	}
 
 	// This should match the README.md example
-	df := NewDataFrame(names, ages).WithConfig(opConfig)
+	df := gorilla.NewDataFrame(names, ages).WithConfig(opConfig)
 	defer df.Release()
 
 	// Verify it works
 	result, err := df.Lazy().
-		Filter(Col("age").Gt(Lit(int64(25)))).
+		Filter(gorilla.Col("age").Gt(gorilla.Lit(int64(25)))).
 		Collect()
 	require.NoError(t, err)
 	defer result.Release()
@@ -172,10 +174,10 @@ func TestDefaultOperationConfig(t *testing.T) {
 	mem := memory.NewGoAllocator()
 
 	// Create test data
-	names := NewSeries("name", []string{"Alice", "Bob"}, mem)
+	names := gorilla.NewSeries("name", []string{"Alice", "Bob"}, mem)
 	defer names.Release()
 
-	df := NewDataFrame(names)
+	df := gorilla.NewDataFrame(names)
 	defer df.Release()
 
 	// Test with empty configuration
@@ -202,7 +204,7 @@ func TestMemoryConfigurationIntegration(t *testing.T) {
 		GCPressureThreshold: 0.6,               // Lower than default 0.8
 	}
 
-	monitor := NewMemoryUsageMonitorFromConfig(testConfig)
+	monitor := gorilla.NewMemoryUsageMonitorFromConfig(testConfig)
 	defer monitor.StopMonitoring()
 
 	// Verify the configuration was applied (we can't directly access private fields,

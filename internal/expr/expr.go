@@ -5,11 +5,11 @@ import (
 	"fmt"
 )
 
-// ExprType represents the type of expression.
-type ExprType int
+// Type represents the type of expression.
+type Type int
 
 const (
-	ExprColumn ExprType = iota
+	ExprColumn Type = iota
 	ExprLiteral
 	ExprBinary
 	ExprUnary
@@ -43,7 +43,7 @@ func (ec EvaluationContext) String() string {
 
 // Expr represents an expression that can be evaluated lazily.
 type Expr interface {
-	Type() ExprType
+	Type() Type
 	String() string
 }
 
@@ -59,7 +59,7 @@ type ColumnExpr struct {
 	name string
 }
 
-func (c *ColumnExpr) Type() ExprType {
+func (c *ColumnExpr) Type() Type {
 	return ExprColumn
 }
 
@@ -73,7 +73,7 @@ func (c *ColumnExpr) Name() string {
 
 // SupportsContext returns whether this expression can be evaluated in the given context
 // ColumnExpr can be evaluated in both contexts (but meaning differs).
-func (c *ColumnExpr) SupportsContext(ctx EvaluationContext) bool {
+func (c *ColumnExpr) SupportsContext(_ EvaluationContext) bool {
 	return true // Columns exist in both raw and aggregated data
 }
 
@@ -82,7 +82,7 @@ type LiteralExpr struct {
 	value interface{}
 }
 
-func (l *LiteralExpr) Type() ExprType {
+func (l *LiteralExpr) Type() Type {
 	return ExprLiteral
 }
 
@@ -96,7 +96,7 @@ func (l *LiteralExpr) Value() interface{} {
 
 // SupportsContext returns whether this expression can be evaluated in the given context
 // LiteralExpr can be evaluated in any context.
-func (l *LiteralExpr) SupportsContext(ctx EvaluationContext) bool {
+func (l *LiteralExpr) SupportsContext(_ EvaluationContext) bool {
 	return true
 }
 
@@ -125,13 +125,13 @@ type BinaryExpr struct {
 	right Expr
 }
 
-func (b *BinaryExpr) Type() ExprType {
-	return ExprBinary
-}
-
 // NewBinaryExpr creates a new binary expression.
 func NewBinaryExpr(left Expr, op BinaryOp, right Expr) *BinaryExpr {
 	return &BinaryExpr{left: left, op: op, right: right}
+}
+
+func (b *BinaryExpr) Type() Type {
+	return ExprBinary
 }
 
 func (b *BinaryExpr) String() string {
@@ -207,7 +207,7 @@ type UnaryExpr struct {
 	operand Expr
 }
 
-func (u *UnaryExpr) Type() ExprType {
+func (u *UnaryExpr) Type() Type {
 	return ExprUnary
 }
 
@@ -244,7 +244,7 @@ type InvalidExpr struct {
 	message string
 }
 
-func (i *InvalidExpr) Type() ExprType {
+func (i *InvalidExpr) Type() Type {
 	return ExprInvalid
 }
 
@@ -258,16 +258,11 @@ func (i *InvalidExpr) Message() string {
 
 // SupportsContext returns whether this expression can be evaluated in the given context
 // InvalidExpr cannot be evaluated in any context.
-func (i *InvalidExpr) SupportsContext(ctx EvaluationContext) bool {
+func (i *InvalidExpr) SupportsContext(_ EvaluationContext) bool {
 	return false
 }
 
 // Constructor functions
-
-// NewFunction creates a function expression.
-func NewFunction(name string, args ...Expr) *FunctionExpr {
-	return &FunctionExpr{name: name, args: args}
-}
 
 // Col creates a column expression.
 func Col(name string) *ColumnExpr {
@@ -473,7 +468,12 @@ type FunctionExpr struct {
 	args []Expr
 }
 
-func (f *FunctionExpr) Type() ExprType {
+// NewFunction creates a function expression.
+func NewFunction(name string, args ...Expr) *FunctionExpr {
+	return &FunctionExpr{name: name, args: args}
+}
+
+func (f *FunctionExpr) Type() Type {
 	return ExprFunction
 }
 
@@ -526,7 +526,7 @@ type AggregationExpr struct {
 	alias   string
 }
 
-func (a *AggregationExpr) Type() ExprType {
+func (a *AggregationExpr) Type() Type {
 	return ExprAggregation
 }
 
@@ -577,7 +577,7 @@ type CaseExpr struct {
 	elseValue Expr
 }
 
-func (c *CaseExpr) Type() ExprType {
+func (c *CaseExpr) Type() Type {
 	return ExprCase
 }
 
@@ -1198,7 +1198,7 @@ type IntervalExpr struct {
 	intervalType IntervalType
 }
 
-func (i *IntervalExpr) Type() ExprType {
+func (i *IntervalExpr) Type() Type {
 	return ExprLiteral // Intervals are treated as literals
 }
 
@@ -1229,7 +1229,7 @@ func (i *IntervalExpr) IntervalType() IntervalType {
 
 // SupportsContext returns whether this expression can be evaluated in the given context
 // IntervalExpr can be evaluated in any context (it's a literal-like expression).
-func (i *IntervalExpr) SupportsContext(ctx EvaluationContext) bool {
+func (i *IntervalExpr) SupportsContext(_ EvaluationContext) bool {
 	return true
 }
 

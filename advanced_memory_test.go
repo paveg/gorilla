@@ -1,9 +1,10 @@
-package gorilla
+package gorilla_test
 
 import (
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/paveg/gorilla"
 	"github.com/paveg/gorilla/internal/parallel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -279,7 +280,7 @@ func TestMemoryMonitorIntegration(t *testing.T) {
 // BenchmarkMemoryMonitoring benchmarks memory monitoring performance.
 func BenchmarkMemoryMonitoring(b *testing.B) {
 	b.Run("memory usage monitoring", func(b *testing.B) {
-		monitor := NewMemoryUsageMonitor(1024 * 1024 * 1024) // 1GB threshold
+		monitor := gorilla.NewMemoryUsageMonitor(1024 * 1024 * 1024) // 1GB threshold
 		defer monitor.StopMonitoring()
 
 		b.ResetTimer()
@@ -357,17 +358,17 @@ func TestIntegrationWithExistingMemoryManager(t *testing.T) {
 		mem := memory.NewGoAllocator()
 
 		// Create memory usage monitor
-		monitor := NewMemoryUsageMonitor(1024 * 1024)
+		monitor := gorilla.NewMemoryUsageMonitor(1024 * 1024)
 		defer monitor.StopMonitoring()
 
 		// Create memory manager
-		manager := NewMemoryManager(mem)
+		manager := gorilla.NewMemoryManager(mem)
 		defer manager.ReleaseAll()
 
 		// Create some resources and track them
-		s1 := NewSeries("test1", []int64{1, 2, 3}, mem)
-		s2 := NewSeries("test2", []string{"a", "b", "c"}, mem)
-		df := NewDataFrame(s1, s2)
+		s1 := gorilla.NewSeries("test1", []int64{1, 2, 3}, mem)
+		s2 := gorilla.NewSeries("test2", []string{"a", "b", "c"}, mem)
+		df := gorilla.NewDataFrame(s1, s2)
 
 		manager.Track(s1)
 		manager.Track(s2)

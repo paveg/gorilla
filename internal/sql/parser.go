@@ -12,17 +12,17 @@ import (
 type TokenType int
 
 const (
-	// Special tokens.
+	// EOF represents end of file token.
 	EOF TokenType = iota
 	ILLEGAL
 
-	// Literals.
-	IDENT  // column names, table names, function names
+	// IDENT represents identifier tokens like column names, table names, function names.
+	IDENT
 	INT    // integers
 	FLOAT  // floating point numbers
 	STRING // string literals
 
-	// Keywords.
+	// SELECT represents the SELECT keyword.
 	SELECT
 	FROM
 	WHERE
@@ -54,8 +54,8 @@ const (
 	MAX
 	DISTINCT
 
-	// Operators.
-	EQ    // =
+	// EQ represents the equals operator (=).
+	EQ
 	NE    // != or <>
 	LT    // <
 	LE    // <=
@@ -67,8 +67,8 @@ const (
 	DIV   // /
 	MOD   // %
 
-	// Delimiters.
-	COMMA     // ,
+	// COMMA represents the comma delimiter (,).
+	COMMA
 	SEMICOLON // ;
 	LPAREN    // (
 	RPAREN    // )
@@ -123,81 +123,143 @@ func (l *Lexer) NextToken() Token {
 	l.skipWhitespace()
 
 	switch l.ch {
+	case '=', '!', '<', '>':
+		tok = l.tokenizeComparisonOperator()
+	case '+', '-', '*', '/', '%':
+		tok = l.tokenizeArithmeticOperator()
+	case ',', ';', '(', ')', '.':
+		tok = l.tokenizeDelimiter()
+	case '\'', '"':
+		tok = l.tokenizeString()
+	case 0:
+		tok = l.tokenizeEOF()
+	default:
+		if isLetter(l.ch) {
+			tok = l.tokenizeIdentifier()
+			return tok // early return to avoid readChar() call
+		} else if isDigit(l.ch) {
+			tok = l.tokenizeNumber()
+			return tok // early return to avoid readChar() call
+		}
+		tok = Token{Type: ILLEGAL, Literal: string(l.ch), Position: l.position}
+	}
+
+	l.readChar()
+	return tok
+}
+
+// tokenizeComparisonOperator handles comparison operators (=, !=, <, <=, >, >=, <>).
+func (l *Lexer) tokenizeComparisonOperator() Token {
+	switch l.ch {
 	case '=':
-		tok = Token{Type: EQ, Literal: string(l.ch), Position: l.position}
+		return Token{Type: EQ, Literal: string(l.ch), Position: l.position}
 	case '!':
 		if l.peekChar() == '=' {
 			ch := l.ch
 			l.readChar()
-			tok = Token{Type: NE, Literal: string(ch) + string(l.ch), Position: l.position - 1}
-		} else {
-			tok = Token{Type: ILLEGAL, Literal: string(l.ch), Position: l.position}
+			return Token{Type: NE, Literal: string(ch) + string(l.ch), Position: l.position - 1}
 		}
+		return Token{Type: ILLEGAL, Literal: string(l.ch), Position: l.position}
 	case '<':
-		if l.peekChar() == '=' {
+		switch l.peekChar() {
+		case '=':
 			ch := l.ch
 			l.readChar()
-			tok = Token{Type: LE, Literal: string(ch) + string(l.ch), Position: l.position - 1}
-		} else if l.peekChar() == '>' {
+			return Token{Type: LE, Literal: string(ch) + string(l.ch), Position: l.position - 1}
+		case '>':
 			ch := l.ch
 			l.readChar()
-			tok = Token{Type: NE, Literal: string(ch) + string(l.ch), Position: l.position - 1}
-		} else {
-			tok = Token{Type: LT, Literal: string(l.ch), Position: l.position}
+			return Token{Type: NE, Literal: string(ch) + string(l.ch), Position: l.position - 1}
+		default:
+			return Token{Type: LT, Literal: string(l.ch), Position: l.position}
 		}
 	case '>':
 		if l.peekChar() == '=' {
 			ch := l.ch
 			l.readChar()
-			tok = Token{Type: GE, Literal: string(ch) + string(l.ch), Position: l.position - 1}
-		} else {
-			tok = Token{Type: GT, Literal: string(l.ch), Position: l.position}
+			return Token{Type: GE, Literal: string(ch) + string(l.ch), Position: l.position - 1}
 		}
-	case '+':
-		tok = Token{Type: PLUS, Literal: string(l.ch), Position: l.position}
-	case '-':
-		tok = Token{Type: MINUS, Literal: string(l.ch), Position: l.position}
-	case '*':
-		tok = Token{Type: MULT, Literal: string(l.ch), Position: l.position}
-	case '/':
-		tok = Token{Type: DIV, Literal: string(l.ch), Position: l.position}
-	case '%':
-		tok = Token{Type: MOD, Literal: string(l.ch), Position: l.position}
-	case ',':
-		tok = Token{Type: COMMA, Literal: string(l.ch), Position: l.position}
-	case ';':
-		tok = Token{Type: SEMICOLON, Literal: string(l.ch), Position: l.position}
-	case '(':
-		tok = Token{Type: LPAREN, Literal: string(l.ch), Position: l.position}
-	case ')':
-		tok = Token{Type: RPAREN, Literal: string(l.ch), Position: l.position}
-	case '.':
-		tok = Token{Type: DOT, Literal: string(l.ch), Position: l.position}
-	case '\'', '"':
-		tok.Type = STRING
-		tok.Literal = l.readString()
-		tok.Position = l.position
-	case 0:
-		tok.Literal = ""
-		tok.Type = EOF
-		tok.Position = l.position
+		return Token{Type: GT, Literal: string(l.ch), Position: l.position}
 	default:
-		if isLetter(l.ch) {
-			tok.Position = l.position
-			tok.Literal = l.readIdentifier()
-			tok.Type = lookupIdent(tok.Literal)
-			return tok // early return to avoid readChar() call
-		} else if isDigit(l.ch) {
-			tok.Position = l.position
-			tok.Type, tok.Literal = l.readNumber()
-			return tok // early return to avoid readChar() call
-		} else {
-			tok = Token{Type: ILLEGAL, Literal: string(l.ch), Position: l.position}
-		}
+		return Token{Type: ILLEGAL, Literal: string(l.ch), Position: l.position}
 	}
+}
 
-	l.readChar()
-	return tok
+// tokenizeArithmeticOperator handles arithmetic operators (+, -, *, /, %).
+func (l *Lexer) tokenizeArithmeticOperator() Token {
+	switch l.ch {
+	case '+':
+		return Token{Type: PLUS, Literal: string(l.ch), Position: l.position}
+	case '-':
+		return Token{Type: MINUS, Literal: string(l.ch), Position: l.position}
+	case '*':
+		return Token{Type: MULT, Literal: string(l.ch), Position: l.position}
+	case '/':
+		return Token{Type: DIV, Literal: string(l.ch), Position: l.position}
+	case '%':
+		return Token{Type: MOD, Literal: string(l.ch), Position: l.position}
+	default:
+		return Token{Type: ILLEGAL, Literal: string(l.ch), Position: l.position}
+	}
+}
+
+// tokenizeDelimiter handles delimiter tokens (,, ;, (, ), .).
+func (l *Lexer) tokenizeDelimiter() Token {
+	switch l.ch {
+	case ',':
+		return Token{Type: COMMA, Literal: string(l.ch), Position: l.position}
+	case ';':
+		return Token{Type: SEMICOLON, Literal: string(l.ch), Position: l.position}
+	case '(':
+		return Token{Type: LPAREN, Literal: string(l.ch), Position: l.position}
+	case ')':
+		return Token{Type: RPAREN, Literal: string(l.ch), Position: l.position}
+	case '.':
+		return Token{Type: DOT, Literal: string(l.ch), Position: l.position}
+	default:
+		return Token{Type: ILLEGAL, Literal: string(l.ch), Position: l.position}
+	}
+}
+
+// tokenizeString handles string literals (' and " quoted strings).
+func (l *Lexer) tokenizeString() Token {
+	return Token{
+		Type:     STRING,
+		Literal:  l.readString(),
+		Position: l.position,
+	}
+}
+
+// tokenizeEOF handles end-of-file token.
+func (l *Lexer) tokenizeEOF() Token {
+	return Token{
+		Literal:  "",
+		Type:     EOF,
+		Position: l.position,
+	}
+}
+
+// tokenizeIdentifier handles identifier tokens (keywords, column names, etc.).
+func (l *Lexer) tokenizeIdentifier() Token {
+	position := l.position
+	literal := l.readIdentifier()
+	tokenType := lookupIdent(literal)
+	return Token{
+		Type:     tokenType,
+		Literal:  literal,
+		Position: position,
+	}
+}
+
+// tokenizeNumber handles numeric tokens (integers and floats).
+func (l *Lexer) tokenizeNumber() Token {
+	position := l.position
+	tokenType, literal := l.readNumber()
+	return Token{
+		Type:     tokenType,
+		Literal:  literal,
+		Position: position,
+	}
 }
 
 // skipWhitespace skips whitespace characters.
@@ -262,43 +324,65 @@ func isDigit(ch byte) bool {
 	return '0' <= ch && ch <= '9'
 }
 
-// Keywords map for identifier lookup.
-var keywords = map[string]TokenType{
-	"SELECT":   SELECT,
-	"FROM":     FROM,
-	"WHERE":    WHERE,
-	"GROUP":    GROUP,
-	"BY":       BY,
-	"HAVING":   HAVING,
-	"ORDER":    ORDER,
-	"LIMIT":    LIMIT,
-	"OFFSET":   OFFSET,
-	"AS":       AS,
-	"AND":      AND,
-	"OR":       OR,
-	"NOT":      NOT,
-	"IN":       IN,
-	"EXISTS":   EXISTS,
-	"NULL":     NULL,
-	"TRUE":     TRUE,
-	"FALSE":    FALSE,
-	"JOIN":     JOIN,
-	"INNER":    INNER,
-	"LEFT":     LEFT,
-	"RIGHT":    RIGHT,
-	"FULL":     FULL,
-	"ON":       ON,
-	"COUNT":    COUNT,
-	"SUM":      SUM,
-	"AVG":      AVG,
-	"MIN":      MIN,
-	"MAX":      MAX,
-	"DISTINCT": DISTINCT,
+// getKeywordsMap returns the keywords map.
+func getKeywordsMap() map[string]TokenType {
+	return map[string]TokenType{
+		"SELECT":   SELECT,
+		"FROM":     FROM,
+		"WHERE":    WHERE,
+		"GROUP":    GROUP,
+		"BY":       BY,
+		"HAVING":   HAVING,
+		"ORDER":    ORDER,
+		"LIMIT":    LIMIT,
+		"OFFSET":   OFFSET,
+		"AS":       AS,
+		"AND":      AND,
+		"OR":       OR,
+		"NOT":      NOT,
+		"IN":       IN,
+		"EXISTS":   EXISTS,
+		"NULL":     NULL,
+		"TRUE":     TRUE,
+		"FALSE":    FALSE,
+		"JOIN":     JOIN,
+		"INNER":    INNER,
+		"LEFT":     LEFT,
+		"RIGHT":    RIGHT,
+		"FULL":     FULL,
+		"ON":       ON,
+		"COUNT":    COUNT,
+		"SUM":      SUM,
+		"AVG":      AVG,
+		"MIN":      MIN,
+		"MAX":      MAX,
+		"DISTINCT": DISTINCT,
+	}
+}
+
+// getPrecedencesMap returns the precedences map.
+func getPrecedencesMap() map[TokenType]int {
+	//nolint:exhaustive // Only tokens with precedence need to be mapped
+	return map[TokenType]int{
+		AND:    LOGICAL,
+		OR:     LOGICAL,
+		EQ:     EQUALS,
+		NE:     EQUALS,
+		LT:     LESSGREATER,
+		GT:     LESSGREATER,
+		LE:     LESSGREATER,
+		GE:     LESSGREATER,
+		PLUS:   SUMPREC,
+		MINUS:  SUMPREC,
+		DIV:    PRODUCT,
+		MULT:   PRODUCT,
+		LPAREN: CALL,
+	}
 }
 
 // lookupIdent checks if identifier is a keyword.
 func lookupIdent(ident string) TokenType {
-	if tok, ok := keywords[strings.ToUpper(ident)]; ok {
+	if tok, ok := getKeywordsMap()[strings.ToUpper(ident)]; ok {
 		return tok
 	}
 	return IDENT
@@ -340,7 +424,8 @@ func (p *Parser) Errors() []string {
 }
 
 // ParseSQL parses a SQL statement.
-func (p *Parser) ParseSQL() SQLStatement {
+func (p *Parser) ParseSQL() Statement {
+	//nolint:exhaustive // Parser only handles SELECT statements currently
 	switch p.curToken.Type {
 	case SELECT:
 		return p.parseSelectStatement()
@@ -354,84 +439,140 @@ func (p *Parser) ParseSQL() SQLStatement {
 func (p *Parser) parseSelectStatement() *SelectStatement {
 	stmt := &SelectStatement{}
 
-	// Current token is already SELECT, no need to advance
-
-	// Parse SELECT list
-	selectList, ok := p.parseSelectList()
-	if !ok {
+	// Parse SELECT list.
+	if !p.parseSelectListClause(stmt) {
 		return nil
 	}
-	stmt.SelectList = selectList
 
-	// Parse FROM clause (optional)
-	if p.peekTokenIs(FROM) {
-		p.nextToken()
-		fromClause, ok := p.parseFromClause()
-		if !ok {
-			return nil
-		}
-		stmt.FromClause = fromClause
-	}
-
-	// Parse WHERE clause (optional)
-	if p.peekTokenIs(WHERE) {
-		p.nextToken()
-		whereClause, ok := p.parseWhereClause()
-		if !ok {
-			return nil
-		}
-		stmt.WhereClause = whereClause
-	}
-
-	// Parse GROUP BY clause (optional)
-	if p.peekTokenIs(GROUP) {
-		p.nextToken()
-		groupByClause, ok := p.parseGroupByClause()
-		if !ok {
-			return nil
-		}
-		stmt.GroupByClause = groupByClause
-	}
-
-	// Parse HAVING clause (optional)
-	if p.peekTokenIs(HAVING) {
-		p.nextToken()
-		havingClause, ok := p.parseHavingClause()
-		if !ok {
-			return nil
-		}
-		stmt.HavingClause = havingClause
-	}
-
-	// Parse ORDER BY clause (optional)
-	if p.peekTokenIs(ORDER) {
-		p.nextToken()
-		orderByClause, ok := p.parseOrderByClause()
-		if !ok {
-			return nil
-		}
-		stmt.OrderByClause = orderByClause
-	}
-
-	// Parse LIMIT clause (optional)
-	if p.peekTokenIs(LIMIT) {
-		p.nextToken()
-		limitClause, ok := p.parseLimitClause()
-		if !ok {
-			return nil
-		}
-		stmt.LimitClause = limitClause
-	} else if p.peekTokenIs(OFFSET) {
-		// Parse standalone OFFSET clause (without LIMIT)
-		p.nextToken()
-		offsetClause, ok := p.parseStandaloneOffsetClause()
-		if !ok {
-			return nil
-		}
-		stmt.LimitClause = offsetClause
+	// Parse optional clauses in sequence.
+	if !p.parseOptionalClauses(stmt) {
+		return nil
 	}
 
 	return stmt
+}
+
+// parseSelectListClause parses the SELECT list and assigns it to the statement.
+func (p *Parser) parseSelectListClause(stmt *SelectStatement) bool {
+	selectList, ok := p.parseSelectList()
+	if !ok {
+		return false
+	}
+	stmt.SelectList = selectList
+	return true
+}
+
+// parseOptionalClauses parses all optional clauses in order.
+func (p *Parser) parseOptionalClauses(stmt *SelectStatement) bool {
+	return p.parseFromClauseIfPresent(stmt) &&
+		p.parseWhereClauseIfPresent(stmt) &&
+		p.parseGroupByClauseIfPresent(stmt) &&
+		p.parseHavingClauseIfPresent(stmt) &&
+		p.parseOrderByClauseIfPresent(stmt) &&
+		p.parseLimitOffsetClausesIfPresent(stmt)
+}
+
+// parseFromClauseIfPresent parses FROM clause if present.
+func (p *Parser) parseFromClauseIfPresent(stmt *SelectStatement) bool {
+	if !p.peekTokenIs(FROM) {
+		return true
+	}
+	p.nextToken()
+	fromClause, ok := p.parseFromClause()
+	if !ok {
+		return false
+	}
+	stmt.FromClause = fromClause
+	return true
+}
+
+// parseWhereClauseIfPresent parses WHERE clause if present.
+func (p *Parser) parseWhereClauseIfPresent(stmt *SelectStatement) bool {
+	if !p.peekTokenIs(WHERE) {
+		return true
+	}
+	p.nextToken()
+	whereClause, ok := p.parseWhereClause()
+	if !ok {
+		return false
+	}
+	stmt.WhereClause = whereClause
+	return true
+}
+
+// parseGroupByClauseIfPresent parses GROUP BY clause if present.
+func (p *Parser) parseGroupByClauseIfPresent(stmt *SelectStatement) bool {
+	if !p.peekTokenIs(GROUP) {
+		return true
+	}
+	p.nextToken()
+	groupByClause, ok := p.parseGroupByClause()
+	if !ok {
+		return false
+	}
+	stmt.GroupByClause = groupByClause
+	return true
+}
+
+// parseHavingClauseIfPresent parses HAVING clause if present.
+func (p *Parser) parseHavingClauseIfPresent(stmt *SelectStatement) bool {
+	if !p.peekTokenIs(HAVING) {
+		return true
+	}
+	p.nextToken()
+	havingClause, ok := p.parseHavingClause()
+	if !ok {
+		return false
+	}
+	stmt.HavingClause = havingClause
+	return true
+}
+
+// parseOrderByClauseIfPresent parses ORDER BY clause if present.
+func (p *Parser) parseOrderByClauseIfPresent(stmt *SelectStatement) bool {
+	if !p.peekTokenIs(ORDER) {
+		return true
+	}
+	p.nextToken()
+	orderByClause, ok := p.parseOrderByClause()
+	if !ok {
+		return false
+	}
+	stmt.OrderByClause = orderByClause
+	return true
+}
+
+// parseLimitOffsetClausesIfPresent parses LIMIT and OFFSET clauses if present.
+func (p *Parser) parseLimitOffsetClausesIfPresent(stmt *SelectStatement) bool {
+	if p.peekTokenIs(LIMIT) {
+		return p.parseLimitClauseAndAssign(stmt)
+	}
+	if p.peekTokenIs(OFFSET) {
+		return p.parseStandaloneOffsetClauseAndAssign(stmt)
+	}
+	return true
+}
+
+// parseLimitClauseAndAssign parses LIMIT clause and assigns it to the statement.
+func (p *Parser) parseLimitClauseAndAssign(stmt *SelectStatement) bool {
+	p.nextToken()
+	limitClause, ok := p.parseLimitClause()
+	if !ok {
+		return false
+	}
+	stmt.LimitClause = limitClause
+	return true
+}
+
+// parseStandaloneOffsetClauseAndAssign parses standalone OFFSET clause and assigns it to the statement.
+func (p *Parser) parseStandaloneOffsetClauseAndAssign(stmt *SelectStatement) bool {
+	p.nextToken()
+	offsetClause, ok := p.parseStandaloneOffsetClause()
+	if !ok {
+		return false
+	}
+	stmt.LimitClause = offsetClause
+	return true
 }
 
 // parseSelectList parses the SELECT list.
@@ -459,6 +600,7 @@ func (p *Parser) parseSelectList() ([]SelectItem, bool) {
 
 // isValidAlias checks if a token can be used as an alias.
 func (p *Parser) isValidAlias() bool {
+	//nolint:exhaustive // Only specific tokens are valid aliases
 	switch p.peekToken.Type {
 	case IDENT, COUNT, SUM, AVG, MIN, MAX:
 		// Allow identifiers and function names as aliases
@@ -516,23 +658,6 @@ const (
 	CALL        // myFunction(X)
 )
 
-// precedences maps tokens to their precedence.
-var precedences = map[TokenType]int{
-	AND:    LOGICAL,
-	OR:     LOGICAL,
-	EQ:     EQUALS,
-	NE:     EQUALS,
-	LT:     LESSGREATER,
-	GT:     LESSGREATER,
-	LE:     LESSGREATER,
-	GE:     LESSGREATER,
-	PLUS:   SUMPREC,
-	MINUS:  SUMPREC,
-	DIV:    PRODUCT,
-	MULT:   PRODUCT,
-	LPAREN: CALL,
-}
-
 // parseExpression parses expressions using Pratt parser.
 func (p *Parser) parseExpression(precedence int) (expr.Expr, bool) {
 	// Parse prefix expression
@@ -554,6 +679,7 @@ func (p *Parser) parseExpression(precedence int) (expr.Expr, bool) {
 
 // parsePrefix parses prefix expressions.
 func (p *Parser) parsePrefix() (expr.Expr, bool) {
+	//nolint:exhaustive // Parser handles only specific prefix token types
 	switch p.curToken.Type {
 	case IDENT:
 		return p.parseIdentifier()
@@ -584,6 +710,7 @@ func (p *Parser) parsePrefix() (expr.Expr, bool) {
 
 // parseInfix parses infix expressions.
 func (p *Parser) parseInfix(left expr.Expr) (expr.Expr, bool) {
+	//nolint:exhaustive // Parser handles only specific infix token types
 	switch p.peekToken.Type {
 	case EQ, NE, LT, LE, GT, GE, PLUS, MINUS, MULT, DIV, MOD:
 		p.nextToken()
@@ -592,9 +719,9 @@ func (p *Parser) parseInfix(left expr.Expr) (expr.Expr, bool) {
 		p.nextToken()
 		return p.parseLogicalExpression(left)
 	case LPAREN:
-		if _, ok := left.(*expr.ColumnExpr); ok {
+		if colExpr, ok := left.(*expr.ColumnExpr); ok {
 			p.nextToken()
-			return p.parseFunctionCallWithLeft(left.(*expr.ColumnExpr))
+			return p.parseFunctionCallWithLeft(colExpr)
 		}
 	}
 	return left, true
@@ -619,15 +746,15 @@ func (p *Parser) expectPeek(t TokenType) bool {
 }
 
 func (p *Parser) peekPrecedence() int {
-	if p, ok := precedences[p.peekToken.Type]; ok {
-		return p
+	if prec, ok := getPrecedencesMap()[p.peekToken.Type]; ok {
+		return prec
 	}
 	return LOWEST
 }
 
 func (p *Parser) curPrecedence() int {
-	if p, ok := precedences[p.curToken.Type]; ok {
-		return p
+	if prec, ok := getPrecedencesMap()[p.curToken.Type]; ok {
+		return prec
 	}
 	return LOWEST
 }
@@ -727,122 +854,110 @@ func (p *Parser) parseBinaryExpression(left expr.Expr) (expr.Expr, bool) {
 		return nil, false
 	}
 
-	// Use type assertion to call methods on concrete types
+	return p.applyBinaryOperator(left, operator, right)
+}
+
+// applyBinaryOperator applies the binary operator to the left and right expressions.
+func (p *Parser) applyBinaryOperator(left expr.Expr, operator string, right expr.Expr) (expr.Expr, bool) {
 	switch operator {
 	case "+":
-		if col, ok := left.(*expr.ColumnExpr); ok {
-			return col.Add(right), true
-		} else if bin, ok := left.(*expr.BinaryExpr); ok {
-			return bin.Add(right), true
-		} else if fun, ok := left.(*expr.FunctionExpr); ok {
-			return fun.Add(right), true
-		} else if agg, ok := left.(*expr.AggregationExpr); ok {
-			return agg.Add(right), true
-		}
-		p.addError(fmt.Sprintf("unsupported expression type for addition: %T", left))
-		return nil, false
+		return p.applyArithmeticOperation(left, right, "addition",
+			func(c *expr.ColumnExpr) expr.Expr { return c.Add(right) },
+			func(b *expr.BinaryExpr) expr.Expr { return b.Add(right) },
+			func(f *expr.FunctionExpr) expr.Expr { return f.Add(right) },
+			func(a *expr.AggregationExpr) expr.Expr { return a.Add(right) })
 	case "-":
-		if col, ok := left.(*expr.ColumnExpr); ok {
-			return col.Sub(right), true
-		} else if bin, ok := left.(*expr.BinaryExpr); ok {
-			return bin.Sub(right), true
-		} else if fun, ok := left.(*expr.FunctionExpr); ok {
-			return fun.Sub(right), true
-		} else if agg, ok := left.(*expr.AggregationExpr); ok {
-			return agg.Sub(right), true
-		}
-		p.addError(fmt.Sprintf("unsupported expression type for subtraction: %T", left))
-		return nil, false
+		return p.applyArithmeticOperation(left, right, "subtraction",
+			func(c *expr.ColumnExpr) expr.Expr { return c.Sub(right) },
+			func(b *expr.BinaryExpr) expr.Expr { return b.Sub(right) },
+			func(f *expr.FunctionExpr) expr.Expr { return f.Sub(right) },
+			func(a *expr.AggregationExpr) expr.Expr { return a.Sub(right) })
 	case "*":
-		if col, ok := left.(*expr.ColumnExpr); ok {
-			return col.Mul(right), true
-		} else if bin, ok := left.(*expr.BinaryExpr); ok {
-			return bin.Mul(right), true
-		} else if fun, ok := left.(*expr.FunctionExpr); ok {
-			return fun.Mul(right), true
-		} else if agg, ok := left.(*expr.AggregationExpr); ok {
-			return agg.Mul(right), true
-		}
-		p.addError(fmt.Sprintf("unsupported expression type for multiplication: %T", left))
-		return nil, false
+		return p.applyArithmeticOperation(left, right, "multiplication",
+			func(c *expr.ColumnExpr) expr.Expr { return c.Mul(right) },
+			func(b *expr.BinaryExpr) expr.Expr { return b.Mul(right) },
+			func(f *expr.FunctionExpr) expr.Expr { return f.Mul(right) },
+			func(a *expr.AggregationExpr) expr.Expr { return a.Mul(right) })
 	case "/":
-		if col, ok := left.(*expr.ColumnExpr); ok {
-			return col.Div(right), true
-		} else if bin, ok := left.(*expr.BinaryExpr); ok {
-			return bin.Div(right), true
-		} else if fun, ok := left.(*expr.FunctionExpr); ok {
-			return fun.Div(right), true
-		} else if agg, ok := left.(*expr.AggregationExpr); ok {
-			return agg.Div(right), true
-		}
-		p.addError(fmt.Sprintf("unsupported expression type for division: %T", left))
-		return nil, false
+		return p.applyArithmeticOperation(left, right, "division",
+			func(c *expr.ColumnExpr) expr.Expr { return c.Div(right) },
+			func(b *expr.BinaryExpr) expr.Expr { return b.Div(right) },
+			func(f *expr.FunctionExpr) expr.Expr { return f.Div(right) },
+			func(a *expr.AggregationExpr) expr.Expr { return a.Div(right) })
 	case "%":
-		// Modulo operation not implemented yet
 		p.addError("modulo operator (%) not supported yet")
 		return nil, false
 	case "=":
-		if col, ok := left.(*expr.ColumnExpr); ok {
-			return col.Eq(right), true
-		} else if fun, ok := left.(*expr.FunctionExpr); ok {
-			return fun.Eq(right), true
-		} else if agg, ok := left.(*expr.AggregationExpr); ok {
-			return agg.Eq(right), true
-		}
-		p.addError(fmt.Sprintf("unsupported expression type for equality: %T", left))
-		return nil, false
+		return p.applyComparisonOperation(left, right, "equality",
+			func(c *expr.ColumnExpr) expr.Expr { return c.Eq(right) },
+			func(f *expr.FunctionExpr) expr.Expr { return f.Eq(right) },
+			func(a *expr.AggregationExpr) expr.Expr { return a.Eq(right) })
 	case "!=", "<>":
-		if col, ok := left.(*expr.ColumnExpr); ok {
-			return col.Ne(right), true
-		} else if fun, ok := left.(*expr.FunctionExpr); ok {
-			return fun.Ne(right), true
-		} else if agg, ok := left.(*expr.AggregationExpr); ok {
-			return agg.Ne(right), true
-		}
-		p.addError(fmt.Sprintf("unsupported expression type for not equal: %T", left))
-		return nil, false
+		return p.applyComparisonOperation(left, right, "not equal",
+			func(c *expr.ColumnExpr) expr.Expr { return c.Ne(right) },
+			func(f *expr.FunctionExpr) expr.Expr { return f.Ne(right) },
+			func(a *expr.AggregationExpr) expr.Expr { return a.Ne(right) })
 	case "<":
-		if col, ok := left.(*expr.ColumnExpr); ok {
-			return col.Lt(right), true
-		} else if fun, ok := left.(*expr.FunctionExpr); ok {
-			return fun.Lt(right), true
-		} else if agg, ok := left.(*expr.AggregationExpr); ok {
-			return agg.Lt(right), true
-		}
-		p.addError(fmt.Sprintf("unsupported expression type for less than: %T", left))
-		return nil, false
+		return p.applyComparisonOperation(left, right, "less than",
+			func(c *expr.ColumnExpr) expr.Expr { return c.Lt(right) },
+			func(f *expr.FunctionExpr) expr.Expr { return f.Lt(right) },
+			func(a *expr.AggregationExpr) expr.Expr { return a.Lt(right) })
 	case "<=":
-		if col, ok := left.(*expr.ColumnExpr); ok {
-			return col.Le(right), true
-		} else if fun, ok := left.(*expr.FunctionExpr); ok {
-			return fun.Le(right), true
-		} else if agg, ok := left.(*expr.AggregationExpr); ok {
-			return agg.Le(right), true
-		}
-		p.addError(fmt.Sprintf("unsupported expression type for less than or equal: %T", left))
-		return nil, false
+		return p.applyComparisonOperation(left, right, "less than or equal",
+			func(c *expr.ColumnExpr) expr.Expr { return c.Le(right) },
+			func(f *expr.FunctionExpr) expr.Expr { return f.Le(right) },
+			func(a *expr.AggregationExpr) expr.Expr { return a.Le(right) })
 	case ">":
-		if col, ok := left.(*expr.ColumnExpr); ok {
-			return col.Gt(right), true
-		} else if fun, ok := left.(*expr.FunctionExpr); ok {
-			return fun.Gt(right), true
-		} else if agg, ok := left.(*expr.AggregationExpr); ok {
-			return agg.Gt(right), true
-		}
-		p.addError(fmt.Sprintf("unsupported expression type for greater than: %T", left))
-		return nil, false
+		return p.applyComparisonOperation(left, right, "greater than",
+			func(c *expr.ColumnExpr) expr.Expr { return c.Gt(right) },
+			func(f *expr.FunctionExpr) expr.Expr { return f.Gt(right) },
+			func(a *expr.AggregationExpr) expr.Expr { return a.Gt(right) })
 	case ">=":
-		if col, ok := left.(*expr.ColumnExpr); ok {
-			return col.Ge(right), true
-		} else if fun, ok := left.(*expr.FunctionExpr); ok {
-			return fun.Ge(right), true
-		} else if agg, ok := left.(*expr.AggregationExpr); ok {
-			return agg.Ge(right), true
-		}
-		p.addError(fmt.Sprintf("unsupported expression type for greater than or equal: %T", left))
-		return nil, false
+		return p.applyComparisonOperation(left, right, "greater than or equal",
+			func(c *expr.ColumnExpr) expr.Expr { return c.Ge(right) },
+			func(f *expr.FunctionExpr) expr.Expr { return f.Ge(right) },
+			func(a *expr.AggregationExpr) expr.Expr { return a.Ge(right) })
 	default:
 		p.addError(fmt.Sprintf("unknown operator: %s", operator))
+		return nil, false
+	}
+}
+
+// applyArithmeticOperation applies arithmetic operations (supports BinaryExpr).
+func (p *Parser) applyArithmeticOperation(left expr.Expr, _ expr.Expr, opName string,
+	colFn func(*expr.ColumnExpr) expr.Expr,
+	binFn func(*expr.BinaryExpr) expr.Expr,
+	funFn func(*expr.FunctionExpr) expr.Expr,
+	aggFn func(*expr.AggregationExpr) expr.Expr) (expr.Expr, bool) {
+	switch l := left.(type) {
+	case *expr.ColumnExpr:
+		return colFn(l), true
+	case *expr.BinaryExpr:
+		return binFn(l), true
+	case *expr.FunctionExpr:
+		return funFn(l), true
+	case *expr.AggregationExpr:
+		return aggFn(l), true
+	default:
+		p.addError(fmt.Sprintf("unsupported expression type for %s: %T", opName, left))
+		return nil, false
+	}
+}
+
+// applyComparisonOperation applies comparison operations (no BinaryExpr support).
+func (p *Parser) applyComparisonOperation(left expr.Expr, _ expr.Expr, opName string,
+	colFn func(*expr.ColumnExpr) expr.Expr,
+	funFn func(*expr.FunctionExpr) expr.Expr,
+	aggFn func(*expr.AggregationExpr) expr.Expr) (expr.Expr, bool) {
+	switch l := left.(type) {
+	case *expr.ColumnExpr:
+		return colFn(l), true
+	case *expr.FunctionExpr:
+		return funFn(l), true
+	case *expr.AggregationExpr:
+		return aggFn(l), true
+	default:
+		p.addError(fmt.Sprintf("unsupported expression type for %s: %T", opName, left))
 		return nil, false
 	}
 }
@@ -859,21 +974,21 @@ func (p *Parser) parseLogicalExpression(left expr.Expr) (expr.Expr, bool) {
 
 	switch strings.ToUpper(operator) {
 	case "AND":
-		if bin, ok := left.(*expr.BinaryExpr); ok {
+		if bin, binOk := left.(*expr.BinaryExpr); binOk {
 			return bin.And(right), true
-		} else if fun, ok := left.(*expr.FunctionExpr); ok {
+		} else if fun, funOk := left.(*expr.FunctionExpr); funOk {
 			return fun.And(right), true
-		} else if agg, ok := left.(*expr.AggregationExpr); ok {
+		} else if agg, aggOk := left.(*expr.AggregationExpr); aggOk {
 			return agg.And(right), true
 		}
 		p.addError(fmt.Sprintf("unsupported expression type for AND operation: %T", left))
 		return nil, false
 	case "OR":
-		if bin, ok := left.(*expr.BinaryExpr); ok {
+		if bin, binOk := left.(*expr.BinaryExpr); binOk {
 			return bin.Or(right), true
-		} else if fun, ok := left.(*expr.FunctionExpr); ok {
+		} else if fun, funOk := left.(*expr.FunctionExpr); funOk {
 			return fun.Or(right), true
-		} else if agg, ok := left.(*expr.AggregationExpr); ok {
+		} else if agg, aggOk := left.(*expr.AggregationExpr); aggOk {
 			return agg.Or(right), true
 		}
 		p.addError(fmt.Sprintf("unsupported expression type for OR operation: %T", left))
@@ -896,127 +1011,84 @@ func (p *Parser) parseFunctionCall() (expr.Expr, bool) {
 		return nil, false
 	}
 
-	// Convert SQL functions to Gorilla expressions
+	// Convert SQL functions to Gorilla expressions using helper functions
 	switch strings.ToUpper(functionName) {
 	// Aggregation functions
 	case CountFunction:
-		if len(args) == 0 {
-			return expr.Count(expr.Lit(1)), true
-		}
-		return expr.Count(args[0]), true
+		return p.parseCountFunction(args)
 	case SumFunction:
-		if len(args) != 1 {
-			p.addError("SUM function requires exactly one argument")
-			return nil, false
-		}
-		return expr.Sum(args[0]), true
+		return p.parseAggregationFunction("SUM", args, expr.Sum)
 	case AvgFunction:
-		if len(args) != 1 {
-			p.addError("AVG function requires exactly one argument")
-			return nil, false
-		}
-		return expr.Mean(args[0]), true
+		return p.parseAggregationFunction("AVG", args, expr.Mean)
 	case MinFunction:
-		if len(args) != 1 {
-			p.addError("MIN function requires exactly one argument")
-			return nil, false
-		}
-		return expr.Min(args[0]), true
+		return p.parseAggregationFunction("MIN", args, expr.Min)
 	case MaxFunction:
-		if len(args) != 1 {
-			p.addError("MAX function requires exactly one argument")
-			return nil, false
-		}
-		return expr.Max(args[0]), true
+		return p.parseAggregationFunction("MAX", args, expr.Max)
 
 	// String functions
 	case UpperFunction:
-		if len(args) != 1 {
-			p.addError("UPPER function requires exactly one argument")
-			return nil, false
-		}
-		// Convert to column expression and apply Upper method
-		if colExpr, ok := args[0].(*expr.ColumnExpr); ok {
-			return colExpr.Upper(), true
-		}
-		p.addError("UPPER function requires a column argument")
-		return nil, false
+		return p.parseColumnFunction("UPPER", args, (*expr.ColumnExpr).Upper)
 	case LowerFunction:
-		if len(args) != 1 {
-			p.addError("LOWER function requires exactly one argument")
-			return nil, false
-		}
-		if colExpr, ok := args[0].(*expr.ColumnExpr); ok {
-			return colExpr.Lower(), true
-		}
-		p.addError("LOWER function requires a column argument")
-		return nil, false
+		return p.parseColumnFunction("LOWER", args, (*expr.ColumnExpr).Lower)
 	case LengthFunction:
-		if len(args) != 1 {
-			p.addError("LENGTH function requires exactly one argument")
-			return nil, false
-		}
-		if colExpr, ok := args[0].(*expr.ColumnExpr); ok {
-			return colExpr.Length(), true
-		}
-		p.addError("LENGTH function requires a column argument")
-		return nil, false
+		return p.parseColumnFunction("LENGTH", args, (*expr.ColumnExpr).Length)
 	case TrimFunction:
-		if len(args) != 1 {
-			p.addError("TRIM function requires exactly one argument")
-			return nil, false
-		}
-		if colExpr, ok := args[0].(*expr.ColumnExpr); ok {
-			return colExpr.Trim(), true
-		}
-		p.addError("TRIM function requires a column argument")
-		return nil, false
+		return p.parseColumnFunction("TRIM", args, (*expr.ColumnExpr).Trim)
 
 	// Math functions
 	case AbsFunction:
-		if len(args) != 1 {
-			p.addError("ABS function requires exactly one argument")
-			return nil, false
-		}
-		if colExpr, ok := args[0].(*expr.ColumnExpr); ok {
-			return colExpr.Abs(), true
-		}
-		p.addError("ABS function requires a column argument")
-		return nil, false
+		return p.parseColumnFunction("ABS", args, (*expr.ColumnExpr).Abs)
 	case RoundFunction:
-		if len(args) != 1 {
-			p.addError("ROUND function requires exactly one argument")
-			return nil, false
-		}
-		if colExpr, ok := args[0].(*expr.ColumnExpr); ok {
-			return colExpr.Round(), true
-		}
-		p.addError("ROUND function requires a column argument")
-		return nil, false
+		return p.parseColumnFunction("ROUND", args, (*expr.ColumnExpr).Round)
 	case FloorFunction:
-		if len(args) != 1 {
-			p.addError("FLOOR function requires exactly one argument")
-			return nil, false
-		}
-		if colExpr, ok := args[0].(*expr.ColumnExpr); ok {
-			return colExpr.Floor(), true
-		}
-		p.addError("FLOOR function requires a column argument")
-		return nil, false
+		return p.parseColumnFunction("FLOOR", args, (*expr.ColumnExpr).Floor)
 	case CeilFunction:
-		if len(args) != 1 {
-			p.addError("CEIL function requires exactly one argument")
-			return nil, false
-		}
-		if colExpr, ok := args[0].(*expr.ColumnExpr); ok {
-			return colExpr.Ceil(), true
-		}
-		p.addError("CEIL function requires a column argument")
-		return nil, false
+		return p.parseColumnFunction("CEIL", args, (*expr.ColumnExpr).Ceil)
 	default:
 		// Create generic function expression for other functions
 		return expr.NewFunction(functionName, args...), true
 	}
+}
+
+// parseCountFunction handles the COUNT function with special logic for zero arguments.
+func (p *Parser) parseCountFunction(args []expr.Expr) (expr.Expr, bool) {
+	if len(args) == 0 {
+		return expr.Count(expr.Lit(1)), true
+	}
+	return expr.Count(args[0]), true
+}
+
+// parseAggregationFunction handles aggregation functions that require exactly one argument.
+func (p *Parser) parseAggregationFunction(
+	name string,
+	args []expr.Expr,
+	exprFunc func(expr.Expr) *expr.AggregationExpr,
+) (expr.Expr, bool) {
+	if len(args) != 1 {
+		p.addError(fmt.Sprintf("%s function requires exactly one argument", name))
+		return nil, false
+	}
+	return exprFunc(args[0]), true
+}
+
+// parseColumnFunction handles functions that operate on column expressions.
+func (p *Parser) parseColumnFunction(
+	name string,
+	args []expr.Expr,
+	columnFunc func(*expr.ColumnExpr) *expr.FunctionExpr,
+) (expr.Expr, bool) {
+	if len(args) != 1 {
+		p.addError(fmt.Sprintf("%s function requires exactly one argument", name))
+		return nil, false
+	}
+
+	colExpr, ok := args[0].(*expr.ColumnExpr)
+	if !ok {
+		p.addError(fmt.Sprintf("%s function requires a column argument", name))
+		return nil, false
+	}
+
+	return columnFunc(colExpr), true
 }
 
 func (p *Parser) parseFunctionCallWithLeft(_ *expr.ColumnExpr) (expr.Expr, bool) {
@@ -1048,11 +1120,11 @@ func (p *Parser) parseExpressionList(end TokenType) ([]expr.Expr, bool) {
 	for p.peekTokenIs(COMMA) {
 		p.nextToken()
 		p.nextToken()
-		arg, ok := p.parseExpression(LOWEST)
-		if !ok {
+		nextArg, nextOk := p.parseExpression(LOWEST)
+		if !nextOk {
 			return nil, false
 		}
-		args = append(args, arg)
+		args = append(args, nextArg)
 	}
 
 	if !p.expectPeek(end) {
@@ -1201,8 +1273,8 @@ func (p *Parser) parseLimitClause() (*LimitClause, bool) {
 			return nil, false
 		}
 
-		offset, err := strconv.ParseInt(p.curToken.Literal, 10, 64)
-		if err != nil {
+		offset, offsetErr := strconv.ParseInt(p.curToken.Literal, 10, 64)
+		if offsetErr != nil {
 			p.addError(fmt.Sprintf("could not parse OFFSET value: %s", p.curToken.Literal))
 			return nil, false
 		}
@@ -1248,7 +1320,7 @@ func (p *Parser) parseStandaloneOffsetClause() (*LimitClause, bool) {
 }
 
 // ParseSQL is the main entry point for SQL parsing.
-func ParseSQL(input string) (SQLStatement, error) {
+func ParseSQL(input string) (Statement, error) {
 	lexer := NewLexer(input)
 	parser := NewParser(lexer)
 

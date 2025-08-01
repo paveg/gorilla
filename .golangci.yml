@@ -417,6 +417,7 @@ linters:
       # Default: false
       os-temp-dir: true
 
+
   exclusions:
     # Log a warning if an exclusion rule is unused.
     # Default: false
@@ -450,3 +451,14 @@ linters:
           - gosec
           - noctx
           - wrapcheck
+      # Exclude forbidigo (print statement checks) for legitimate use cases
+      - path: '^cmd/'
+        linters:
+          - forbidigo  # CLI applications legitimately need print statements
+      - path: '^examples/'
+        linters:
+          - forbidigo  # Example code needs print statements for demonstration
+      - path: 'gorilla\.go'
+        text: 'use of `fmt\.(Print|Printf|Println)` forbidden by pattern'
+        linters:
+          - forbidigo  # Example functions in main lib need print statements

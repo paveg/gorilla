@@ -1,3 +1,4 @@
+//nolint:testpackage // requires internal access to unexported types and functions
 package dataframe
 
 import (
@@ -12,9 +13,25 @@ import (
 
 // BenchmarkHavingOverheadAnalysis compares overhead vs base operation.
 func BenchmarkHavingOverheadAnalysis(b *testing.B) {
-	mem := memory.NewGoAllocator()
+	df := createOverheadTestDataFrame()
+	defer df.Release()
 
-	// Medium dataset (10K rows)
+	b.Run("GroupBy only (baseline)", func(b *testing.B) {
+		benchmarkBaselineGroupBy(b, df)
+	})
+
+	b.Run("GroupBy with HAVING (optimized)", func(b *testing.B) {
+		benchmarkOptimizedHaving(b, df)
+	})
+
+	b.Run("Manual GroupBy + Filter (comparison)", func(b *testing.B) {
+		benchmarkManualGroupByFilter(b, df)
+	})
+}
+
+// createOverheadTestDataFrame creates test data for overhead analysis.
+func createOverheadTestDataFrame() *DataFrame {
+	mem := memory.NewGoAllocator()
 	size := 10000
 	departments := make([]string, size)
 	salaries := make([]float64, size)
@@ -27,62 +44,48 @@ func BenchmarkHavingOverheadAnalysis(b *testing.B) {
 
 	deptSeries := series.New("department", departments, mem)
 	salarySeries := series.New("salary", salaries, mem)
-	df := New(deptSeries, salarySeries)
-	defer df.Release()
+	return New(deptSeries, salarySeries)
+}
 
-	b.Run("GroupBy only (baseline)", func(b *testing.B) {
-		b.ReportAllocs()
+// benchmarkBaselineGroupBy runs baseline GroupBy benchmark.
+func benchmarkBaselineGroupBy(b *testing.B, df *DataFrame) {
+	b.ReportAllocs()
+	var totalBytes uint64
 
-		var totalBaselineBytes uint64
-
-		b.ResetTimer()
-		for i := range b.N {
-			var beforeStats runtime.MemStats
-			runtime.ReadMemStats(&beforeStats)
-
-			// Just GroupBy + Aggregation without HAVING
+	b.ResetTimer()
+	for i := range b.N {
+		bytes := measureMemoryUsage(func() error {
 			result, err := df.Lazy().
 				GroupBy("department").
 				Agg(expr.Mean(expr.Col("salary")).As("avg_salary"),
 					expr.Count(expr.Col("department")).As("emp_count")).
 				Collect()
-
 			if err != nil {
-				b.Fatal(err)
+				return err
 			}
+			defer result.Release()
+			return nil
+		})
 
-			var afterStats runtime.MemStats
-			runtime.ReadMemStats(&afterStats)
-
-			baselineBytes := afterStats.TotalAlloc - beforeStats.TotalAlloc
-			totalBaselineBytes += baselineBytes
-
-			result.Release()
-
-			if i%10 == 0 {
-				runtime.GC()
-			}
+		if bytes < 0 {
+			b.Fatal("Memory measurement failed")
 		}
 
-		b.StopTimer()
-		if b.N > 0 {
-			avgBaselineBytes := float64(totalBaselineBytes) / float64(b.N)
-			b.ReportMetric(avgBaselineBytes, "baseline_bytes/op")
-			b.Logf("Average baseline memory: %.0f bytes/op", avgBaselineBytes)
-		}
-	})
+		totalBytes += uint64(bytes)
+		triggerGCPeriodically(i)
+	}
 
-	b.Run("GroupBy with HAVING (optimized)", func(b *testing.B) {
-		b.ReportAllocs()
+	reportAverageMemory(b, totalBytes, "baseline_bytes/op", "baseline")
+}
 
-		var totalHavingBytes uint64
+// benchmarkOptimizedHaving runs optimized HAVING benchmark.
+func benchmarkOptimizedHaving(b *testing.B, df *DataFrame) {
+	b.ReportAllocs()
+	var totalBytes uint64
 
-		b.ResetTimer()
-		for i := range b.N {
-			var beforeStats runtime.MemStats
-			runtime.ReadMemStats(&beforeStats)
-
-			// GroupBy + Aggregation + HAVING using optimized operation
+	b.ResetTimer()
+	for i := range b.N {
+		bytes := measureMemoryUsage(func() error {
 			lazy := df.Lazy()
 			groupByOp := &GroupByHavingOperation{
 				groupByCols: []string{"department"},
@@ -90,86 +93,97 @@ func BenchmarkHavingOverheadAnalysis(b *testing.B) {
 					And(expr.Count(expr.Col("department")).As("emp_count").Gt(expr.Lit(1000))),
 			}
 			lazy.operations = append(lazy.operations, groupByOp)
+
 			result, err := lazy.Collect()
-
 			if err != nil {
-				b.Fatal(err)
+				return err
 			}
+			defer result.Release()
+			defer groupByOp.Release()
+			return nil
+		})
 
-			var afterStats runtime.MemStats
-			runtime.ReadMemStats(&afterStats)
-
-			havingBytes := afterStats.TotalAlloc - beforeStats.TotalAlloc
-			totalHavingBytes += havingBytes
-
-			result.Release()
-			groupByOp.Release()
-
-			if i%10 == 0 {
-				runtime.GC()
-			}
+		if bytes < 0 {
+			b.Fatal("Memory measurement failed")
 		}
 
-		b.StopTimer()
-		if b.N > 0 {
-			avgHavingBytes := float64(totalHavingBytes) / float64(b.N)
-			b.ReportMetric(avgHavingBytes, "having_bytes/op")
-			b.Logf("Average HAVING memory: %.0f bytes/op", avgHavingBytes)
-		}
-	})
+		totalBytes += uint64(bytes)
+		triggerGCPeriodically(i)
+	}
 
-	b.Run("Manual GroupBy + Filter (comparison)", func(b *testing.B) {
-		b.ReportAllocs()
+	reportAverageMemory(b, totalBytes, "having_bytes/op", "HAVING")
+}
 
-		var totalManualBytes uint64
+// benchmarkManualGroupByFilter runs manual GroupBy + Filter benchmark.
+func benchmarkManualGroupByFilter(b *testing.B, df *DataFrame) {
+	b.ReportAllocs()
+	var totalBytes uint64
 
-		b.ResetTimer()
-		for i := range b.N {
-			var beforeStats runtime.MemStats
-			runtime.ReadMemStats(&beforeStats)
-
-			// Manual approach: GroupBy + Aggregation, then Filter
+	b.ResetTimer()
+	for i := range b.N {
+		bytes := measureMemoryUsage(func() error {
 			aggregated, err := df.Lazy().
 				GroupBy("department").
 				Agg(expr.Mean(expr.Col("salary")).As("avg_salary"),
 					expr.Count(expr.Col("department")).As("emp_count")).
 				Collect()
-
 			if err != nil {
-				b.Fatal(err)
+				return err
 			}
+			defer aggregated.Release()
 
 			result, err := aggregated.Lazy().
 				Filter(expr.Col("avg_salary").Gt(expr.Lit(60000.0)).
 					And(expr.Col("emp_count").Gt(expr.Lit(1000)))).
 				Collect()
-
 			if err != nil {
-				aggregated.Release()
-				b.Fatal(err)
+				return err
 			}
+			defer result.Release()
+			return nil
+		})
 
-			var afterStats runtime.MemStats
-			runtime.ReadMemStats(&afterStats)
-
-			manualBytes := afterStats.TotalAlloc - beforeStats.TotalAlloc
-			totalManualBytes += manualBytes
-
-			aggregated.Release()
-			result.Release()
-
-			if i%10 == 0 {
-				runtime.GC()
-			}
+		if bytes < 0 {
+			b.Fatal("Memory measurement failed")
 		}
 
-		b.StopTimer()
-		if b.N > 0 {
-			avgManualBytes := float64(totalManualBytes) / float64(b.N)
-			b.ReportMetric(avgManualBytes, "manual_bytes/op")
-			b.Logf("Average manual memory: %.0f bytes/op", avgManualBytes)
-		}
-	})
+		totalBytes += uint64(bytes)
+		triggerGCPeriodically(i)
+	}
+
+	reportAverageMemory(b, totalBytes, "manual_bytes/op", "manual")
+}
+
+// measureMemoryUsage measures memory usage of a function execution.
+func measureMemoryUsage(fn func() error) int64 {
+	var beforeStats runtime.MemStats
+	runtime.ReadMemStats(&beforeStats)
+
+	if err := fn(); err != nil {
+		return -1
+	}
+
+	var afterStats runtime.MemStats
+	runtime.ReadMemStats(&afterStats)
+
+	return int64(afterStats.TotalAlloc - beforeStats.TotalAlloc)
+}
+
+// triggerGCPeriodically triggers GC every 10 iterations.
+func triggerGCPeriodically(iteration int) {
+	if iteration%10 == 0 {
+		runtime.GC()
+	}
+}
+
+// reportAverageMemory reports average memory usage metrics.
+func reportAverageMemory(b *testing.B, totalBytes uint64, metric, label string) {
+	b.StopTimer()
+	if b.N > 0 {
+		avgBytes := float64(totalBytes) / float64(b.N)
+		b.ReportMetric(avgBytes, metric)
+		b.Logf("Average %s memory: %.0f bytes/op", label, avgBytes)
+	}
 }
 
 // TestHavingOverheadCalculation calculates actual overhead percentage.

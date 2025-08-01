@@ -54,65 +54,6 @@ type DataFrameError struct {
 	DataInfo *DataFrameInfo    // DataFrame information for better context
 }
 
-// Error implements the error interface.
-func (e *DataFrameError) Error() string {
-	return e.Format(ErrorLevelDetailed)
-}
-
-// Format returns a formatted error message at the specified verbosity level.
-func (e *DataFrameError) Format(level ErrorLevel) string {
-	var buf strings.Builder
-
-	// Base error message
-	if e.Column != "" {
-		fmt.Fprintf(&buf, "%s operation failed on column '%s': %s", e.Op, e.Column, e.Message)
-	} else {
-		fmt.Fprintf(&buf, "%s operation failed: %s", e.Op, e.Message)
-	}
-
-	// Add hint for detailed and debug levels
-	if level >= ErrorLevelDetailed && e.Hint != "" {
-		fmt.Fprintf(&buf, "\nHint: %s", e.Hint)
-	}
-
-	// Add DataFrame info for detailed and debug levels
-	if level >= ErrorLevelDetailed && e.DataInfo != nil {
-		if len(e.DataInfo.Columns) > 0 {
-			fmt.Fprintf(&buf, "\nAvailable columns: [%s]", strings.Join(e.DataInfo.Columns, ", "))
-		}
-		fmt.Fprintf(&buf, "\nDataFrame has %d rows", e.DataInfo.Rows)
-	}
-
-	// Add context for debug level
-	if level >= ErrorLevelDebug && len(e.Context) > 0 {
-		fmt.Fprintf(&buf, "\nContext:")
-		// Sort keys for consistent output
-		keys := make([]string, 0, len(e.Context))
-		for k := range e.Context {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		for _, k := range keys {
-			fmt.Fprintf(&buf, "\n  %s: %s", k, e.Context[k])
-		}
-	}
-
-	return buf.String()
-}
-
-// Unwrap returns the underlying cause for error wrapping support.
-func (e *DataFrameError) Unwrap() error {
-	return e.Cause
-}
-
-// Is implements error equality checking for errors.Is().
-func (e *DataFrameError) Is(target error) bool {
-	if df, ok := target.(*DataFrameError); ok {
-		return e.Op == df.Op && e.Column == df.Column && e.Message == df.Message
-	}
-	return false
-}
-
 // Common error constructors for consistent error creation
 
 // NewColumnNotFoundError creates an error for operations on non-existent columns.
@@ -157,68 +98,6 @@ func NewInternalError(op string, cause error) *DataFrameError {
 		Cause:   cause,
 	}
 }
-
-// Enhanced error methods for fluent API
-
-// WithContext adds additional context information to the error.
-func (e *DataFrameError) WithContext(context map[string]string) *DataFrameError {
-	enhanced := *e // Copy the error
-	if enhanced.Context == nil {
-		enhanced.Context = make(map[string]string)
-	}
-	for k, v := range context {
-		enhanced.Context[k] = v
-	}
-	return &enhanced
-}
-
-// WithHint adds a helpful hint to the error.
-func (e *DataFrameError) WithHint(hint string) *DataFrameError {
-	enhanced := *e // Copy the error
-	enhanced.Hint = hint
-	return &enhanced
-}
-
-// WithDataFrameInfo adds DataFrame information for better context.
-func (e *DataFrameError) WithDataFrameInfo(info DataFrameInfo) *DataFrameError {
-	enhanced := *e // Copy the error
-	enhanced.DataInfo = &info
-	return &enhanced
-}
-
-// WithCause adds an underlying cause to the error.
-func (e *DataFrameError) WithCause(cause error) *DataFrameError {
-	enhanced := *e // Copy the error
-	enhanced.Cause = cause
-	return &enhanced
-}
-
-// WrapError wraps an error with operation context information.
-func (ctx *OperationContext) WrapError(err error) *DataFrameError {
-	dfErr := &DataFrameError{}
-	if errors.As(err, &dfErr) {
-		// Wrap existing DataFrameError with context
-		return &DataFrameError{
-			Op:       fmt.Sprintf("%s (step %d/%d)", ctx.Operation, ctx.Step, ctx.TotalSteps),
-			Column:   dfErr.Column,
-			Message:  dfErr.Message,
-			Cause:    dfErr.Cause,
-			Hint:     dfErr.Hint,
-			Context:  dfErr.Context,
-			DataInfo: &ctx.DataInfo,
-		}
-	}
-
-	// Wrap generic error
-	return &DataFrameError{
-		Op:       fmt.Sprintf("%s (step %d/%d)", ctx.Operation, ctx.Step, ctx.TotalSteps),
-		Message:  err.Error(),
-		Cause:    err,
-		DataInfo: &ctx.DataInfo,
-	}
-}
-
-// Specialized error constructors
 
 // NewColumnNotFoundErrorWithSuggestions creates a column not found error with similar column suggestions.
 func NewColumnNotFoundErrorWithSuggestions(op, column string, availableColumns []string) *DataFrameError {
@@ -312,6 +191,125 @@ func NewInvalidExpressionErrorWithHint(op, reason, hint string) *DataFrameError 
 		Op:      op,
 		Message: fmt.Sprintf("Invalid expression in %s: %s", op, reason),
 		Hint:    hint,
+	}
+}
+
+// Error implements the error interface.
+func (e *DataFrameError) Error() string {
+	return e.Format(ErrorLevelDetailed)
+}
+
+// Format returns a formatted error message at the specified verbosity level.
+func (e *DataFrameError) Format(level ErrorLevel) string {
+	var buf strings.Builder
+
+	// Base error message
+	if e.Column != "" {
+		fmt.Fprintf(&buf, "%s operation failed on column '%s': %s", e.Op, e.Column, e.Message)
+	} else {
+		fmt.Fprintf(&buf, "%s operation failed: %s", e.Op, e.Message)
+	}
+
+	// Add hint for detailed and debug levels
+	if level >= ErrorLevelDetailed && e.Hint != "" {
+		fmt.Fprintf(&buf, "\nHint: %s", e.Hint)
+	}
+
+	// Add DataFrame info for detailed and debug levels
+	if level >= ErrorLevelDetailed && e.DataInfo != nil {
+		if len(e.DataInfo.Columns) > 0 {
+			fmt.Fprintf(&buf, "\nAvailable columns: [%s]", strings.Join(e.DataInfo.Columns, ", "))
+		}
+		fmt.Fprintf(&buf, "\nDataFrame has %d rows", e.DataInfo.Rows)
+	}
+
+	// Add context for debug level
+	if level >= ErrorLevelDebug && len(e.Context) > 0 {
+		fmt.Fprintf(&buf, "\nContext:")
+		// Sort keys for consistent output
+		keys := make([]string, 0, len(e.Context))
+		for k := range e.Context {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			fmt.Fprintf(&buf, "\n  %s: %s", k, e.Context[k])
+		}
+	}
+
+	return buf.String()
+}
+
+// Unwrap returns the underlying cause for error wrapping support.
+func (e *DataFrameError) Unwrap() error {
+	return e.Cause
+}
+
+// Is implements error equality checking for errors.Is().
+func (e *DataFrameError) Is(target error) bool {
+	if df, ok := target.(*DataFrameError); ok {
+		return e.Op == df.Op && e.Column == df.Column && e.Message == df.Message
+	}
+	return false
+}
+
+// Enhanced error methods for fluent API
+
+// WithContext adds additional context information to the error.
+func (e *DataFrameError) WithContext(context map[string]string) *DataFrameError {
+	enhanced := *e // Copy the error
+	if enhanced.Context == nil {
+		enhanced.Context = make(map[string]string)
+	}
+	for k, v := range context {
+		enhanced.Context[k] = v
+	}
+	return &enhanced
+}
+
+// WithHint adds a helpful hint to the error.
+func (e *DataFrameError) WithHint(hint string) *DataFrameError {
+	enhanced := *e // Copy the error
+	enhanced.Hint = hint
+	return &enhanced
+}
+
+// WithDataFrameInfo adds DataFrame information for better context.
+func (e *DataFrameError) WithDataFrameInfo(info DataFrameInfo) *DataFrameError {
+	enhanced := *e // Copy the error
+	enhanced.DataInfo = &info
+	return &enhanced
+}
+
+// WithCause adds an underlying cause to the error.
+func (e *DataFrameError) WithCause(cause error) *DataFrameError {
+	enhanced := *e // Copy the error
+	enhanced.Cause = cause
+	return &enhanced
+}
+
+// WrapError wraps an error with operation context information.
+func (ctx *OperationContext) WrapError(err error) *DataFrameError {
+	dfErr := &DataFrameError{}
+	if errors.As(err, &dfErr) {
+		// Wrap existing DataFrameError with context
+		return &DataFrameError{
+			Op:       fmt.Sprintf("%s (step %d/%d)", ctx.Operation, ctx.Step, ctx.TotalSteps),
+			Column:   dfErr.Column,
+			Message:  dfErr.Message,
+			Cause:    dfErr.Cause,
+			Hint:     dfErr.Hint,
+			Context:  dfErr.Context,
+			DataInfo: &ctx.DataInfo,
+		}
+	}
+
+	// Wrap generic error
+	return &DataFrameError{
+		Op:       fmt.Sprintf("%s (step %d/%d)", ctx.Operation, ctx.Step, ctx.TotalSteps),
+		Message:  err.Error(),
+		Cause:    err,
+		DataInfo: &ctx.DataInfo,
 	}
 }
 

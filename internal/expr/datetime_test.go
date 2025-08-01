@@ -1,4 +1,4 @@
-package expr
+package expr_test
 
 import (
 	"testing"
@@ -7,13 +7,14 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/paveg/gorilla/internal/expr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestDateTimeFunctions(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	evaluator := NewEvaluator(mem)
+	evaluator := expr.NewEvaluator(mem)
 
 	// Create test timestamps
 	testTimes := []time.Time{
@@ -39,37 +40,37 @@ func TestDateTimeFunctions(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		expr     Expr
+		expr     expr.Expr
 		expected []int64
 	}{
 		{
 			name:     "Year extraction",
-			expr:     Col("timestamp_col").Year(),
+			expr:     expr.Col("timestamp_col").Year(),
 			expected: []int64{2023, 2023, 2024},
 		},
 		{
 			name:     "Month extraction",
-			expr:     Col("timestamp_col").Month(),
+			expr:     expr.Col("timestamp_col").Month(),
 			expected: []int64{1, 12, 6},
 		},
 		{
 			name:     "Day extraction",
-			expr:     Col("timestamp_col").Day(),
+			expr:     expr.Col("timestamp_col").Day(),
 			expected: []int64{15, 31, 15},
 		},
 		{
 			name:     "Hour extraction",
-			expr:     Col("timestamp_col").Hour(),
+			expr:     expr.Col("timestamp_col").Hour(),
 			expected: []int64{14, 23, 12},
 		},
 		{
 			name:     "Minute extraction",
-			expr:     Col("timestamp_col").Minute(),
+			expr:     expr.Col("timestamp_col").Minute(),
 			expected: []int64{30, 59, 0},
 		},
 		{
 			name:     "Second extraction",
-			expr:     Col("timestamp_col").Second(),
+			expr:     expr.Col("timestamp_col").Second(),
 			expected: []int64{45, 59, 0},
 		},
 	}
@@ -93,7 +94,7 @@ func TestDateTimeFunctions(t *testing.T) {
 
 func TestDateTimeFunctionConstructors(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	evaluator := NewEvaluator(mem)
+	evaluator := expr.NewEvaluator(mem)
 
 	// Create test timestamp
 	testTime := time.Date(2023, 5, 10, 16, 45, 30, 0, time.UTC)
@@ -111,37 +112,37 @@ func TestDateTimeFunctionConstructors(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		expr     Expr
+		expr     expr.Expr
 		expected int64
 	}{
 		{
 			name:     "Year constructor function",
-			expr:     Year(Col("ts")),
+			expr:     expr.Year(expr.Col("ts")),
 			expected: 2023,
 		},
 		{
 			name:     "Month constructor function",
-			expr:     Month(Col("ts")),
+			expr:     expr.Month(expr.Col("ts")),
 			expected: 5,
 		},
 		{
 			name:     "Day constructor function",
-			expr:     Day(Col("ts")),
+			expr:     expr.Day(expr.Col("ts")),
 			expected: 10,
 		},
 		{
 			name:     "Hour constructor function",
-			expr:     Hour(Col("ts")),
+			expr:     expr.Hour(expr.Col("ts")),
 			expected: 16,
 		},
 		{
 			name:     "Minute constructor function",
-			expr:     Minute(Col("ts")),
+			expr:     expr.Minute(expr.Col("ts")),
 			expected: 45,
 		},
 		{
 			name:     "Second constructor function",
-			expr:     Second(Col("ts")),
+			expr:     expr.Second(expr.Col("ts")),
 			expected: 30,
 		},
 	}
@@ -163,7 +164,7 @@ func TestDateTimeFunctionConstructors(t *testing.T) {
 
 func TestDateTimeLiterals(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	evaluator := NewEvaluator(mem)
+	evaluator := expr.NewEvaluator(mem)
 
 	// Create a dummy column to determine array length
 	stringBuilder := array.NewStringBuilder(mem)
@@ -177,7 +178,7 @@ func TestDateTimeLiterals(t *testing.T) {
 	}
 
 	testTime := time.Date(2023, 7, 4, 12, 30, 45, 0, time.UTC)
-	literal := Lit(testTime)
+	literal := expr.Lit(testTime)
 
 	result, err := evaluator.Evaluate(literal, columns)
 	require.NoError(t, err)
@@ -198,7 +199,7 @@ func TestDateTimeLiterals(t *testing.T) {
 
 func TestDateTimeFunctionExpressions(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	evaluator := NewEvaluator(mem)
+	evaluator := expr.NewEvaluator(mem)
 
 	// Create test data
 	testTime := time.Date(2023, 8, 15, 10, 25, 30, 0, time.UTC)
@@ -216,9 +217,9 @@ func TestDateTimeFunctionExpressions(t *testing.T) {
 
 	// Test chaining with other functions
 	t.Run("chained functions", func(t *testing.T) {
-		// Test Year().Add(Lit(1))
-		yearExpr := Col("timestamp_col").Year()
-		addExpr := yearExpr.Add(Lit(1))
+		// Test expr.Year().Add(expr.Lit(1))
+		yearExpr := expr.Col("timestamp_col").Year()
+		addExpr := yearExpr.Add(expr.Lit(1))
 
 		result, err := evaluator.Evaluate(addExpr, columns)
 		require.NoError(t, err)
@@ -233,8 +234,8 @@ func TestDateTimeFunctionExpressions(t *testing.T) {
 
 	// Test comparisons
 	t.Run("date comparison", func(t *testing.T) {
-		monthExpr := Col("timestamp_col").Month()
-		comparisonExpr := monthExpr.Gt(Lit(6))
+		monthExpr := expr.Col("timestamp_col").Month()
+		comparisonExpr := monthExpr.Gt(expr.Lit(6))
 
 		result, err := evaluator.EvaluateBoolean(comparisonExpr, columns)
 		require.NoError(t, err)
@@ -250,7 +251,7 @@ func TestDateTimeFunctionExpressions(t *testing.T) {
 
 func TestDateTimeFunctionWithNulls(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	evaluator := NewEvaluator(mem)
+	evaluator := expr.NewEvaluator(mem)
 
 	// Create timestamp array with null values
 	timestampType := &arrow.TimestampType{Unit: arrow.Nanosecond}
@@ -269,7 +270,7 @@ func TestDateTimeFunctionWithNulls(t *testing.T) {
 		"timestamp_col": timestampArray,
 	}
 
-	yearExpr := Col("timestamp_col").Year()
+	yearExpr := expr.Col("timestamp_col").Year()
 	result, err := evaluator.Evaluate(yearExpr, columns)
 	require.NoError(t, err)
 	defer result.Release()
@@ -285,7 +286,7 @@ func TestDateTimeFunctionWithNulls(t *testing.T) {
 
 func TestDateTimeFunctionErrors(t *testing.T) {
 	mem := memory.NewGoAllocator()
-	evaluator := NewEvaluator(mem)
+	evaluator := expr.NewEvaluator(mem)
 
 	// Create a non-timestamp column
 	stringBuilder := array.NewStringBuilder(mem)
@@ -300,26 +301,26 @@ func TestDateTimeFunctionErrors(t *testing.T) {
 
 	tests := []struct {
 		name string
-		expr Expr
+		expr expr.Expr
 	}{
 		{
 			name: "Year on non-timestamp column",
-			expr: Col("string_col").Year(),
+			expr: expr.Col("string_col").Year(),
 		},
 		{
 			name: "Month on non-timestamp column",
-			expr: Col("string_col").Month(),
+			expr: expr.Col("string_col").Month(),
 		},
 		{
 			name: "Day on non-timestamp column",
-			expr: Col("string_col").Day(),
+			expr: expr.Col("string_col").Day(),
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := evaluator.Evaluate(tt.expr, columns)
-			assert.Error(t, err)
+			require.Error(t, err)
 			assert.Contains(t, err.Error(), "requires a timestamp argument")
 		})
 	}
@@ -328,22 +329,22 @@ func TestDateTimeFunctionErrors(t *testing.T) {
 func TestDateTimeFunctionStringRepresentation(t *testing.T) {
 	tests := []struct {
 		name     string
-		expr     Expr
+		expr     expr.Expr
 		expected string
 	}{
 		{
 			name:     "Year column expression",
-			expr:     Col("timestamp_col").Year(),
+			expr:     expr.Col("timestamp_col").Year(),
 			expected: "year(col(timestamp_col))",
 		},
 		{
 			name:     "Month constructor",
-			expr:     Month(Col("ts")),
+			expr:     expr.Month(expr.Col("ts")),
 			expected: "month(col(ts))",
 		},
 		{
 			name:     "Day with literal",
-			expr:     Day(Lit(time.Date(2023, 5, 10, 0, 0, 0, 0, time.UTC))),
+			expr:     expr.Day(expr.Lit(time.Date(2023, 5, 10, 0, 0, 0, 0, time.UTC))),
 			expected: "day(lit(2023-05-10 00:00:00 +0000 UTC))",
 		},
 	}

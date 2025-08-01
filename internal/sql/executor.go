@@ -20,13 +20,28 @@ func safeInt64ToInt(value int64) (int, error) {
 	return int(value), nil
 }
 
-// SQLExecutor executes SQL queries against registered DataFrames.
-type SQLExecutor struct {
+// Executor executes SQL queries against registered DataFrames.
+type Executor struct {
 	translator *SQLTranslator
 	mem        memory.Allocator
 }
 
+// SQLExecutor is deprecated, use Executor instead.
+type SQLExecutor struct { //nolint:revive // Maintained for backward compatibility
+	translator *SQLTranslator
+	mem        memory.Allocator
+}
+
+// NewExecutor creates a new SQL executor.
+func NewExecutor(mem memory.Allocator) *Executor {
+	return &Executor{
+		translator: NewSQLTranslator(mem),
+		mem:        mem,
+	}
+}
+
 // NewSQLExecutor creates a new SQL executor.
+// Deprecated: Use NewExecutor instead.
 func NewSQLExecutor(mem memory.Allocator) *SQLExecutor {
 	return &SQLExecutor{
 		translator: NewSQLTranslator(mem),
@@ -209,8 +224,8 @@ func (e *SQLExecutor) ValidateQuery(query string) error {
 	}
 
 	// Validate SQL syntax
-	if err := e.translator.ValidateSQLSyntax(stmt); err != nil {
-		return fmt.Errorf("validation error: %w", err)
+	if validateErr := e.translator.ValidateSQLSyntax(stmt); validateErr != nil {
+		return fmt.Errorf("validation error: %w", validateErr)
 	}
 
 	// Check table references
@@ -245,16 +260,16 @@ func (e *SQLExecutor) BatchExecute(queries []string) ([]*dataframe.DataFrame, er
 	return results, nil
 }
 
-// SQLQuery represents a prepared SQL query for reuse.
-type SQLQuery struct {
-	statement  SQLStatement
+// Query represents a prepared SQL query for reuse.
+type Query struct {
+	statement  Statement
 	translator *SQLTranslator
 	mem        memory.Allocator
 	validated  bool
 }
 
 // PrepareQuery prepares a SQL query for multiple executions.
-func (e *SQLExecutor) PrepareQuery(query string) (*SQLQuery, error) {
+func (e *SQLExecutor) PrepareQuery(query string) (*Query, error) {
 	// Parse SQL query
 	stmt, err := ParseSQL(query)
 	if err != nil {
@@ -266,7 +281,7 @@ func (e *SQLExecutor) PrepareQuery(query string) (*SQLQuery, error) {
 		return nil, fmt.Errorf("validation error: %w", validationErr)
 	}
 
-	return &SQLQuery{
+	return &Query{
 		statement:  stmt,
 		translator: e.translator,
 		mem:        e.mem,
@@ -275,7 +290,7 @@ func (e *SQLExecutor) PrepareQuery(query string) (*SQLQuery, error) {
 }
 
 // Execute executes a prepared SQL query.
-func (q *SQLQuery) Execute() (*dataframe.DataFrame, error) {
+func (q *Query) Execute() (*dataframe.DataFrame, error) {
 	if !q.validated {
 		return nil, errors.New("query not validated")
 	}
@@ -302,7 +317,7 @@ func (q *SQLQuery) Execute() (*dataframe.DataFrame, error) {
 }
 
 // executeWithLimit executes prepared query with LIMIT/OFFSET handling.
-func (q *SQLQuery) executeWithLimit(lazy *dataframe.LazyFrame, limitClause *LimitClause) (*dataframe.DataFrame, error) {
+func (q *Query) executeWithLimit(lazy *dataframe.LazyFrame, limitClause *LimitClause) (*dataframe.DataFrame, error) {
 	// This is a simplified version - in a full implementation, we would
 	// integrate LIMIT/OFFSET into the LazyFrame operations for better performance
 
@@ -376,7 +391,7 @@ func (q *SQLQuery) executeWithLimit(lazy *dataframe.LazyFrame, limitClause *Limi
 }
 
 // String returns the SQL query string.
-func (q *SQLQuery) String() string {
+func (q *Query) String() string {
 	if q.statement != nil {
 		return q.statement.String()
 	}

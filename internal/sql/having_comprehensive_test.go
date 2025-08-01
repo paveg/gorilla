@@ -1,3 +1,4 @@
+//nolint:testpackage // requires internal access to unexported types and functions
 package sql
 
 import (
@@ -592,9 +593,9 @@ func BenchmarkHavingTranslation(b *testing.B) {
 	b.ReportAllocs()
 
 	for range b.N {
-		lazy, err := translator.TranslateStatement(stmt)
-		if err != nil {
-			b.Fatal(err)
+		lazy, translateErr := translator.TranslateStatement(stmt)
+		if translateErr != nil {
+			b.Fatal(translateErr)
 		}
 		_ = lazy // Don't collect to avoid execution overhead in benchmark
 	}

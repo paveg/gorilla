@@ -1,15 +1,16 @@
-package errors
+package errors_test
 
 import (
 	"testing"
 
+	"github.com/paveg/gorilla/internal/errors"
 	"github.com/stretchr/testify/assert"
 )
 
 // TestNewErrorTypes tests the new error types added for enhanced error handling.
 func TestNewErrorTypes(t *testing.T) {
 	t.Run("UnsupportedOperationError", func(t *testing.T) {
-		err := NewUnsupportedOperationError("Join", "Cannot join on boolean columns",
+		err := errors.NewUnsupportedOperationError("Join", "Cannot join on boolean columns",
 			[]string{"inner", "left", "right", "outer"})
 
 		errMsg := err.Error()
@@ -19,7 +20,7 @@ func TestNewErrorTypes(t *testing.T) {
 	})
 
 	t.Run("UnsupportedOperationErrorWithoutOptions", func(t *testing.T) {
-		err := NewUnsupportedOperationError("Custom", "This operation is not implemented", nil)
+		err := errors.NewUnsupportedOperationError("Custom", "This operation is not implemented", nil)
 
 		errMsg := err.Error()
 		assert.Contains(t, errMsg, "Unsupported operation in Custom")
@@ -28,7 +29,7 @@ func TestNewErrorTypes(t *testing.T) {
 	})
 
 	t.Run("ConfigurationError", func(t *testing.T) {
-		err := NewConfigurationError("WorkerPoolSize", -5, []string{"0 (auto)", "1-16"})
+		err := errors.NewConfigurationError("WorkerPoolSize", -5, []string{"0 (auto)", "1-16"})
 
 		errMsg := err.Error()
 		assert.Contains(t, errMsg, "Invalid configuration for parameter 'WorkerPoolSize'")
@@ -37,7 +38,7 @@ func TestNewErrorTypes(t *testing.T) {
 	})
 
 	t.Run("ConfigurationErrorWithoutOptions", func(t *testing.T) {
-		err := NewConfigurationError("CustomParam", "invalid", nil)
+		err := errors.NewConfigurationError("CustomParam", "invalid", nil)
 
 		errMsg := err.Error()
 		assert.Contains(t, errMsg, "Invalid configuration for parameter 'CustomParam'")
@@ -46,7 +47,7 @@ func TestNewErrorTypes(t *testing.T) {
 	})
 
 	t.Run("InvalidExpressionError", func(t *testing.T) {
-		err := NewInvalidExpressionError("Filter", "Cannot use aggregation function in WHERE clause")
+		err := errors.NewInvalidExpressionError("Filter", "Cannot use aggregation function in WHERE clause")
 
 		errMsg := err.Error()
 		assert.Contains(t, errMsg, "Filter operation failed")
@@ -58,28 +59,28 @@ func TestNewErrorTypes(t *testing.T) {
 // TestErrorEnhancementCompatibility tests that new error types work with existing enhancement features.
 func TestErrorEnhancementCompatibility(t *testing.T) {
 	t.Run("UnsupportedOperationWithContext", func(t *testing.T) {
-		err := NewUnsupportedOperationError("Sort", "Cannot sort null values", []string{"ascending", "descending"}).
+		err := errors.NewUnsupportedOperationError("Sort", "Cannot sort null values", []string{"ascending", "descending"}).
 			WithContext(map[string]string{
 				"null_count": "25",
 				"total_rows": "100",
 			}).
 			WithHint("Consider filtering out null values before sorting")
 
-		debugMsg := err.Format(ErrorLevelDebug)
+		debugMsg := err.Format(errors.ErrorLevelDebug)
 		assert.Contains(t, debugMsg, "null_count: 25")
 		assert.Contains(t, debugMsg, "Consider filtering out null values")
 	})
 
-	t.Run("ConfigurationErrorWithDataFrameInfo", func(t *testing.T) {
-		dataInfo := DataFrameInfo{
+	t.Run("ConfigurationErrorWithDataFrameInfo.DataFrameInfo", func(t *testing.T) {
+		dataInfo := errors.DataFrameInfo{
 			Rows:    1000,
 			Columns: []string{"col1", "col2", "col3"},
 		}
 
-		err := NewConfigurationError("ChunkSize", 0, []string{"1", "100", "1000"}).
+		err := errors.NewConfigurationError("ChunkSize", 0, []string{"1", "100", "1000"}).
 			WithDataFrameInfo(dataInfo)
 
-		detailedMsg := err.Format(ErrorLevelDetailed)
+		detailedMsg := err.Format(errors.ErrorLevelDetailed)
 		assert.Contains(t, detailedMsg, "DataFrame has 1000 rows")
 		assert.Contains(t, detailedMsg, "Available columns: [col1, col2, col3]")
 	})

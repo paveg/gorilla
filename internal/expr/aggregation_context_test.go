@@ -1,26 +1,26 @@
-package expr
+package expr_test
 
 import (
 	"testing"
 
+	"github.com/paveg/gorilla/internal/expr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestNewAggregationContext(t *testing.T) {
 	t.Run("creates empty context", func(t *testing.T) {
-		ctx := NewAggregationContext()
+		ctx := expr.NewAggregationContext()
 
 		assert.NotNil(t, ctx)
-		assert.Empty(t, ctx.columnMappings)
-		assert.Empty(t, ctx.reverseMapping)
+		// Note: Cannot access unexported columnMappings and reverseMapping fields
 		assert.Equal(t, "AggregationContext{empty}", ctx.String())
 	})
 }
 
 func TestAggregationContext_AddMapping(t *testing.T) {
 	t.Run("adds single mapping", func(t *testing.T) {
-		ctx := NewAggregationContext()
+		ctx := expr.NewAggregationContext()
 
 		ctx.AddMapping("SUM(sales)", "sum_sales")
 
@@ -34,7 +34,7 @@ func TestAggregationContext_AddMapping(t *testing.T) {
 	})
 
 	t.Run("adds multiple mappings", func(t *testing.T) {
-		ctx := NewAggregationContext()
+		ctx := expr.NewAggregationContext()
 
 		ctx.AddMapping("SUM(sales)", "sum_sales")
 		ctx.AddMapping("COUNT(id)", "count_id")
@@ -51,7 +51,7 @@ func TestAggregationContext_AddMapping(t *testing.T) {
 	})
 
 	t.Run("overwrites existing mapping", func(t *testing.T) {
-		ctx := NewAggregationContext()
+		ctx := expr.NewAggregationContext()
 
 		ctx.AddMapping("SUM(sales)", "sum_sales")
 		ctx.AddMapping("SUM(sales)", "total_sales") // Overwrite
@@ -73,7 +73,7 @@ func TestAggregationContext_AddMapping(t *testing.T) {
 
 func TestAggregationContext_GetColumnName(t *testing.T) {
 	t.Run("returns existing mapping", func(t *testing.T) {
-		ctx := NewAggregationContext()
+		ctx := expr.NewAggregationContext()
 		ctx.AddMapping("COUNT(*)", "count_all")
 
 		columnName, exists := ctx.GetColumnName("COUNT(*)")
@@ -82,7 +82,7 @@ func TestAggregationContext_GetColumnName(t *testing.T) {
 	})
 
 	t.Run("returns false for non-existent mapping", func(t *testing.T) {
-		ctx := NewAggregationContext()
+		ctx := expr.NewAggregationContext()
 
 		columnName, exists := ctx.GetColumnName("SUM(nonexistent)")
 		assert.False(t, exists)
@@ -92,7 +92,7 @@ func TestAggregationContext_GetColumnName(t *testing.T) {
 
 func TestAggregationContext_GetExpression(t *testing.T) {
 	t.Run("returns existing reverse mapping", func(t *testing.T) {
-		ctx := NewAggregationContext()
+		ctx := expr.NewAggregationContext()
 		ctx.AddMapping("MIN(value)", "min_value")
 
 		exprStr, exists := ctx.GetExpression("min_value")
@@ -101,7 +101,7 @@ func TestAggregationContext_GetExpression(t *testing.T) {
 	})
 
 	t.Run("returns false for non-existent reverse mapping", func(t *testing.T) {
-		ctx := NewAggregationContext()
+		ctx := expr.NewAggregationContext()
 
 		exprStr, exists := ctx.GetExpression("nonexistent_column")
 		assert.False(t, exists)
@@ -110,7 +110,7 @@ func TestAggregationContext_GetExpression(t *testing.T) {
 }
 
 func TestAggregationContext_HasMapping(t *testing.T) {
-	ctx := NewAggregationContext()
+	ctx := expr.NewAggregationContext()
 	ctx.AddMapping("MAX(score)", "max_score")
 
 	t.Run("returns true for existing mapping", func(t *testing.T) {
@@ -124,14 +124,14 @@ func TestAggregationContext_HasMapping(t *testing.T) {
 
 func TestAggregationContext_AllMappings(t *testing.T) {
 	t.Run("returns empty map for empty context", func(t *testing.T) {
-		ctx := NewAggregationContext()
+		ctx := expr.NewAggregationContext()
 
 		mappings := ctx.AllMappings()
 		assert.Empty(t, mappings)
 	})
 
 	t.Run("returns copy of all mappings", func(t *testing.T) {
-		ctx := NewAggregationContext()
+		ctx := expr.NewAggregationContext()
 		ctx.AddMapping("SUM(a)", "sum_a")
 		ctx.AddMapping("COUNT(b)", "count_b")
 
@@ -150,7 +150,7 @@ func TestAggregationContext_AllMappings(t *testing.T) {
 
 func TestAggregationContext_Clear(t *testing.T) {
 	t.Run("clears all mappings", func(t *testing.T) {
-		ctx := NewAggregationContext()
+		ctx := expr.NewAggregationContext()
 		ctx.AddMapping("SUM(x)", "sum_x")
 		ctx.AddMapping("COUNT(y)", "count_y")
 
@@ -171,12 +171,12 @@ func TestAggregationContext_Clear(t *testing.T) {
 
 func TestAggregationContext_String(t *testing.T) {
 	t.Run("empty context", func(t *testing.T) {
-		ctx := NewAggregationContext()
+		ctx := expr.NewAggregationContext()
 		assert.Equal(t, "AggregationContext{empty}", ctx.String())
 	})
 
 	t.Run("single mapping", func(t *testing.T) {
-		ctx := NewAggregationContext()
+		ctx := expr.NewAggregationContext()
 		ctx.AddMapping("SUM(sales)", "sum_sales")
 
 		result := ctx.String()
@@ -186,7 +186,7 @@ func TestAggregationContext_String(t *testing.T) {
 	})
 
 	t.Run("multiple mappings", func(t *testing.T) {
-		ctx := NewAggregationContext()
+		ctx := expr.NewAggregationContext()
 		ctx.AddMapping("SUM(sales)", "sum_sales")
 		ctx.AddMapping("COUNT(id)", "count_id")
 
@@ -200,50 +200,50 @@ func TestAggregationContext_String(t *testing.T) {
 
 func TestExpressionToColumnName(t *testing.T) {
 	t.Run("aggregation expression", func(t *testing.T) {
-		expr := Sum(Col("sales"))
-		columnName := ExpressionToColumnName(expr)
+		e := expr.Sum(expr.Col("sales"))
+		columnName := expr.ExpressionToColumnName(e)
 		assert.Equal(t, "sum(col(sales))", columnName)
 	})
 
 	t.Run("column expression", func(t *testing.T) {
-		expr := Col("name")
-		columnName := ExpressionToColumnName(expr)
+		e := expr.Col("name")
+		columnName := expr.ExpressionToColumnName(e)
 		assert.Equal(t, "col(name)", columnName)
 	})
 
 	t.Run("literal expression", func(t *testing.T) {
-		expr := Lit(42)
-		columnName := ExpressionToColumnName(expr)
+		e := expr.Lit(42)
+		columnName := expr.ExpressionToColumnName(e)
 		assert.Equal(t, "lit(42)", columnName)
 	})
 
 	t.Run("binary expression", func(t *testing.T) {
-		expr := Col("a").Gt(Lit(10))
-		columnName := ExpressionToColumnName(expr)
+		e := expr.Col("a").Gt(expr.Lit(10))
+		columnName := expr.ExpressionToColumnName(e)
 		assert.Equal(t, "(col(a) > lit(10))", columnName)
 	})
 
 	t.Run("function expression", func(t *testing.T) {
-		expr := NewFunction("UPPER", Col("name"))
-		columnName := ExpressionToColumnName(expr)
+		e := expr.NewFunction("UPPER", expr.Col("name"))
+		columnName := expr.ExpressionToColumnName(e)
 		assert.Equal(t, "UPPER(col(name))", columnName)
 	})
 }
 
 func TestBuildContextFromAggregations(t *testing.T) {
 	t.Run("empty aggregations", func(t *testing.T) {
-		ctx := BuildContextFromAggregations([]*AggregationExpr{})
+		ctx := expr.BuildContextFromAggregations([]*expr.AggregationExpr{})
 
 		assert.NotNil(t, ctx)
 		assert.Empty(t, ctx.AllMappings())
 	})
 
 	t.Run("single aggregation", func(t *testing.T) {
-		agg := Sum(Col("sales"))
-		ctx := BuildContextFromAggregations([]*AggregationExpr{agg})
+		agg := expr.Sum(expr.Col("sales"))
+		ctx := expr.BuildContextFromAggregations([]*expr.AggregationExpr{agg})
 
 		exprStr := agg.String()
-		columnName := ExpressionToColumnName(agg)
+		columnName := expr.ExpressionToColumnName(agg)
 
 		assert.True(t, ctx.HasMapping(exprStr))
 		mappedColumn, exists := ctx.GetColumnName(exprStr)
@@ -252,12 +252,12 @@ func TestBuildContextFromAggregations(t *testing.T) {
 	})
 
 	t.Run("multiple aggregations", func(t *testing.T) {
-		agg1 := Sum(Col("sales"))
-		agg2 := Count(Col("id"))
-		agg3 := Mean(Col("price"))
+		agg1 := expr.Sum(expr.Col("sales"))
+		agg2 := expr.Count(expr.Col("id"))
+		agg3 := expr.Mean(expr.Col("price"))
 
-		aggregations := []*AggregationExpr{agg1, agg2, agg3}
-		ctx := BuildContextFromAggregations(aggregations)
+		aggregations := []*expr.AggregationExpr{agg1, agg2, agg3}
+		ctx := expr.BuildContextFromAggregations(aggregations)
 
 		// Verify all aggregations are mapped
 		for _, agg := range aggregations {
@@ -266,16 +266,16 @@ func TestBuildContextFromAggregations(t *testing.T) {
 
 			mappedColumn, exists := ctx.GetColumnName(exprStr)
 			assert.True(t, exists)
-			assert.Equal(t, ExpressionToColumnName(agg), mappedColumn)
+			assert.Equal(t, expr.ExpressionToColumnName(agg), mappedColumn)
 		}
 	})
 
 	t.Run("duplicate aggregations", func(t *testing.T) {
-		agg1 := Sum(Col("sales"))
-		agg2 := Sum(Col("sales")) // Duplicate
+		agg1 := expr.Sum(expr.Col("sales"))
+		agg2 := expr.Sum(expr.Col("sales")) // Duplicate
 
-		aggregations := []*AggregationExpr{agg1, agg2}
-		ctx := BuildContextFromAggregations(aggregations)
+		aggregations := []*expr.AggregationExpr{agg1, agg2}
+		ctx := expr.BuildContextFromAggregations(aggregations)
 
 		// Should only have one mapping (last one wins)
 		exprStr := agg1.String()
@@ -294,12 +294,12 @@ func TestAggregationContext_Integration(t *testing.T) {
 		// HAVING SUM(sales) > 1000 AND COUNT(id) > 5
 
 		// Build aggregations used in GROUP BY
-		sumSales := Sum(Col("sales"))
-		countID := Count(Col("id"))
-		aggregations := []*AggregationExpr{sumSales, countID}
+		sumSales := expr.Sum(expr.Col("sales"))
+		countID := expr.Count(expr.Col("id"))
+		aggregations := []*expr.AggregationExpr{sumSales, countID}
 
 		// Create context from aggregations
-		ctx := BuildContextFromAggregations(aggregations)
+		ctx := expr.BuildContextFromAggregations(aggregations)
 
 		// Verify context has mappings for both aggregations
 		sumExpr := sumSales.String()
@@ -328,7 +328,7 @@ func TestAggregationContext_Integration(t *testing.T) {
 	})
 
 	t.Run("context modification during evaluation", func(t *testing.T) {
-		ctx := NewAggregationContext()
+		ctx := expr.NewAggregationContext()
 
 		// Start with basic mapping
 		ctx.AddMapping("SUM(a)", "sum_a")

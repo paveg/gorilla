@@ -7,7 +7,7 @@ import (
 
 // Add new expression types for window functions.
 const (
-	ExprWindow ExprType = iota + 100
+	ExprWindow Type = iota + 100
 	ExprWindowFunction
 )
 
@@ -175,6 +175,8 @@ func UnboundedFollowing() *FrameBoundary {
 func (f *WindowFrame) String() string {
 	frameTypeName := "ROWS"
 	switch f.frameType {
+	case FrameTypeRows:
+		frameTypeName = "ROWS"
 	case FrameTypeRange:
 		frameTypeName = "RANGE"
 	case FrameTypeGroups:
@@ -206,7 +208,7 @@ func (b *FrameBoundary) String() string {
 // Window function expressions
 
 // Type returns the expression type.
-func (w *WindowExpr) Type() ExprType {
+func (w *WindowExpr) Type() Type {
 	return ExprWindow
 }
 
@@ -222,7 +224,7 @@ func (w *WindowExpr) SupportsContext(ctx EvaluationContext) bool {
 }
 
 // Type returns the expression type.
-func (w *WindowFunctionExpr) Type() ExprType {
+func (w *WindowFunctionExpr) Type() Type {
 	return ExprWindowFunction
 }
 

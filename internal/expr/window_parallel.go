@@ -124,9 +124,9 @@ func (e *Evaluator) evaluateLagParallel(
 	// Get the offset (default to 1)
 	offset := int64(1)
 	if len(expr.args) > 1 {
-		offsetExpr, err := e.Evaluate(expr.args[1], columns)
-		if err != nil {
-			return nil, fmt.Errorf("evaluating LAG offset: %w", err)
+		offsetExpr, offsetErr := e.Evaluate(expr.args[1], columns)
+		if offsetErr != nil {
+			return nil, fmt.Errorf("evaluating LAG offset: %w", offsetErr)
 		}
 		defer offsetExpr.Release()
 
@@ -167,9 +167,9 @@ func (e *Evaluator) evaluateLeadParallel(
 	// Get the offset (default to 1)
 	offset := int64(1)
 	if len(expr.args) > 1 {
-		offsetExpr, err := e.Evaluate(expr.args[1], columns)
-		if err != nil {
-			return nil, fmt.Errorf("evaluating LEAD offset: %w", err)
+		offsetExpr, offsetErr := e.Evaluate(expr.args[1], columns)
+		if offsetErr != nil {
+			return nil, fmt.Errorf("evaluating LEAD offset: %w", offsetErr)
 		}
 		defer offsetExpr.Release()
 
@@ -299,7 +299,7 @@ func (e *Evaluator) executePartitionsParallel(
 
 	// Process partitions in parallel
 	results := parallel.ProcessIndexed(wp, tasks,
-		func(taskIndex int, task partitionTask) partitionResult {
+		func(_ int, task partitionTask) partitionResult {
 			// Create independent memory allocator for thread safety
 			workerMem := memory.NewGoAllocator()
 
@@ -334,7 +334,7 @@ func (e *Evaluator) processRankPartition(
 	partition []int,
 	window *WindowSpec,
 	columns map[string]arrow.Array,
-	workerMem memory.Allocator,
+	_ memory.Allocator,
 ) ([]interface{}, error) {
 	// Sort partition if ORDER BY is specified
 	sortedIndices := partition
@@ -376,7 +376,7 @@ func (e *Evaluator) processDenseRankPartition(
 	partition []int,
 	window *WindowSpec,
 	columns map[string]arrow.Array,
-	workerMem memory.Allocator,
+	_ memory.Allocator,
 ) ([]interface{}, error) {
 	// Sort partition if ORDER BY is specified
 	sortedIndices := partition
@@ -468,8 +468,10 @@ func (e *Evaluator) buildWindowResult(
 		for i := range dataLength {
 			if finalResult[i] == nil {
 				builder.AppendNull()
+			} else if int64Val, ok := finalResult[i].(int64); ok {
+				builder.Append(int64Val)
 			} else {
-				builder.Append(finalResult[i].(int64))
+				builder.AppendNull() // Fallback for type assertion failure
 			}
 		}
 		return builder.NewArray(), nil
@@ -546,7 +548,7 @@ func (e *Evaluator) executeOffsetPartitionsParallel(
 
 	// Process partitions in parallel
 	results := parallel.ProcessIndexed(wp, tasks,
-		func(taskIndex int, task offsetPartitionTask) offsetPartitionResult {
+		func(_ int, task offsetPartitionTask) offsetPartitionResult {
 			// Process the offset partition
 			partitionResults := e.processOffsetPartition(
 				task.rowIndices,
@@ -670,39 +672,63 @@ func (e *Evaluator) buildTypedArrayResultParallel(
 ) (arrow.Array, error) {
 	switch arrayType {
 	case typeInt64:
-		builder := array.NewInt64Builder(e.mem)
-		defer builder.Release()
-		for i := range dataLength {
-			if result[i] == nil {
-				builder.AppendNull()
-			} else {
-				builder.Append(result[i].(int64))
-			}
-		}
-		return builder.NewArray(), nil
+		return e.buildParallelInt64Array(result, dataLength)
 	case typeString:
-		builder := array.NewStringBuilder(e.mem)
-		defer builder.Release()
-		for i := range dataLength {
-			if result[i] == nil {
-				builder.AppendNull()
-			} else {
-				builder.Append(result[i].(string))
-			}
-		}
-		return builder.NewArray(), nil
+		return e.buildParallelStringArray(result, dataLength)
 	case typeFloat64:
-		builder := array.NewFloat64Builder(e.mem)
-		defer builder.Release()
-		for i := range dataLength {
-			if result[i] == nil {
-				builder.AppendNull()
-			} else {
-				builder.Append(result[i].(float64))
-			}
-		}
-		return builder.NewArray(), nil
+		return e.buildParallelFloat64Array(result, dataLength)
 	default:
 		return nil, fmt.Errorf("unsupported array type: %s", arrayType)
 	}
+}
+
+// buildParallelInt64Array builds an Int64 array for parallel processing.
+func (e *Evaluator) buildParallelInt64Array(result []interface{}, dataLength int) (arrow.Array, error) {
+	builder := array.NewInt64Builder(e.mem)
+	defer builder.Release()
+
+	for i := range dataLength {
+		if result[i] == nil {
+			builder.AppendNull()
+		} else if int64Val, ok := result[i].(int64); ok {
+			builder.Append(int64Val)
+		} else {
+			builder.AppendNull() // Fallback for type assertion failure.
+		}
+	}
+	return builder.NewArray(), nil
+}
+
+// buildParallelStringArray builds a String array for parallel processing.
+func (e *Evaluator) buildParallelStringArray(result []interface{}, dataLength int) (arrow.Array, error) {
+	builder := array.NewStringBuilder(e.mem)
+	defer builder.Release()
+
+	for i := range dataLength {
+		if result[i] == nil {
+			builder.AppendNull()
+		} else if stringVal, ok := result[i].(string); ok {
+			builder.Append(stringVal)
+		} else {
+			builder.AppendNull() // Fallback for type assertion failure.
+		}
+	}
+	return builder.NewArray(), nil
+}
+
+// buildParallelFloat64Array builds a Float64 array for parallel processing.
+func (e *Evaluator) buildParallelFloat64Array(result []interface{}, dataLength int) (arrow.Array, error) {
+	builder := array.NewFloat64Builder(e.mem)
+	defer builder.Release()
+
+	for i := range dataLength {
+		if result[i] == nil {
+			builder.AppendNull()
+		} else if float64Val, ok := result[i].(float64); ok {
+			builder.Append(float64Val)
+		} else {
+			builder.AppendNull() // Fallback for type assertion failure.
+		}
+	}
+	return builder.NewArray(), nil
 }

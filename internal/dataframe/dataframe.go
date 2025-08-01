@@ -23,18 +23,21 @@ import (
 	"github.com/paveg/gorilla/internal/validation"
 )
 
-// Global memory pool for GroupBy operations to reduce GC pressure.
-var (
-	groupByMemoryPool *parallel.AllocatorPool
-	groupByPoolOnce   sync.Once
-)
+// memoryPoolManager manages the singleton memory pool for GroupBy operations.
+type memoryPoolManager struct {
+	pool *parallel.AllocatorPool
+	once sync.Once
+}
+
+//nolint:gochecknoglobals // Required for singleton memory pool pattern for thread-safe resource management
+var poolManager = &memoryPoolManager{}
 
 // getGroupByMemoryPool returns the shared memory pool for GroupBy operations.
 func getGroupByMemoryPool() *parallel.AllocatorPool {
-	groupByPoolOnce.Do(func() {
-		groupByMemoryPool = parallel.NewAllocatorPool(runtime.NumCPU() * allocatorPoolMultiplier)
+	poolManager.once.Do(func() {
+		poolManager.pool = parallel.NewAllocatorPool(runtime.NumCPU() * allocatorPoolMultiplier)
 	})
-	return groupByMemoryPool
+	return poolManager.pool
 }
 
 const (
@@ -551,7 +554,7 @@ func (df *DataFrame) Concat(others ...*DataFrame) *DataFrame {
 			// Collect all series for this column
 			allSeries := []ISeries{series}
 			for _, other := range others {
-				if otherSeries, exists := other.columns[colName]; exists {
+				if otherSeries, otherExists := other.columns[colName]; otherExists {
 					allSeries = append(allSeries, otherSeries)
 				}
 			}
@@ -633,7 +636,10 @@ func (df *DataFrame) concatStringSeries(
 	name string, seriesList []ISeries, totalLength int, mem memory.Allocator,
 ) ISeries {
 	return concatTypedSeries(name, seriesList, totalLength, mem, "", func(arr arrow.Array, i int) string {
-		return arr.(*array.String).Value(i)
+		if stringArray, ok := arr.(*array.String); ok {
+			return stringArray.Value(i)
+		}
+		return ""
 	})
 }
 
@@ -642,7 +648,10 @@ func (df *DataFrame) concatInt64Series(
 	name string, seriesList []ISeries, totalLength int, mem memory.Allocator,
 ) ISeries {
 	return concatTypedSeries(name, seriesList, totalLength, mem, int64(0), func(arr arrow.Array, i int) int64 {
-		return arr.(*array.Int64).Value(i)
+		if int64Array, ok := arr.(*array.Int64); ok {
+			return int64Array.Value(i)
+		}
+		return 0
 	})
 }
 
@@ -651,7 +660,10 @@ func (df *DataFrame) concatFloat64Series(
 	name string, seriesList []ISeries, totalLength int, mem memory.Allocator,
 ) ISeries {
 	return concatTypedSeries(name, seriesList, totalLength, mem, 0.0, func(arr arrow.Array, i int) float64 {
-		return arr.(*array.Float64).Value(i)
+		if float64Array, ok := arr.(*array.Float64); ok {
+			return float64Array.Value(i)
+		}
+		return 0.0
 	})
 }
 
@@ -660,7 +672,10 @@ func (df *DataFrame) concatBoolSeries(
 	name string, seriesList []ISeries, totalLength int, mem memory.Allocator,
 ) ISeries {
 	return concatTypedSeries(name, seriesList, totalLength, mem, false, func(arr arrow.Array, i int) bool {
-		return arr.(*array.Boolean).Value(i)
+		if boolArray, ok := arr.(*array.Boolean); ok {
+			return boolArray.Value(i)
+		}
+		return false
 	})
 }
 
@@ -672,7 +687,7 @@ func concatTypedSeries[T any](
 	values := make([]T, 0, totalLength)
 	for _, s := range seriesList {
 		arr := s.Array()
-		for i := 0; i < arr.Len(); i++ {
+		for i := range arr.Len() {
 			if !arr.IsNull(i) {
 				values = append(values, getValue(arr, i))
 			} else {
@@ -684,51 +699,53 @@ func concatTypedSeries[T any](
 	return series.New(name, values, mem)
 }
 
+// copySeriesGeneric creates a typed series copy using generics.
+func copySeriesGeneric[T any](
+	name string, typedArr ArrowValueArray[T], mem memory.Allocator,
+) ISeries {
+	values := make([]T, typedArr.Len())
+	for i := range typedArr.Len() {
+		if !typedArr.IsNull(i) {
+			values[i] = typedArr.Value(i)
+		}
+	}
+	return series.New(name, values, mem)
+}
+
 // copySeries creates a copy of a series.
 func (df *DataFrame) copySeries(s ISeries) ISeries {
 	originalArray := s.Array()
 	defer originalArray.Release()
 
 	mem := memory.NewGoAllocator()
-	_ = mem // TODO: Used in series creation but flagged as unused due to build issues
 
 	switch typedArr := originalArray.(type) {
 	case *array.String:
-		values := make([]string, typedArr.Len())
-		for i := 0; i < typedArr.Len(); i++ {
-			if !typedArr.IsNull(i) {
-				values[i] = typedArr.Value(i)
-			}
-		}
-		return series.New(s.Name(), values, mem)
-
+		return copySeriesGeneric(s.Name(), typedArr, mem)
 	case *array.Int64:
-		values := make([]int64, typedArr.Len())
-		for i := 0; i < typedArr.Len(); i++ {
-			if !typedArr.IsNull(i) {
-				values[i] = typedArr.Value(i)
-			}
-		}
-		return series.New(s.Name(), values, mem)
-
+		return copySeriesGeneric(s.Name(), typedArr, mem)
+	case *array.Int32:
+		return copySeriesGeneric(s.Name(), typedArr, mem)
+	case *array.Int16:
+		return copySeriesGeneric(s.Name(), typedArr, mem)
+	case *array.Int8:
+		return copySeriesGeneric(s.Name(), typedArr, mem)
+	case *array.Uint64:
+		return copySeriesGeneric(s.Name(), typedArr, mem)
+	case *array.Uint32:
+		return copySeriesGeneric(s.Name(), typedArr, mem)
+	case *array.Uint16:
+		return copySeriesGeneric(s.Name(), typedArr, mem)
+	case *array.Uint8:
+		return copySeriesGeneric(s.Name(), typedArr, mem)
 	case *array.Float64:
-		values := make([]float64, typedArr.Len())
-		for i := 0; i < typedArr.Len(); i++ {
-			if !typedArr.IsNull(i) {
-				values[i] = typedArr.Value(i)
-			}
-		}
-		return series.New(s.Name(), values, mem)
-
+		return copySeriesGeneric(s.Name(), typedArr, mem)
+	case *array.Float32:
+		return copySeriesGeneric(s.Name(), typedArr, mem)
 	case *array.Boolean:
-		values := make([]bool, typedArr.Len())
-		for i := 0; i < typedArr.Len(); i++ {
-			if !typedArr.IsNull(i) {
-				values[i] = typedArr.Value(i)
-			}
-		}
-		return series.New(s.Name(), values, mem)
-
+		return copySeriesGeneric(s.Name(), typedArr, mem)
+	case *array.Timestamp:
+		return copySeriesGeneric(s.Name(), typedArr, mem)
 	default:
 		// For unsupported types, return empty series
 		return series.New(s.Name(), []string{}, mem)
@@ -743,12 +760,13 @@ func (df *DataFrame) Release() {
 }
 
 // safeDataType safely gets the data type from a series, returning nil if the series has a nil array.
-func safeDataType(s ISeries) (result arrow.DataType) {
+func safeDataType(s ISeries) arrow.DataType {
 	if s == nil {
 		return nil
 	}
 
 	// Use the series DataType method directly, but with recovery
+	var result arrow.DataType
 	defer func() {
 		if r := recover(); r != nil {
 			// If there's a panic (e.g. nil pointer), return nil
@@ -756,7 +774,8 @@ func safeDataType(s ISeries) (result arrow.DataType) {
 		}
 	}()
 
-	return s.DataType()
+	result = s.DataType()
+	return result
 }
 
 // GroupBy represents a grouped DataFrame for aggregation operations.
@@ -1271,7 +1290,7 @@ func (df *DataFrame) sequentialJoin(
 
 	// Build hash map from right DataFrame
 	rightHashMap := make(map[string][]int)
-	for i := 0; i < right.Len(); i++ {
+	for i := range right.Len() {
 		key := buildJoinKey(right, rightKeys, i)
 		rightHashMap[key] = append(rightHashMap[key], i)
 	}
@@ -1435,7 +1454,7 @@ func getStringValue(series ISeries, index int) string {
 func (df *DataFrame) performInnerJoin(rightHashMap map[string][]int, leftKeys []string) ([]int, []int) {
 	var leftIndices, rightIndices []int
 
-	for i := 0; i < df.Len(); i++ {
+	for i := range df.Len() {
 		key := buildJoinKey(df, leftKeys, i)
 		if rightRows, exists := rightHashMap[key]; exists {
 			for _, rightIdx := range rightRows {
@@ -1452,7 +1471,7 @@ func (df *DataFrame) performInnerJoin(rightHashMap map[string][]int, leftKeys []
 func (df *DataFrame) performLeftJoin(rightHashMap map[string][]int, leftKeys []string) ([]int, []int) {
 	var leftIndices, rightIndices []int
 
-	for i := 0; i < df.Len(); i++ {
+	for i := range df.Len() {
 		key := buildJoinKey(df, leftKeys, i)
 		if rightRows, exists := rightHashMap[key]; exists {
 			for _, rightIdx := range rightRows {
@@ -1476,7 +1495,7 @@ func (df *DataFrame) performRightJoin(
 	matched := make(map[int]bool) // Track which right rows were matched
 
 	// First pass: find matches (same as inner join)
-	for i := 0; i < df.Len(); i++ {
+	for i := range df.Len() {
 		key := buildJoinKey(df, leftKeys, i)
 		if rightRows, exists := rightHashMap[key]; exists {
 			for _, rightIdx := range rightRows {
@@ -1488,7 +1507,7 @@ func (df *DataFrame) performRightJoin(
 	}
 
 	// Second pass: add unmatched right rows
-	for i := 0; i < right.Len(); i++ {
+	for i := range right.Len() {
 		if !matched[i] {
 			leftIndices = append(leftIndices, -1) // -1 indicates null/missing
 			rightIndices = append(rightIndices, i)
@@ -1506,7 +1525,7 @@ func (df *DataFrame) performFullOuterJoin(
 	matched := make(map[int]bool) // Track which right rows were matched
 
 	// First pass: process all left rows
-	for i := 0; i < df.Len(); i++ {
+	for i := range df.Len() {
 		key := buildJoinKey(df, leftKeys, i)
 		if rightRows, exists := rightHashMap[key]; exists {
 			for _, rightIdx := range rightRows {
@@ -1521,7 +1540,7 @@ func (df *DataFrame) performFullOuterJoin(
 	}
 
 	// Second pass: add unmatched right rows
-	for i := 0; i < right.Len(); i++ {
+	for i := range right.Len() {
 		if !matched[i] {
 			leftIndices = append(leftIndices, -1) // -1 indicates null/missing
 			rightIndices = append(rightIndices, i)
@@ -1766,7 +1785,7 @@ func (df *DataFrame) sortParallel(columns []string, ascending []bool) []int {
 	defer pool.Close()
 
 	// Sort each chunk in parallel using the existing ProcessIndexed function
-	sortedChunks := parallel.ProcessIndexed(pool, chunks, func(index int, chunk chunkResult) chunkResult {
+	sortedChunks := parallel.ProcessIndexed(pool, chunks, func(_ int, chunk chunkResult) chunkResult {
 		// Sort this chunk's indices
 		sort.Slice(chunk.indices, func(i, j int) bool {
 			return df.compareRows(chunk.indices[i], chunk.indices[j], columns, ascending)
@@ -1793,9 +1812,8 @@ func (df *DataFrame) compareRows(rowA, rowB int, columns []string, ascending []b
 
 		if ascending[i] {
 			return cmp < 0
-		} else {
-			return cmp > 0
 		}
+		return cmp > 0
 	}
 	return false // All columns equal
 }
@@ -2057,7 +2075,7 @@ func (df *DataFrame) extractNumericValues(s ISeries) ([]float64, error) {
 // Helper functions for extractNumericValues.
 func (df *DataFrame) extractFloat64Values(arr *array.Float64) []float64 {
 	var values []float64
-	for i := 0; i < arr.Len(); i++ {
+	for i := range arr.Len() {
 		if !arr.IsNull(i) {
 			values = append(values, arr.Value(i))
 		}
@@ -2067,7 +2085,7 @@ func (df *DataFrame) extractFloat64Values(arr *array.Float64) []float64 {
 
 func (df *DataFrame) extractFloat32Values(arr *array.Float32) []float64 {
 	var values []float64
-	for i := 0; i < arr.Len(); i++ {
+	for i := range arr.Len() {
 		if !arr.IsNull(i) {
 			values = append(values, float64(arr.Value(i)))
 		}
@@ -2077,7 +2095,7 @@ func (df *DataFrame) extractFloat32Values(arr *array.Float32) []float64 {
 
 func (df *DataFrame) extractInt64Values(arr *array.Int64) []float64 {
 	var values []float64
-	for i := 0; i < arr.Len(); i++ {
+	for i := range arr.Len() {
 		if !arr.IsNull(i) {
 			values = append(values, float64(arr.Value(i)))
 		}
@@ -2087,7 +2105,7 @@ func (df *DataFrame) extractInt64Values(arr *array.Int64) []float64 {
 
 func (df *DataFrame) extractInt32Values(arr *array.Int32) []float64 {
 	var values []float64
-	for i := 0; i < arr.Len(); i++ {
+	for i := range arr.Len() {
 		if !arr.IsNull(i) {
 			values = append(values, float64(arr.Value(i)))
 		}
@@ -2097,7 +2115,7 @@ func (df *DataFrame) extractInt32Values(arr *array.Int32) []float64 {
 
 func (df *DataFrame) extractInt16Values(arr *array.Int16) []float64 {
 	var values []float64
-	for i := 0; i < arr.Len(); i++ {
+	for i := range arr.Len() {
 		if !arr.IsNull(i) {
 			values = append(values, float64(arr.Value(i)))
 		}
@@ -2107,7 +2125,7 @@ func (df *DataFrame) extractInt16Values(arr *array.Int16) []float64 {
 
 func (df *DataFrame) extractInt8Values(arr *array.Int8) []float64 {
 	var values []float64
-	for i := 0; i < arr.Len(); i++ {
+	for i := range arr.Len() {
 		if !arr.IsNull(i) {
 			values = append(values, float64(arr.Value(i)))
 		}
@@ -2117,7 +2135,7 @@ func (df *DataFrame) extractInt8Values(arr *array.Int8) []float64 {
 
 func (df *DataFrame) extractUint64Values(arr *array.Uint64) []float64 {
 	var values []float64
-	for i := 0; i < arr.Len(); i++ {
+	for i := range arr.Len() {
 		if !arr.IsNull(i) {
 			values = append(values, float64(arr.Value(i)))
 		}
@@ -2127,7 +2145,7 @@ func (df *DataFrame) extractUint64Values(arr *array.Uint64) []float64 {
 
 func (df *DataFrame) extractUint32Values(arr *array.Uint32) []float64 {
 	var values []float64
-	for i := 0; i < arr.Len(); i++ {
+	for i := range arr.Len() {
 		if !arr.IsNull(i) {
 			values = append(values, float64(arr.Value(i)))
 		}
@@ -2137,7 +2155,7 @@ func (df *DataFrame) extractUint32Values(arr *array.Uint32) []float64 {
 
 func (df *DataFrame) extractUint16Values(arr *array.Uint16) []float64 {
 	var values []float64
-	for i := 0; i < arr.Len(); i++ {
+	for i := range arr.Len() {
 		if !arr.IsNull(i) {
 			values = append(values, float64(arr.Value(i)))
 		}
@@ -2147,7 +2165,7 @@ func (df *DataFrame) extractUint16Values(arr *array.Uint16) []float64 {
 
 func (df *DataFrame) extractUint8Values(arr *array.Uint8) []float64 {
 	var values []float64
-	for i := 0; i < arr.Len(); i++ {
+	for i := range arr.Len() {
 		if !arr.IsNull(i) {
 			values = append(values, float64(arr.Value(i)))
 		}
@@ -2165,7 +2183,7 @@ func (df *DataFrame) calculateCorrelation(x, y []float64) float64 {
 
 	// Calculate means
 	var sumX, sumY float64
-	for i := range len(x) {
+	for i := range x {
 		sumX += x[i]
 		sumY += y[i]
 	}
@@ -2174,7 +2192,7 @@ func (df *DataFrame) calculateCorrelation(x, y []float64) float64 {
 
 	// Calculate correlation coefficient
 	var numerator, denomX, denomY float64
-	for i := range len(x) {
+	for i := range x {
 		dx := x[i] - meanX
 		dy := y[i] - meanY
 		numerator += dx * dy
@@ -2219,7 +2237,7 @@ func (df *DataFrame) RollingWindow(column string, windowSize int, operation stri
 
 	// Add original columns
 	for _, colName := range df.order {
-		if originalSeries, exists := df.columns[colName]; exists {
+		if originalSeries, colExists := df.columns[colName]; colExists {
 			resultSeries = append(resultSeries, df.copySeries(originalSeries))
 		}
 	}
@@ -2235,7 +2253,7 @@ func (df *DataFrame) RollingWindow(column string, windowSize int, operation stri
 func (df *DataFrame) applyRollingWindow(values []float64, windowSize int, operation string) ([]float64, error) {
 	results := make([]float64, len(values))
 
-	for i := range len(values) {
+	for i := range values {
 		if i < windowSize-1 {
 			// Not enough data for window, set to NaN
 			results[i] = math.NaN()
@@ -2484,7 +2502,7 @@ func (df *DataFrame) createLagLeadSeries(
 	builder := array.NewFloat64Builder(mem)
 	defer builder.Release()
 
-	for i := range len(values) {
+	for i := range values {
 		if (isLag && i < offset) || (!isLag && i+offset >= len(values)) {
 			builder.AppendNull()
 		} else {

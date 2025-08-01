@@ -1,3 +1,4 @@
+//nolint:testpackage // requires internal access to unexported types and functions
 package sql
 
 import (
@@ -93,7 +94,7 @@ func TestSQLExecutorBasicQueries(t *testing.T) {
 }
 
 func TestSQLExecutorAggregation(t *testing.T) {
-	t.Skip("TODO: Fix SQL parser issues before enabling these tests")
+	t.Skip("TODO: Missing helper methods in translator: translateCountFunction, translateUnaryAggregationFunction")
 	mem := memory.NewGoAllocator()
 	executor := NewSQLExecutor(mem)
 
@@ -298,12 +299,12 @@ func TestSQLExecutorValidation(t *testing.T) {
 			err := executor.ValidateQuery(tt.query)
 
 			if tt.wantErr {
-				assert.Error(t, err)
+				require.Error(t, err)
 				if tt.errMsg != "" {
 					assert.Contains(t, err.Error(), tt.errMsg)
 				}
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 		})
 	}
@@ -341,7 +342,7 @@ func TestSQLExecutorExplain(t *testing.T) {
 			require.NoError(t, err)
 
 			assert.NotEmpty(t, plan)
-			assert.NotEqual(t, plan, "", "Explain plan should not be empty")
+			assert.NotEmpty(t, plan, "Explain plan should not be empty")
 		})
 	}
 }
@@ -376,7 +377,7 @@ func TestSQLExecutorTableManagement(t *testing.T) {
 }
 
 func TestSQLExecutorBatchExecute(t *testing.T) {
-	t.Skip("TODO: Fix SQL parser issues before enabling these tests")
+	t.Skip("TODO: COUNT aggregation returns empty results")
 	mem := memory.NewGoAllocator()
 	executor := NewSQLExecutor(mem)
 
@@ -430,13 +431,13 @@ func TestSQLExecutorBatchExecuteError(t *testing.T) {
 	}
 
 	results, err := executor.BatchExecute(queries)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, results)
 	assert.Contains(t, err.Error(), "error executing query 1")
 }
 
 func TestSQLExecutorComplexQueries(t *testing.T) {
-	t.Skip("TODO: Fix SQL parser issues before enabling these tests")
+	t.Skip("TODO: Contains aggregation queries that need aggregation functionality")
 	mem := memory.NewGoAllocator()
 	executor := NewSQLExecutor(mem)
 
@@ -580,7 +581,7 @@ func TestSQLExecutorErrorHandling(t *testing.T) {
 	for _, tt := range errorQueries {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := executor.Execute(tt.query)
-			assert.Error(t, err)
+			require.Error(t, err)
 			assert.Nil(t, result)
 
 			if tt.errorMsg != "" {

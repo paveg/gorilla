@@ -1,3 +1,4 @@
+//nolint:testpackage // requires internal access to unexported types and functions
 package dataframe
 
 import (
@@ -56,11 +57,11 @@ func TestDataFrameWithDateTime(t *testing.T) {
 			time.Date(2023, 1, 1, 9, 15, 0, 0, time.UTC),
 			time.Date(2023, 1, 1, 9, 30, 0, 0, time.UTC),
 		}
-		userIds := []int64{1, 1, 1}
+		userIDs := []int64{1, 1, 1}
 
 		eventSeries := series.New("event", events, mem)
 		timestampSeries := series.New("timestamp", timestamps, mem)
-		userSeries := series.New("user_id", userIds, mem)
+		userSeries := series.New("user_id", userIDs, mem)
 
 		defer eventSeries.Release()
 		defer timestampSeries.Release()

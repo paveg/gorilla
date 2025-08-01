@@ -59,8 +59,8 @@ type SystemInfo struct {
 	OSType       string
 }
 
-// ConfigValidator validates and provides recommendations for configuration.
-type ConfigValidator struct {
+// Validator validates and provides recommendations for configuration.
+type Validator struct {
 	systemInfo SystemInfo
 }
 
@@ -89,11 +89,30 @@ const (
 	WorkerPoolReductionFactor     = 2
 )
 
-// Global configuration instance.
+// globalConfigManager manages the singleton global configuration instance.
+type globalConfigManager struct {
+	config Config
+	mutex  sync.RWMutex
+}
+
+// Package-level singleton implementation using sync.Once pattern
+// These variables are necessary for proper singleton behavior and thread safety
+//
+//nolint:gochecknoglobals // Required for singleton pattern with sync.Once
 var (
-	globalConfig = NewConfig() // Initialize with defaults
-	configMutex  sync.RWMutex
+	managerInstance *globalConfigManager
+	managerOnce     sync.Once
 )
+
+// getGlobalManager returns the singleton global config manager instance.
+func getGlobalManager() *globalConfigManager {
+	managerOnce.Do(func() {
+		managerInstance = &globalConfigManager{
+			config: NewConfig(),
+		}
+	})
+	return managerInstance
+}
 
 // NewConfig creates a new configuration with default values.
 func NewConfig() Config {
@@ -155,7 +174,7 @@ func (c *Config) Validate() error {
 }
 
 // WithDefaults returns a new configuration with default values filled in for zero values.
-func (c Config) WithDefaults() Config {
+func (c *Config) WithDefaults() Config {
 	defaults := NewConfig()
 
 	// Apply defaults for zero values
@@ -185,21 +204,23 @@ func (c Config) WithDefaults() Config {
 	// This allows distinguishing between explicitly set false and unset values
 	// Use NewConfig() directly if you need boolean defaults
 
-	return c
+	return *c
 }
 
 // SetGlobalConfig sets the global configuration.
 func SetGlobalConfig(config Config) {
-	configMutex.Lock()
-	defer configMutex.Unlock()
-	globalConfig = config
+	manager := getGlobalManager()
+	manager.mutex.Lock()
+	defer manager.mutex.Unlock()
+	manager.config = config
 }
 
 // GetGlobalConfig returns the current global configuration.
 func GetGlobalConfig() Config {
-	configMutex.RLock()
-	defer configMutex.RUnlock()
-	return globalConfig
+	manager := getGlobalManager()
+	manager.mutex.RLock()
+	defer manager.mutex.RUnlock()
+	return manager.config
 }
 
 // LoadFromJSON loads configuration from JSON data.
@@ -352,15 +373,21 @@ func GetSystemInfo() SystemInfo {
 	}
 }
 
-// NewConfigValidator creates a new configuration validator.
-func NewConfigValidator() *ConfigValidator {
-	return &ConfigValidator{
+// NewValidator creates a new configuration validator.
+func NewValidator() *Validator {
+	return &Validator{
 		systemInfo: GetSystemInfo(),
 	}
 }
 
+// NewConfigValidator creates a new configuration validator.
+// Deprecated: Use NewValidator instead.
+func NewConfigValidator() *Validator {
+	return NewValidator()
+}
+
 // Validate validates a configuration and provides recommendations.
-func (cv *ConfigValidator) Validate(config Config) (Config, []string, error) {
+func (cv *Validator) Validate(config Config) (Config, []string, error) {
 	var warnings []string
 	validated := config
 
@@ -417,21 +444,7 @@ func (pt *PerformanceTuner) OptimizeForDataset(rowCount, columnCount int) Config
 	}
 
 	// Adjust chunk size based on data characteristics
-	if columnCount > HighColumnCountThreshold {
-		// Many columns - use smaller chunks to avoid memory pressure
-		if optimized.ChunkSize == 0 {
-			optimized.ChunkSize = SmallChunkSize
-		} else {
-			optimized.ChunkSize = minInt(optimized.ChunkSize, SmallChunkSize)
-		}
-	} else if columnCount < LowColumnCountThreshold {
-		// Few columns - can use larger chunks
-		if optimized.ChunkSize == 0 {
-			optimized.ChunkSize = LargeChunkSize
-		} else {
-			optimized.ChunkSize = maxInt(optimized.ChunkSize, LargeChunkSize)
-		}
-	}
+	optimized.ChunkSize = pt.adjustChunkSizeForColumns(optimized.ChunkSize, columnCount)
 
 	// Adjust worker pool size based on system load (simplified)
 	if pt.isSystemLoadHigh() {
@@ -461,4 +474,25 @@ func maxInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// adjustChunkSizeForColumns adjusts chunk size based on column count to reduce complexity.
+func (pt *PerformanceTuner) adjustChunkSizeForColumns(currentChunkSize, columnCount int) int {
+	if columnCount > HighColumnCountThreshold {
+		// Many columns - use smaller chunks to avoid memory pressure
+		if currentChunkSize == 0 {
+			return SmallChunkSize
+		}
+		return minInt(currentChunkSize, SmallChunkSize)
+	}
+
+	if columnCount < LowColumnCountThreshold {
+		// Few columns - can use larger chunks
+		if currentChunkSize == 0 {
+			return LargeChunkSize
+		}
+		return maxInt(currentChunkSize, LargeChunkSize)
+	}
+
+	return currentChunkSize
 }
