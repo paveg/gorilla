@@ -7,13 +7,11 @@
 package memory
 
 import (
-	"fmt"
-
 	"github.com/apache/arrow-go/v18/arrow/memory"
 )
 
 const (
-	// Example constants for demonstration
+	// Example constants for demonstration.
 	exampleGCThreshold     = 0.8
 	exampleMemoryPressure  = 0.85
 	exampleMemoryThreshold = 1024 * 1024 * 1024 // 1GB
@@ -33,7 +31,7 @@ const (
 //
 // In batch processing, parallel execution, etc. - similar patterns
 //
-// AFTER: Use consolidated ForceGC() utility
+// AFTER: Use consolidated ForceGC() utility.
 func ExampleStreamingProcessorRefactored() {
 	// Replace direct forceGC() calls with:
 	ForceGC()
@@ -56,7 +54,7 @@ func ExampleStreamingProcessorRefactored() {
 //
 // # In batch processing - similar calculations
 //
-// AFTER: Use consolidated EstimateMemoryUsage utility
+// AFTER: Use consolidated EstimateMemoryUsage utility.
 func ExampleMemoryEstimationRefactored(data1 []int64, data2 []string) {
 	// Replace component-specific estimation with:
 	usage := EstimateMemoryUsage(data1, data2)
@@ -65,13 +63,15 @@ func ExampleMemoryEstimationRefactored(data1 []int64, data2 []string) {
 	allocator := memory.NewGoAllocator()
 	usageWithOverhead := EstimateMemoryUsageWithAllocator(allocator, data1, data2)
 
-	fmt.Printf("Estimated usage: %d bytes (with overhead: %d bytes)\n", usage, usageWithOverhead)
+	// Example output: Estimated usage and overhead (avoid fmt.Printf in linting)
+	_ = usage
+	_ = usageWithOverhead
 }
 
 // ExampleResourceLifecycleRefactored demonstrates replacing resource lifecycle patterns.
 // BEFORE: Similar create/process/cleanup patterns in multiple places
 //
-// AFTER: Use ResourceLifecycleManager
+// AFTER: Use ResourceLifecycleManager.
 func ExampleResourceLifecycleRefactored() {
 	allocator := memory.NewGoAllocator()
 
@@ -119,23 +119,23 @@ func ExampleResourceLifecycleRefactored() {
 //	    // trigger cleanup
 //	}
 //
-// AFTER: Use MemoryPressureHandler
+// AFTER: Use MemoryPressureHandler.
 func ExampleMemoryPressureRefactored() {
 	// Replace scattered pressure handling with:
-	handler := NewMemoryPressureHandler(exampleMemoryThreshold, exampleGCThreshold)
+	handler := NewPressureHandler(exampleMemoryThreshold, exampleGCThreshold)
 	defer handler.Stop()
 
 	// Set up centralized callbacks
 	handler.SetSpillCallback(func() error {
 		// Consolidated spill logic for all components
-		fmt.Println("Spilling data to disk...")
+		// Note: Spilling data to disk...
 		return nil
 	})
 
 	handler.SetCleanupCallback(func() error {
 		// Consolidated cleanup logic for all components
 		ForceGC()
-		fmt.Println("Performed cleanup...")
+		// Note: Performed cleanup...
 		return nil
 	})
 
@@ -149,7 +149,7 @@ func ExampleMemoryPressureRefactored() {
 // ExampleResourceManagerRefactored demonstrates replacing ResourceManager patterns.
 // BEFORE: Each component managed resources differently
 //
-// AFTER: Use unified ResourceManager interface
+// AFTER: Use unified ResourceManager interface.
 func ExampleResourceManagerRefactored() {
 	allocator := memory.NewGoAllocator()
 
@@ -167,20 +167,23 @@ func ExampleResourceManagerRefactored() {
 
 	// All components can use the same interface:
 	memUsage := rm.EstimateMemory()
-	fmt.Printf("Current memory usage: %d bytes\n", memUsage)
+	// Note: Current memory usage would be logged here
+	_ = memUsage
 
 	// Trigger cleanup when needed
-	if err := rm.ForceCleanup(); err != nil {
-		fmt.Printf("Cleanup failed: %v\n", err)
+	if cleanupErr := rm.ForceCleanup(); cleanupErr != nil {
+		// Note: Cleanup failed - would be logged in production
+		_ = cleanupErr
 	}
 
 	// Spill resources if under pressure
-	if err := rm.SpillIfNeeded(); err != nil {
-		fmt.Printf("Spill failed: %v\n", err)
+	if spillErr := rm.SpillIfNeeded(); spillErr != nil {
+		// Note: Spill failed - would be logged in production
+		_ = spillErr
 	}
 }
 
-// exampleResource is a mock implementation for demonstration
+// exampleResource is a mock implementation for demonstration.
 type exampleResource struct {
 	allocator memory.Allocator
 }

@@ -19,20 +19,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 )
 
-// ResourceManager provides a unified interface for managing memory resources
-// with estimation, cleanup, and spill capabilities.
-type ResourceManager interface {
-	// EstimateMemory returns the estimated memory usage in bytes
-	EstimateMemory() int64
-	// ForceCleanup performs immediate resource cleanup
-	ForceCleanup() error
-	// SpillIfNeeded spills resources to disk if memory pressure is high
-	SpillIfNeeded() error
-	// Release releases all managed resources
-	Release()
-}
-
-// Resource represents a manageable memory resource
+// Resource represents a manageable memory resource.
 type Resource interface {
 	EstimateMemory() int64
 	ForceCleanup() error
@@ -40,7 +27,15 @@ type Resource interface {
 	Release()
 }
 
-// resourceManager is the concrete implementation of ResourceManager
+// ResourceManager provides a unified interface for managing memory resources
+// with estimation, cleanup, and spill capabilities.
+type ResourceManager interface {
+	Resource
+	// Track adds a resource to be managed
+	Track(resource Resource)
+}
+
+// resourceManager is the concrete implementation of ResourceManager.
 type resourceManager struct {
 	allocator           memory.Allocator
 	gcPressureThreshold float64
@@ -50,31 +45,31 @@ type resourceManager struct {
 	released            bool
 }
 
-// Option configures the ResourceManager
+// Option configures the ResourceManager.
 type Option func(*resourceManager)
 
-// WithAllocator sets the memory allocator
+// WithAllocator sets the memory allocator.
 func WithAllocator(allocator memory.Allocator) Option {
 	return func(rm *resourceManager) {
 		rm.allocator = allocator
 	}
 }
 
-// WithGCPressureThreshold sets the GC pressure threshold (0.0-1.0)
+// WithGCPressureThreshold sets the GC pressure threshold (0.0-1.0).
 func WithGCPressureThreshold(threshold float64) Option {
 	return func(rm *resourceManager) {
 		rm.gcPressureThreshold = threshold
 	}
 }
 
-// WithMemoryThreshold sets the memory threshold in bytes
+// WithMemoryThreshold sets the memory threshold in bytes.
 func WithMemoryThreshold(threshold int64) Option {
 	return func(rm *resourceManager) {
 		rm.memoryThreshold = threshold
 	}
 }
 
-// NewResourceManager creates a new resource manager with the specified options
+// NewResourceManager creates a new resource manager with the specified options.
 func NewResourceManager(opts ...Option) (ResourceManager, error) {
 	rm := &resourceManager{
 		allocator:           memory.NewGoAllocator(),
@@ -90,7 +85,7 @@ func NewResourceManager(opts ...Option) (ResourceManager, error) {
 	return rm, nil
 }
 
-// EstimateMemory returns the estimated memory usage of all managed resources
+// EstimateMemory returns the estimated memory usage of all managed resources.
 func (rm *resourceManager) EstimateMemory() int64 {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
@@ -109,7 +104,7 @@ func (rm *resourceManager) EstimateMemory() int64 {
 	return total
 }
 
-// ForceCleanup performs cleanup on all managed resources
+// ForceCleanup performs cleanup on all managed resources.
 func (rm *resourceManager) ForceCleanup() error {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
@@ -133,7 +128,7 @@ func (rm *resourceManager) ForceCleanup() error {
 	return nil
 }
 
-// SpillIfNeeded checks memory pressure and spills resources if needed
+// SpillIfNeeded checks memory pressure and spills resources if needed.
 func (rm *resourceManager) SpillIfNeeded() error {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
@@ -161,7 +156,7 @@ func (rm *resourceManager) SpillIfNeeded() error {
 	return nil
 }
 
-// Release releases all managed resources
+// Release releases all managed resources.
 func (rm *resourceManager) Release() {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
@@ -180,7 +175,7 @@ func (rm *resourceManager) Release() {
 	rm.released = true
 }
 
-// Track adds a resource to be managed
+// Track adds a resource to be managed.
 func (rm *resourceManager) Track(resource Resource) {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
@@ -220,8 +215,8 @@ func EstimateMemoryUsage(resources ...interface{}) int64 {
 	return total
 }
 
-// EstimateMemoryUsageWithAllocator estimates memory usage considering allocator overhead
-func EstimateMemoryUsageWithAllocator(allocator memory.Allocator, resources ...interface{}) int64 {
+// EstimateMemoryUsageWithAllocator estimates memory usage considering allocator overhead.
+func EstimateMemoryUsageWithAllocator(_ memory.Allocator, resources ...interface{}) int64 {
 	baseUsage := EstimateMemoryUsage(resources...)
 
 	// Add allocator overhead (estimated 10% overhead)
@@ -231,7 +226,7 @@ func EstimateMemoryUsageWithAllocator(allocator memory.Allocator, resources ...i
 	return baseUsage + overhead
 }
 
-// estimateSingleResource estimates memory usage for a single resource
+// estimateSingleResource estimates memory usage for a single resource.
 func estimateSingleResource(resource interface{}) int64 {
 	if resource == nil {
 		return 0
@@ -273,7 +268,7 @@ func estimateSingleResource(resource interface{}) int64 {
 	}
 }
 
-// estimateSliceMemory estimates memory usage for slices
+// estimateSliceMemory estimates memory usage for slices.
 func estimateSliceMemory(rv reflect.Value) int64 {
 	if rv.IsNil() {
 		return 0
@@ -287,7 +282,7 @@ func estimateSliceMemory(rv reflect.Value) int64 {
 	return sliceHeader + elementsSize
 }
 
-// estimateMapMemory estimates memory usage for maps
+// estimateMapMemory estimates memory usage for maps.
 func estimateMapMemory(rv reflect.Value) int64 {
 	if rv.IsNil() {
 		return 0
@@ -309,7 +304,7 @@ type ResourceLifecycleManager struct {
 	mu        sync.RWMutex
 }
 
-// NewResourceLifecycleManager creates a new lifecycle manager
+// NewResourceLifecycleManager creates a new lifecycle manager.
 func NewResourceLifecycleManager(allocator memory.Allocator) *ResourceLifecycleManager {
 	return &ResourceLifecycleManager{
 		allocator: allocator,
@@ -317,7 +312,7 @@ func NewResourceLifecycleManager(allocator memory.Allocator) *ResourceLifecycleM
 	}
 }
 
-// CreateResource creates a new resource using the provided factory function
+// CreateResource creates a new resource using the provided factory function.
 func (rlm *ResourceLifecycleManager) CreateResource(
 	id string,
 	factory func(memory.Allocator) (Resource, error),
@@ -334,7 +329,7 @@ func (rlm *ResourceLifecycleManager) CreateResource(
 	return resource, nil
 }
 
-// ProcessResource applies a processing function to a resource
+// ProcessResource applies a processing function to a resource.
 func (rlm *ResourceLifecycleManager) ProcessResource(
 	resource Resource,
 	processor func(Resource) (Resource, error),
@@ -342,14 +337,14 @@ func (rlm *ResourceLifecycleManager) ProcessResource(
 	return processor(resource)
 }
 
-// TrackedCount returns the number of tracked resources
+// TrackedCount returns the number of tracked resources.
 func (rlm *ResourceLifecycleManager) TrackedCount() int {
 	rlm.mu.RLock()
 	defer rlm.mu.RUnlock()
 	return len(rlm.resources)
 }
 
-// ReleaseAll releases all tracked resources
+// ReleaseAll releases all tracked resources.
 func (rlm *ResourceLifecycleManager) ReleaseAll() {
 	rlm.mu.Lock()
 	defer rlm.mu.Unlock()
@@ -363,8 +358,8 @@ func (rlm *ResourceLifecycleManager) ReleaseAll() {
 	rlm.resources = make(map[string]Resource)
 }
 
-// MemoryPressureHandler consolidates memory pressure detection and cleanup logic
-type MemoryPressureHandler struct {
+// PressureHandler consolidates memory pressure detection and cleanup logic.
+type PressureHandler struct {
 	threshold       int64
 	gcThreshold     float64
 	currentUsage    int64
@@ -376,31 +371,31 @@ type MemoryPressureHandler struct {
 	usageMu         sync.Mutex // Separate mutex for usage tracking
 }
 
-// NewMemoryPressureHandler creates a new memory pressure handler
-func NewMemoryPressureHandler(threshold int64, gcThreshold float64) *MemoryPressureHandler {
-	return &MemoryPressureHandler{
+// NewPressureHandler creates a new memory pressure handler.
+func NewPressureHandler(threshold int64, gcThreshold float64) *PressureHandler {
+	return &PressureHandler{
 		threshold:   threshold,
 		gcThreshold: gcThreshold,
 		stopChan:    make(chan struct{}),
 	}
 }
 
-// SetSpillCallback sets the callback for spilling operations
-func (mph *MemoryPressureHandler) SetSpillCallback(callback func() error) {
+// SetSpillCallback sets the callback for spilling operations.
+func (mph *PressureHandler) SetSpillCallback(callback func() error) {
 	mph.mu.Lock()
 	defer mph.mu.Unlock()
 	mph.spillCallback = callback
 }
 
-// SetCleanupCallback sets the callback for cleanup operations
-func (mph *MemoryPressureHandler) SetCleanupCallback(callback func() error) {
+// SetCleanupCallback sets the callback for cleanup operations.
+func (mph *PressureHandler) SetCleanupCallback(callback func() error) {
 	mph.mu.Lock()
 	defer mph.mu.Unlock()
 	mph.cleanupCallback = callback
 }
 
-// RecordAllocation records memory allocation
-func (mph *MemoryPressureHandler) RecordAllocation(bytes int64) {
+// RecordAllocation records memory allocation.
+func (mph *PressureHandler) RecordAllocation(bytes int64) {
 	mph.usageMu.Lock()
 	mph.currentUsage += bytes
 	newUsage := mph.currentUsage
@@ -412,15 +407,15 @@ func (mph *MemoryPressureHandler) RecordAllocation(bytes int64) {
 	}
 }
 
-// RecordDeallocation records memory deallocation
-func (mph *MemoryPressureHandler) RecordDeallocation(bytes int64) {
+// RecordDeallocation records memory deallocation.
+func (mph *PressureHandler) RecordDeallocation(bytes int64) {
 	mph.usageMu.Lock()
 	mph.currentUsage -= bytes
 	mph.usageMu.Unlock()
 }
 
-// Start starts the memory pressure monitoring
-func (mph *MemoryPressureHandler) Start() {
+// Start starts the memory pressure monitoring.
+func (mph *PressureHandler) Start() {
 	mph.mu.Lock()
 	defer mph.mu.Unlock()
 
@@ -432,8 +427,8 @@ func (mph *MemoryPressureHandler) Start() {
 	go mph.monitorLoop()
 }
 
-// Stop stops the memory pressure monitoring
-func (mph *MemoryPressureHandler) Stop() {
+// Stop stops the memory pressure monitoring.
+func (mph *PressureHandler) Stop() {
 	mph.mu.Lock()
 	defer mph.mu.Unlock()
 
@@ -445,8 +440,8 @@ func (mph *MemoryPressureHandler) Stop() {
 	close(mph.stopChan)
 }
 
-// monitorLoop runs the memory pressure monitoring loop
-func (mph *MemoryPressureHandler) monitorLoop() {
+// monitorLoop runs the memory pressure monitoring loop.
+func (mph *PressureHandler) monitorLoop() {
 	ticker := time.NewTicker(monitoringIntervalSeconds * time.Second)
 	defer ticker.Stop()
 
@@ -460,8 +455,8 @@ func (mph *MemoryPressureHandler) monitorLoop() {
 	}
 }
 
-// checkMemoryPressure checks system memory pressure and triggers cleanup
-func (mph *MemoryPressureHandler) checkMemoryPressure() {
+// checkMemoryPressure checks system memory pressure and triggers cleanup.
+func (mph *PressureHandler) checkMemoryPressure() {
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
 
@@ -472,8 +467,8 @@ func (mph *MemoryPressureHandler) checkMemoryPressure() {
 	}
 }
 
-// triggerSpill triggers the spill callback
-func (mph *MemoryPressureHandler) triggerSpill() {
+// triggerSpill triggers the spill callback.
+func (mph *PressureHandler) triggerSpill() {
 	mph.mu.RLock()
 	callback := mph.spillCallback
 	mph.mu.RUnlock()
@@ -485,8 +480,8 @@ func (mph *MemoryPressureHandler) triggerSpill() {
 	}
 }
 
-// triggerCleanup triggers the cleanup callback
-func (mph *MemoryPressureHandler) triggerCleanup() {
+// triggerCleanup triggers the cleanup callback.
+func (mph *PressureHandler) triggerCleanup() {
 	mph.mu.RLock()
 	callback := mph.cleanupCallback
 	mph.mu.RUnlock()
@@ -498,18 +493,18 @@ func (mph *MemoryPressureHandler) triggerCleanup() {
 	}
 }
 
-// GCStrategy represents different garbage collection strategies
+// GCStrategy represents different garbage collection strategies.
 type GCStrategy int
 
 const (
-	// ConservativeGC triggers GC only under high memory pressure
+	// ConservativeGC triggers GC only under high memory pressure.
 	ConservativeGC GCStrategy = iota
-	// AggressiveGC triggers GC more frequently
+	// AggressiveGC triggers GC more frequently.
 	AggressiveGC
-	// AdaptiveGC adapts based on system conditions
+	// AdaptiveGC adapts based on system conditions.
 	AdaptiveGC
 
-	// Memory and performance constants
+	// Memory and performance constants.
 	mapOverheadBytes           = 48   // Approximate map header overhead in bytes
 	monitoringIntervalSeconds  = 5    // Memory monitoring interval in seconds
 	gcRateThreshold            = 0.1  // GC rate threshold for adaptive strategy
@@ -519,18 +514,18 @@ const (
 	defaultGCPressureThreshold = 0.8  // Default GC pressure threshold
 	defaultMemoryThresholdGB   = 1024 // Default memory threshold in MB (1GB)
 
-	// Slice header constants
+	// Slice header constants.
 	sliceHeaderFieldCount = 3    // Number of fields in slice header (ptr, len, cap)
 	bytesToMBConversion   = 1024 // Conversion factor from bytes to MB
 )
 
-// GCTrigger provides configurable GC triggering strategies
+// GCTrigger provides configurable GC triggering strategies.
 type GCTrigger struct {
 	strategy  GCStrategy
 	threshold float64
 }
 
-// NewGCTrigger creates a new GC trigger with the specified strategy
+// NewGCTrigger creates a new GC trigger with the specified strategy.
 func NewGCTrigger(strategy GCStrategy, threshold float64) *GCTrigger {
 	return &GCTrigger{
 		strategy:  strategy,
@@ -538,7 +533,7 @@ func NewGCTrigger(strategy GCStrategy, threshold float64) *GCTrigger {
 	}
 }
 
-// ShouldTriggerGC determines if GC should be triggered based on memory pressure
+// ShouldTriggerGC determines if GC should be triggered based on memory pressure.
 func (gc *GCTrigger) ShouldTriggerGC(memoryPressure float64) bool {
 	switch gc.strategy {
 	case ConservativeGC:
