@@ -1196,8 +1196,6 @@ func (gh *GroupByHavingOperation) applyHavingFilterOptimized(df *DataFrame) (*Da
 	return gh.applyFilterMaskOptimizedWithAllocator(df, mask, allocator)
 }
 
-
-
 // applyFilterMaskOptimizedWithAllocator applies the boolean mask with memory optimizations using provided allocator.
 func (gh *GroupByHavingOperation) applyFilterMaskOptimizedWithAllocator(
 	df *DataFrame,
