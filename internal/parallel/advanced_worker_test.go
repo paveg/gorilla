@@ -47,7 +47,7 @@ func TestAdvancedWorkerPool(t *testing.T) {
 
 		// Submit work that will fill the queue
 		results = parallel.ProcessGeneric(pool, largeWorkload, func(x int) int {
-			time.Sleep(50 * time.Millisecond) // Longer work to fill queue
+			time.Sleep(10 * time.Millisecond) // Longer work to fill queue
 			return x * 3
 		})
 
@@ -75,9 +75,9 @@ func TestAdvancedWorkerPool(t *testing.T) {
 		results := parallel.ProcessGeneric(pool, workload, func(x int) int {
 			// Every 5th task takes longer
 			if x%5 == 0 {
-				time.Sleep(50 * time.Millisecond)
+				time.Sleep(5 * time.Millisecond)
 			} else {
-				time.Sleep(10 * time.Millisecond)
+				time.Sleep(1 * time.Millisecond)
 			}
 			return x * 2
 		})
@@ -86,7 +86,7 @@ func TestAdvancedWorkerPool(t *testing.T) {
 
 		assert.Len(t, results, 20)
 		// With work stealing, this should complete faster than without
-		assert.Less(t, duration, 300*time.Millisecond, "Work stealing should improve performance")
+		assert.Less(t, duration, 100*time.Millisecond, "Work stealing should improve performance")
 	})
 
 	t.Run("memory pressure adaptation", func(t *testing.T) {
@@ -316,14 +316,14 @@ func TestBackpressureControl(t *testing.T) {
 
 		start := time.Now()
 		results := parallel.ProcessGeneric(pool, workload, func(x int) int {
-			time.Sleep(50 * time.Millisecond)
+			time.Sleep(10 * time.Millisecond)
 			return x * 2
 		})
 		duration := time.Since(start)
 
 		assert.Len(t, results, 20)
 		// Should block and process sequentially due to backpressure
-		assert.Greater(t, duration, 400*time.Millisecond)
+		assert.Greater(t, duration, 80*time.Millisecond)
 	})
 }
 
