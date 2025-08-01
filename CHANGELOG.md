@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+## [0.3.1] - 2025-08-01
+
+### Added
+- **Consolidated shared utilities** in `internal/common` package
+  - String formatting patterns for expressions, SQL clauses, and functions
+  - Safe type conversions with overflow detection and comprehensive type support  
+  - Centralized enum-to-string mappings with parsing capabilities
+- Enhanced test reliability with optimized timing and timeout mechanisms
+
+### Changed
+- **Reduced code duplication** by ~50% across string formatting methods
+- **Improved consistency** in enum-to-string conversions throughout codebase
+- Optimized CI pipeline execution time with better test timing patterns
+
+### Fixed
+- Worker pool timeout issues in CI environments with graceful test skipping
+- Race conditions in parallel test execution with proper synchronization
+- golangci-lint var-naming warnings for internal/common package
+- Test assertion improvements using require.Error for better error handling
+
 ## [0.3.0] - 2025-07-27
 
 ### Added
