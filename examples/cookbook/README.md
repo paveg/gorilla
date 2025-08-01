@@ -153,7 +153,7 @@ func transformationExamples(df *gorilla.DataFrame) {
             gorilla.Case().
                 When(gorilla.Col("age").Lt(gorilla.Lit(int64(25))), gorilla.Lit("Young")).
                 When(gorilla.Col("age").Lt(gorilla.Lit(int64(40))), gorilla.Lit("Middle")).
-                Otherwise(gorilla.Lit("Senior")),
+                Else(gorilla.Lit("Senior")),
         ).
         
         // Performance tiers
@@ -162,7 +162,7 @@ func transformationExamples(df *gorilla.DataFrame) {
                 When(gorilla.Col("score").Gt(gorilla.Lit(95.0)), gorilla.Lit("Excellent")).
                 When(gorilla.Col("score").Gt(gorilla.Lit(85.0)), gorilla.Lit("Good")).
                 When(gorilla.Col("score").Gt(gorilla.Lit(70.0)), gorilla.Lit("Average")).
-                Otherwise(gorilla.Lit("Below Average")),
+                Else(gorilla.Lit("Below Average")),
         ).
         
         Collect()
@@ -380,7 +380,7 @@ func multiKeyJoinExamples() {
             gorilla.Case().
                 When(gorilla.Col("performance_pct").Gt(gorilla.Lit(100.0)), gorilla.Lit("Above Target")).
                 When(gorilla.Col("performance_pct").Gt(gorilla.Lit(90.0)), gorilla.Lit("Near Target")).
-                Otherwise(gorilla.Lit("Below Target")),
+                Else(gorilla.Lit("Below Target")),
         ).
         Collect()
     
@@ -419,7 +419,7 @@ func conditionalLogicExamples(df *gorilla.DataFrame) {
                     ),
                     gorilla.Lit("Low Risk"),
                 ).
-                Otherwise(gorilla.Lit("Standard Risk")),
+                Else(gorilla.Lit("Standard Risk")),
         ).
         
         // Nested conditional logic

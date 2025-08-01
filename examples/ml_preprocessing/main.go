@@ -575,16 +575,51 @@ func generatePreprocessingSummary(df *gorilla.DataFrame) *gorilla.DataFrame {
 		).
 
 		// Calculate class percentages
-		WithColumn("class_percentage",
-			gorilla.Col("sample_count").Div(
-				gorilla.Col("sample_count").Sum(), // Total samples
-			).Mul(gorilla.Lit(100.0)),
-		).
 		Collect()
 
 	if err != nil {
 		log.Fatalf("Summary generation failed: %v", err)
 	}
 
-	return result
+	// Calculate total sample count  
+	var totalSamples float64
+	sampleCountCol, _ := result.Column("sample_count")
+	for i := 0; i < sampleCountCol.Len(); i++ {
+		if val, ok := sampleCountCol.IsNull(i); !ok && !val {
+			if v, err := sampleCountCol.GetOneForMarshal(i); err == nil {
+				if floatVal, ok := v.(float64); ok {
+					totalSamples += floatVal
+				} else if intVal, ok := v.(int64); ok {
+					totalSamples += float64(intVal)
+				}
+			}
+		}
+	}
+
+	// Add class_percentage column
+	classPercentages := make([]float64, result.Len())
+	for i := 0; i < result.Len(); i++ {
+		if val, ok := sampleCountCol.IsNull(i); !ok && !val {
+			if v, err := sampleCountCol.GetOneForMarshal(i); err == nil {
+				var sampleCount float64
+				if floatVal, ok := v.(float64); ok {
+					sampleCount = floatVal
+				} else if intVal, ok := v.(int64); ok {
+					sampleCount = float64(intVal)
+				}
+				if totalSamples > 0 {
+					classPercentages[i] = (sampleCount / totalSamples) * 100.0
+				}
+			}
+		}
+	}
+	
+	mem := memory.NewGoAllocator()
+	percentageSeries := gorilla.NewSeries("class_percentage", classPercentages, mem)
+	defer percentageSeries.Release()
+	
+	finalResult := result.WithColumn("class_percentage", percentageSeries)
+	result.Release() // Release the intermediate result
+	
+	return finalResult
 }
