@@ -232,7 +232,7 @@ func (e *SQLExecutor) ValidateQuery(query string) error {
 	if selectStmt, ok := stmt.(*SelectStatement); ok {
 		if selectStmt.FromClause != nil {
 			tableName := selectStmt.FromClause.TableName
-			if _, exists := e.translator.tables[tableName]; !exists {
+			if validateErr := e.translator.ValidateTableExists(tableName); validateErr != nil {
 				return fmt.Errorf("table not found: %s", tableName)
 			}
 		}

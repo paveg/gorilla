@@ -403,6 +403,108 @@ gh issue list --label="priority: high,area: core"    # High priority core featur
 - New aggregation functions need both eager and lazy variants
 - Comprehensive test coverage including edge cases and benchmarks
 
+### Go Code Style and Linting
+
+This project uses **golangci-lint v2** with a strict configuration based on best practices. Key style requirements:
+
+#### Required Linters
+- **intrange**: Use Go 1.22+ integer range syntax (`for i := range count`) instead of traditional loops
+- **embeddedstructfieldcheck**: Embedded fields must be separated from regular fields with a blank line
+- **govet**: Avoid variable shadowing (e.g., `err := ...` inside a scope where `err` already exists)
+- **mnd**: Magic numbers should be constants (except in tests and specific allowed functions)
+- **nilerr**: Don't return nil when checking err != nil
+- **perfsprint**: Use `errors.New` instead of `fmt.Errorf` for simple error messages
+- **testifylint**: Use `require.Error` for error assertions in tests, not `assert.Error`
+- **testpackage**: Test files should use `package foo_test` instead of `package foo`
+
+#### Common Fixes
+```go
+// ❌ Bad: Traditional for loop
+for i := 0; i < count; i++ {
+    items[i] = process(i)
+}
+
+// ✅ Good: Go 1.22+ integer range
+for i := range count {
+    items[i] = process(i)
+}
+
+// ❌ Bad: Embedded field not separated
+type SQLTranslator struct {
+    *common.BaseTranslator
+    evaluator *expr.Evaluator
+}
+
+// ✅ Good: Blank line after embedded field
+type SQLTranslator struct {
+    *common.BaseTranslator
+
+    evaluator *expr.Evaluator
+}
+
+// ❌ Bad: Variable shadowing
+func process() error {
+    err := doSomething()
+    if err != nil {
+        if err := doAnotherThing(); err != nil { // shadows outer err
+            return err
+        }
+    }
+    return err
+}
+
+// ✅ Good: No shadowing
+func process() error {
+    err := doSomething()
+    if err != nil {
+        if anotherErr := doAnotherThing(); anotherErr != nil {
+            return anotherErr
+        }
+    }
+    return err
+}
+
+// ❌ Bad: Magic number
+const defaultRowCount = 4
+
+// ✅ Good: Named constant
+const defaultTestRowCount = 4
+
+// ❌ Bad: fmt.Errorf for simple errors
+return fmt.Errorf("DataFrame cannot be nil")
+
+// ✅ Good: errors.New for simple errors
+return errors.New("DataFrame cannot be nil")
+```
+
+#### Test Package Convention
+```go
+// ❌ Bad: Same package for tests
+package common
+
+import "testing"
+
+func TestBaseTranslator(t *testing.T) { ... }
+
+// ✅ Good: Separate test package
+package common_test
+
+import (
+    "testing"
+    "github.com/paveg/gorilla/internal/sql/common"
+)
+
+func TestBaseTranslator(t *testing.T) { ... }
+```
+
+#### Running Linter
+```bash
+make lint              # Run linter (fails on violations)
+golangci-lint run --fix  # Auto-fix some issues
+```
+
+See `.golangci.yml` for the complete linter configuration and all enabled checks.
+
 ### Pull Request Guidelines
 When creating pull requests:
 - **Always include `Closes #<issue-number>` or `Resolves #<issue-number>`** in the PR description when implementing a GitHub issue
