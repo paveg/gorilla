@@ -15,107 +15,107 @@ func TestTypeConverter(t *testing.T) {
 	t.Run("SafeInt64ToInt", func(t *testing.T) {
 		// Valid conversions
 		result, err := converter.SafeInt64ToInt(42)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 42, result)
 
 		result, err = converter.SafeInt64ToInt(-42)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, -42, result)
 
 		// Overflow cases
 		_, err = converter.SafeInt64ToInt(math.MaxInt64)
-		assert.Error(t, err)
+		require.Error(t, err)
 
 		_, err = converter.SafeInt64ToInt(math.MinInt64)
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("SafeFloat64ToFloat32", func(t *testing.T) {
 		// Valid conversions
 		result, err := converter.SafeFloat64ToFloat32(3.14)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.InDelta(t, 3.14, result, 0.01)
 
 		// Special values
 		result, err = converter.SafeFloat64ToFloat32(math.Inf(1))
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, math.IsInf(float64(result), 1))
 
 		result, err = converter.SafeFloat64ToFloat32(math.NaN())
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, math.IsNaN(float64(result)))
 
 		// Overflow
 		_, err = converter.SafeFloat64ToFloat32(math.MaxFloat64)
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("ToInt64", func(t *testing.T) {
 		// Integer types
 		result, err := converter.ToInt64(int(42))
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, int64(42), result)
 
 		result, err = converter.ToInt64(int32(42))
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, int64(42), result)
 
 		result, err = converter.ToInt64(uint16(42))
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, int64(42), result)
 
 		// Float types
 		result, err = converter.ToInt64(float64(42.7))
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, int64(42), result)
 
 		// String
 		result, err = converter.ToInt64("42")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, int64(42), result)
 
 		// Bool
 		result, err = converter.ToInt64(true)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, int64(1), result)
 
 		result, err = converter.ToInt64(false)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, int64(0), result)
 
 		// Invalid string
 		_, err = converter.ToInt64("not a number")
-		assert.Error(t, err)
+		require.Error(t, err)
 
 		// Unsupported type
 		_, err = converter.ToInt64(struct{}{})
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("ToFloat64", func(t *testing.T) {
 		// Integer types
 		result, err := converter.ToFloat64(int(42))
-		assert.NoError(t, err)
-		assert.Equal(t, float64(42), result)
+		require.NoError(t, err)
+		assert.InEpsilon(t, float64(42), result, 0.001)
 
 		// Float types
 		result, err = converter.ToFloat64(float32(3.14))
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.InDelta(t, 3.14, result, 0.01)
 
 		// String
 		result, err = converter.ToFloat64("3.14")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.InDelta(t, 3.14, result, 0.01)
 
 		// Bool
 		result, err = converter.ToFloat64(true)
-		assert.NoError(t, err)
-		assert.Equal(t, 1.0, result)
+		require.NoError(t, err)
+		assert.InEpsilon(t, 1.0, result, 0.001)
 
 		// Invalid string
 		_, err = converter.ToFloat64("not a number")
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("ToString", func(t *testing.T) {
@@ -129,39 +129,39 @@ func TestTypeConverter(t *testing.T) {
 	t.Run("ToBool", func(t *testing.T) {
 		// Bool
 		result, err := converter.ToBool(true)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, result)
 
 		// Integer types
 		result, err = converter.ToBool(1)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, result)
 
 		result, err = converter.ToBool(0)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.False(t, result)
 
 		// Float types
 		result, err = converter.ToBool(1.0)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, result)
 
 		result, err = converter.ToBool(0.0)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.False(t, result)
 
 		// String
 		result, err = converter.ToBool("true")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, result)
 
 		result, err = converter.ToBool("false")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.False(t, result)
 
 		// Invalid string
 		_, err = converter.ToBool("maybe")
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("Type checking methods", func(t *testing.T) {
@@ -201,7 +201,7 @@ func TestDefaultConverterFunctions(t *testing.T) {
 	t.Run("ToFloat64", func(t *testing.T) {
 		result, err := common.ToFloat64(42)
 		require.NoError(t, err)
-		assert.Equal(t, float64(42), result)
+		assert.InEpsilon(t, float64(42), result, 0.001)
 	})
 
 	t.Run("ToString", func(t *testing.T) {

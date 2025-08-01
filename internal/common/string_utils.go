@@ -137,7 +137,7 @@ func (sf *StringFormatter) FormatEnum(value int, mapping EnumStringMap) string {
 }
 
 // Default formatter instance for convenience.
-var defaultFormatter = NewStringFormatter()
+var defaultFormatter = NewStringFormatter() //nolint:gochecknoglobals // Singleton for performance
 
 // Convenient functions using the default formatter
 

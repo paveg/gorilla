@@ -41,7 +41,7 @@ func (er *EnumRegistry) GetEnumMapping(typeName string) (EnumStringMap, bool) {
 // Common enum mappings used throughout the codebase
 
 // BinaryOperatorMapping maps binary operators to their string representations.
-var BinaryOperatorMapping = EnumStringMap{
+var BinaryOperatorMapping = EnumStringMap{ //nolint:gochecknoglobals // Static enum mapping
 	0:  "+",  // OpAdd
 	1:  "-",  // OpSub
 	2:  "*",  // OpMul
@@ -57,13 +57,13 @@ var BinaryOperatorMapping = EnumStringMap{
 }
 
 // UnaryOperatorMapping maps unary operators to their string representations.
-var UnaryOperatorMapping = EnumStringMap{
+var UnaryOperatorMapping = EnumStringMap{ //nolint:gochecknoglobals // Static enum mapping
 	0: "-", // UnaryNeg
 	1: "!", // UnaryNot
 }
 
 // AggregationTypeMapping maps aggregation types to their string representations.
-var AggregationTypeMapping = EnumStringMap{
+var AggregationTypeMapping = EnumStringMap{ //nolint:gochecknoglobals // Static enum mapping
 	0: "sum",   // AggSum
 	1: "count", // AggCount
 	2: "mean",  // AggMean
@@ -72,7 +72,7 @@ var AggregationTypeMapping = EnumStringMap{
 }
 
 // JoinTypeMapping maps join types to their string representations.
-var JoinTypeMapping = EnumStringMap{
+var JoinTypeMapping = EnumStringMap{ //nolint:gochecknoglobals // Static enum mapping
 	0: "INNER", // InnerJoin
 	1: "LEFT",  // LeftJoin
 	2: "RIGHT", // RightJoin
@@ -80,13 +80,13 @@ var JoinTypeMapping = EnumStringMap{
 }
 
 // OrderDirectionMapping maps order directions to their string representations.
-var OrderDirectionMapping = EnumStringMap{
+var OrderDirectionMapping = EnumStringMap{ //nolint:gochecknoglobals // Static enum mapping
 	0: "ASC",  // Ascending
 	1: "DESC", // Descending
 }
 
 // IntervalTypeMapping maps interval types to their string representations.
-var IntervalTypeMapping = EnumStringMap{
+var IntervalTypeMapping = EnumStringMap{ //nolint:gochecknoglobals // Static enum mapping
 	0: "days",    // IntervalDays
 	1: "hours",   // IntervalHours
 	2: "minutes", // IntervalMinutes
@@ -95,23 +95,13 @@ var IntervalTypeMapping = EnumStringMap{
 }
 
 // EvaluationContextMapping maps evaluation contexts to their string representations.
-var EvaluationContextMapping = EnumStringMap{
+var EvaluationContextMapping = EnumStringMap{ //nolint:gochecknoglobals // Static enum mapping
 	0: "RowContext",   // RowContext
 	1: "GroupContext", // GroupContext
 }
 
-// Default enum registry with common mappings.
-var defaultEnumRegistry = func() *EnumRegistry {
-	registry := NewEnumRegistry()
-	registry.RegisterEnum("BinaryOperator", BinaryOperatorMapping)
-	registry.RegisterEnum("UnaryOperator", UnaryOperatorMapping)
-	registry.RegisterEnum("AggregationType", AggregationTypeMapping)
-	registry.RegisterEnum("JoinType", JoinTypeMapping)
-	registry.RegisterEnum("OrderDirection", OrderDirectionMapping)
-	registry.RegisterEnum("IntervalType", IntervalTypeMapping)
-	registry.RegisterEnum("EvaluationContext", EvaluationContextMapping)
-	return registry
-}()
+// Note: defaultEnumRegistry was removed as it was unused.
+// Individual enum mappings are used directly via their respective format functions.
 
 // FormatBinaryOperator formats a binary operator enum value.
 func FormatBinaryOperator(op int) string {
@@ -188,7 +178,7 @@ func (ste *StringToEnum) ParseEnum(typeName, str string) (int, bool) {
 }
 
 // Default string-to-enum converter with common mappings.
-var defaultStringToEnum = func() *StringToEnum {
+var defaultStringToEnum = func() *StringToEnum { //nolint:gochecknoglobals // Initialized once for performance
 	converter := NewStringToEnum()
 	converter.RegisterReverseMapping("BinaryOperator", BinaryOperatorMapping)
 	converter.RegisterReverseMapping("UnaryOperator", UnaryOperatorMapping)

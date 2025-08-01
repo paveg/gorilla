@@ -1,4 +1,5 @@
-package common
+// Package common provides shared utilities for string formatting, type conversions, and enum handling.
+package common //nolint:revive // Package name 'common' is appropriate for shared utilities
 
 import (
 	"fmt"
@@ -228,7 +229,7 @@ func (tc *TypeConverter) GetTypeName(value interface{}) string {
 }
 
 // Default converter instance for convenience.
-var defaultConverter = NewTypeConverter()
+var defaultConverter = NewTypeConverter() //nolint:gochecknoglobals // Singleton for performance
 
 // Convenient functions using the default converter
 

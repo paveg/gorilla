@@ -88,7 +88,7 @@ func TestAdvancedWorkerPool(t *testing.T) {
 		// With work stealing, this should complete within reasonable time
 		// More lenient timeout for CI environments - allow up to 300ms
 		assert.Less(t, duration, 300*time.Millisecond, "Work stealing should improve performance")
-		
+
 		// Log duration for debugging CI issues
 		t.Logf("Work stealing completion took: %v", duration)
 	})

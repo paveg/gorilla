@@ -63,7 +63,7 @@ func TestWorkerIdleBehavior(t *testing.T) {
 		duration := time.Since(start)
 
 		// Check if worker pool timed out (indicating a deeper issue)
-		if results == nil || len(results) == 0 {
+		if len(results) == 0 {
 			t.Skip("Worker pool timed out - skipping test due to infrastructure issues")
 			return
 		}
@@ -74,7 +74,7 @@ func TestWorkerIdleBehavior(t *testing.T) {
 		// Workers should respond within reasonable time even after being idle
 		// More lenient timeout for CI environments - allow up to 500ms
 		assert.Less(t, duration, 500*time.Millisecond, "Workers should respond within reasonable time to work")
-		
+
 		// Log duration for debugging CI issues
 		t.Logf("Work completion took: %v", duration)
 	})
@@ -98,7 +98,7 @@ func TestWorkerIdleBehavior(t *testing.T) {
 		// Workers should shutdown within reasonable time
 		// More lenient timeout for CI environments - allow up to 500ms
 		assert.Less(t, duration, 500*time.Millisecond, "Workers should shutdown within reasonable time")
-		
+
 		// Log duration for debugging CI issues
 		t.Logf("Pool shutdown took: %v", duration)
 	})
@@ -179,7 +179,7 @@ func TestWorkerResourceEfficiency(t *testing.T) {
 		})
 
 		// Check if worker pool timed out (indicating a deeper issue)
-		if results == nil || len(results) == 0 {
+		if len(results) == 0 {
 			t.Skip("Worker pool timed out - skipping test due to infrastructure issues")
 			return
 		}
@@ -245,7 +245,7 @@ func TestWorkerIdleBackoffBehavior(t *testing.T) {
 		duration := time.Since(start)
 
 		// Check if worker pool timed out (indicating a deeper issue)
-		if results == nil || len(results) == 0 {
+		if len(results) == 0 {
 			t.Skip("Worker pool timed out - skipping test due to infrastructure issues")
 			return
 		}
@@ -256,7 +256,7 @@ func TestWorkerIdleBackoffBehavior(t *testing.T) {
 		// Even with backoff, response should be reasonable
 		// More lenient timeout for CI environments - allow up to 300ms
 		assert.Less(t, duration, 300*time.Millisecond, "Worker should respond within reasonable time despite backoff")
-		
+
 		// Log duration for debugging CI issues
 		t.Logf("Backoff work completion took: %v", duration)
 	})
