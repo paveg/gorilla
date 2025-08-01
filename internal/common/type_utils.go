@@ -1,5 +1,5 @@
 // Package common provides shared utilities for string formatting, type conversions, and enum handling.
-package common //nolint:revive // Package name 'common' is appropriate for shared utilities
+package common
 
 import (
 	"fmt"
