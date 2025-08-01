@@ -341,9 +341,9 @@ func (w *CSVWriter) getValueAsString(column dataframe.ISeries, index int) string
 		return strconv.FormatFloat(float64(typedArr.Value(index)), 'g', -1, 32)
 	case *array.Boolean:
 		if typedArr.Value(index) {
-			return "true"
+			return trueStr
 		}
-		return "false"
+		return falseStr
 	default:
 		// Fallback for unknown types
 		return ""

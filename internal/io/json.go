@@ -12,13 +12,6 @@ import (
 	"github.com/paveg/gorilla/internal/series"
 )
 
-// Type constants for data type inference.
-const (
-	typeInt64   = "int64"
-	typeFloat64 = "float64"
-	typeBool    = "bool"
-	typeString  = "string"
-)
 
 // Read reads JSON data and returns a DataFrame.
 func (r *JSONReader) Read() (*dataframe.DataFrame, error) {
@@ -130,7 +123,7 @@ func (r *JSONReader) recordsToDataFrame(records []map[string]interface{}) (*data
 	var seriesList []dataframe.ISeries
 	for _, col := range columns {
 		data := columnData[col]
-		
+
 		// Infer type and create series
 		series, err := r.createSeriesFromData(col, data)
 		if err != nil {
@@ -157,13 +150,13 @@ func (r *JSONReader) createSeriesFromData(name string, data []interface{}) (data
 	dataType := r.inferDataType(data)
 
 	switch dataType {
-	case typeInt64:
+	case ArrowTypeInt64:
 		return r.createInt64Series(name, data)
-	case typeFloat64:
+	case ArrowTypeFloat64:
 		return r.createFloat64Series(name, data)
-	case typeBool:
+	case ArrowTypeBool:
 		return r.createBoolSeries(name, data)
-	case typeString:
+	case ArrowTypeString:
 		return r.createStringSeries(name, data)
 	default:
 		return r.createStringSeries(name, data)
@@ -173,17 +166,17 @@ func (r *JSONReader) createSeriesFromData(name string, data []interface{}) (data
 // inferDataType infers the most appropriate data type for the column.
 func (r *JSONReader) inferDataType(data []interface{}) string {
 	typeFlags := r.analyzeDataTypes(data)
-	
+
 	// Early exit if we have explicit string values
 	if typeFlags.hasString {
-		return typeString
+		return ArrowTypeString
 	}
-	
+
 	// Check for mixed number representations
 	if r.hasMixedNumberTypes(data) {
-		return typeString
+		return ArrowTypeString
 	}
-	
+
 	return r.selectBestType(typeFlags)
 }
 
@@ -198,20 +191,20 @@ type dataTypeFlags struct {
 // analyzeDataTypes analyzes the data and returns type flags.
 func (r *JSONReader) analyzeDataTypes(data []interface{}) dataTypeFlags {
 	var flags dataTypeFlags
-	
+
 	for _, v := range data {
 		if v == nil || r.isNull(v) {
 			continue
 		}
-		
+
 		r.updateTypeFlags(v, &flags)
-		
+
 		// Early exit if we find explicit string values
 		if flags.hasString {
 			break
 		}
 	}
-	
+
 	return flags
 }
 
@@ -250,12 +243,12 @@ func (r *JSONReader) analyzeStringValue(s string, flags *dataTypeFlags) {
 func (r *JSONReader) hasMixedNumberTypes(data []interface{}) bool {
 	hasActualNumbers := false
 	hasStringNumbers := false
-	
+
 	for _, v := range data {
 		if v == nil || r.isNull(v) {
 			continue
 		}
-		
+
 		switch val := v.(type) {
 		case float64:
 			hasActualNumbers = true
@@ -265,7 +258,7 @@ func (r *JSONReader) hasMixedNumberTypes(data []interface{}) bool {
 			}
 		}
 	}
-	
+
 	return hasActualNumbers && hasStringNumbers
 }
 
@@ -284,15 +277,15 @@ func (r *JSONReader) isNumericString(s string) bool {
 func (r *JSONReader) selectBestType(flags dataTypeFlags) string {
 	// Priority: float > int > bool > string
 	if flags.hasFloat {
-		return typeFloat64
+		return ArrowTypeFloat64
 	}
 	if flags.hasInt {
-		return typeInt64
+		return ArrowTypeInt64
 	}
 	if flags.hasBool {
-		return typeBool
+		return ArrowTypeBool
 	}
-	return typeString
+	return ArrowTypeString
 }
 
 // createInt64Series creates an int64 series from interface{} data.
@@ -473,7 +466,7 @@ func (w *JSONWriter) Write(df *dataframe.DataFrame) error {
 // writeJSONArray writes DataFrame as JSON array.
 func (w *JSONWriter) writeJSONArray(df *dataframe.DataFrame) error {
 	records := w.dataFrameToRecords(df)
-	
+
 	data, err := json.Marshal(records)
 	if err != nil {
 		return fmt.Errorf("marshaling JSON array: %w", err)
@@ -486,13 +479,13 @@ func (w *JSONWriter) writeJSONArray(df *dataframe.DataFrame) error {
 // writeJSONLines writes DataFrame as JSON Lines.
 func (w *JSONWriter) writeJSONLines(df *dataframe.DataFrame) error {
 	records := w.dataFrameToRecords(df)
-	
+
 	for _, record := range records {
 		data, err := json.Marshal(record)
 		if err != nil {
 			return fmt.Errorf("marshaling JSON record: %w", err)
 		}
-		
+
 		if _, writeErr := w.writer.Write(data); writeErr != nil {
 			return writeErr
 		}
@@ -507,24 +500,24 @@ func (w *JSONWriter) writeJSONLines(df *dataframe.DataFrame) error {
 // dataFrameToRecords converts DataFrame to slice of maps.
 func (w *JSONWriter) dataFrameToRecords(df *dataframe.DataFrame) []map[string]interface{} {
 	records := make([]map[string]interface{}, df.Len())
-	
+
 	for i := range df.Len() {
 		record := make(map[string]interface{})
-		
+
 		for _, colName := range df.Columns() {
 			col, exists := df.Column(colName)
 			if !exists {
 				continue
 			}
-			
+
 			// Get value at index i
 			value := w.getSeriesValue(col, i)
 			record[colName] = value
 		}
-		
+
 		records[i] = record
 	}
-	
+
 	return records
 }
 
@@ -536,17 +529,17 @@ func (w *JSONWriter) getSeriesValue(s dataframe.ISeries, index int) interface{} 
 
 	dataTypeName := s.DataType().Name()
 	switch dataTypeName {
-	case typeInt64:
+	case ArrowTypeInt64:
 		return w.getInt64Value(s, index)
-	case "int32":
+	case ArrowTypeInt32:
 		return w.getInt32Value(s, index)
-	case typeFloat64:
+	case ArrowTypeFloat64:
 		return w.getFloat64Value(s, index)
-	case "float32":
+	case ArrowTypeFloat32:
 		return w.getFloat32Value(s, index)
-	case "utf8":
+	case ArrowTypeString:
 		return w.getStringValue(s, index)
-	case typeBool:
+	case ArrowTypeBool:
 		return w.getBoolValue(s, index)
 	}
 

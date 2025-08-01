@@ -32,6 +32,22 @@ const (
 	DefaultPageSize = 1048576 // 1MB pages
 )
 
+// Arrow data type name constants for consistent usage across I/O implementations.
+const (
+	// ArrowTypeInt64 is the Arrow type name for int64 columns.
+	ArrowTypeInt64 = "int64"
+	// ArrowTypeInt32 is the Arrow type name for int32 columns.
+	ArrowTypeInt32 = "int32"
+	// ArrowTypeFloat64 is the Arrow type name for float64 columns.
+	ArrowTypeFloat64 = "float64"
+	// ArrowTypeFloat32 is the Arrow type name for float32 columns.
+	ArrowTypeFloat32 = "float32"
+	// ArrowTypeBool is the Arrow type name for bool columns.
+	ArrowTypeBool = "bool"
+	// ArrowTypeString is the Arrow type name for string columns.
+	ArrowTypeString = "utf8"
+)
+
 // DataReader defines the interface for reading data from various sources.
 type DataReader interface {
 	// Read reads data from the source and returns a DataFrame
