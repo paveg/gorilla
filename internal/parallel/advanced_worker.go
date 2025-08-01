@@ -193,11 +193,19 @@ func (pool *AdvancedWorkerPool) Process(items []interface{}, worker func(interfa
 
 	// Collect results
 	resultSlice := make([]interface{}, len(items))
+	
 	for range items {
+		// Create timeout for each individual result to prevent hanging
+		timeout := time.NewTimer(5 * time.Second) // Shorter timeout per item
 		select {
 		case result := <-results:
+			timeout.Stop()
 			resultSlice[result.index] = result.result
 		case <-pool.ctx.Done():
+			timeout.Stop()
+			return nil
+		case <-timeout.C:
+			// Timeout reached - return nil to prevent hanging
 			return nil
 		}
 	}
@@ -259,14 +267,22 @@ func (pool *AdvancedWorkerPool) ProcessWithPriority(tasks []PriorityTask, worker
 
 	// Collect results
 	resultSlice := make([]int, len(tasks))
+	
 	for range tasks {
+		// Create timeout for each individual result to prevent hanging
+		timeout := time.NewTimer(5 * time.Second) // Shorter timeout per item
 		select {
 		case result := <-results:
+			timeout.Stop()
 			if intResult, ok := result.result.(int); ok {
 				resultSlice[result.index] = intResult
 			}
 			// If type assertion fails, resultSlice[result.index] remains 0
 		case <-pool.ctx.Done():
+			timeout.Stop()
+			return nil
+		case <-timeout.C:
+			// Timeout reached - return nil to prevent hanging
 			return nil
 		}
 	}
