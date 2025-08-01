@@ -3,6 +3,8 @@ package expr
 
 import (
 	"fmt"
+
+	"github.com/paveg/gorilla/internal/common"
 )
 
 // Type represents the type of expression.
@@ -32,10 +34,8 @@ const (
 
 func (ec EvaluationContext) String() string {
 	switch ec {
-	case RowContext:
-		return "RowContext"
-	case GroupContext:
-		return "GroupContext"
+	case RowContext, GroupContext:
+		return common.FormatEvaluationContext(int(ec))
 	default:
 		return "UnknownContext"
 	}
@@ -64,7 +64,7 @@ func (c *ColumnExpr) Type() Type {
 }
 
 func (c *ColumnExpr) String() string {
-	return fmt.Sprintf("col(%s)", c.name)
+	return common.FormatFunction("col", c.name)
 }
 
 func (c *ColumnExpr) Name() string {
@@ -87,7 +87,7 @@ func (l *LiteralExpr) Type() Type {
 }
 
 func (l *LiteralExpr) String() string {
-	return fmt.Sprintf("lit(%v)", l.value)
+	return common.FormatFunction("lit", common.ToString(l.value))
 }
 
 func (l *LiteralExpr) Value() interface{} {
@@ -135,34 +135,8 @@ func (b *BinaryExpr) Type() Type {
 }
 
 func (b *BinaryExpr) String() string {
-	var opStr string
-	switch b.op {
-	case OpAdd:
-		opStr = "+"
-	case OpSub:
-		opStr = "-"
-	case OpMul:
-		opStr = "*"
-	case OpDiv:
-		opStr = "/"
-	case OpEq:
-		opStr = "=="
-	case OpNe:
-		opStr = "!="
-	case OpLt:
-		opStr = "<"
-	case OpLe:
-		opStr = "<="
-	case OpGt:
-		opStr = ">"
-	case OpGe:
-		opStr = ">="
-	case OpAnd:
-		opStr = "&&"
-	case OpOr:
-		opStr = "||"
-	}
-	return fmt.Sprintf("(%s %s %s)", b.left.String(), opStr, b.right.String())
+	opStr := common.FormatBinaryOperator(int(b.op))
+	return common.FormatBinaryOperation(b.left.String(), opStr, b.right.String())
 }
 
 func (b *BinaryExpr) Left() Expr {
@@ -212,13 +186,7 @@ func (u *UnaryExpr) Type() Type {
 }
 
 func (u *UnaryExpr) String() string {
-	var opStr string
-	switch u.op {
-	case UnaryNeg:
-		opStr = "-"
-	case UnaryNot:
-		opStr = "!"
-	}
+	opStr := common.FormatUnaryOperator(int(u.op))
 	return fmt.Sprintf("(%s%s)", opStr, u.operand.String())
 }
 
@@ -249,7 +217,7 @@ func (i *InvalidExpr) Type() Type {
 }
 
 func (i *InvalidExpr) String() string {
-	return fmt.Sprintf("invalid(%s)", i.message)
+	return common.FormatFunction("invalid", i.message)
 }
 
 func (i *InvalidExpr) Message() string {
@@ -478,24 +446,11 @@ func (f *FunctionExpr) Type() Type {
 }
 
 func (f *FunctionExpr) String() string {
-	if len(f.args) == 0 {
-		return fmt.Sprintf("%s()", f.name)
-	}
-
 	argStrs := make([]string, len(f.args))
 	for i, arg := range f.args {
 		argStrs[i] = arg.String()
 	}
-
-	result := f.name + "("
-	for i, argStr := range argStrs {
-		if i > 0 {
-			result += ", "
-		}
-		result += argStr
-	}
-	result += ")"
-	return result
+	return common.FormatFunction(f.name, argStrs...)
 }
 
 func (f *FunctionExpr) Name() string {
@@ -531,20 +486,8 @@ func (a *AggregationExpr) Type() Type {
 }
 
 func (a *AggregationExpr) String() string {
-	var aggName string
-	switch a.aggType {
-	case AggSum:
-		aggName = AggNameSum
-	case AggCount:
-		aggName = AggNameCount
-	case AggMean:
-		aggName = AggNameMean
-	case AggMin:
-		aggName = AggNameMin
-	case AggMax:
-		aggName = AggNameMax
-	}
-	return fmt.Sprintf("%s(%s)", aggName, a.column.String())
+	aggName := common.FormatAggregationType(int(a.aggType))
+	return common.FormatFunction(aggName, a.column.String())
 }
 
 func (a *AggregationExpr) Column() Expr {
@@ -1203,20 +1146,8 @@ func (i *IntervalExpr) Type() Type {
 }
 
 func (i *IntervalExpr) String() string {
-	var unit string
-	switch i.intervalType {
-	case IntervalDays:
-		unit = "days"
-	case IntervalHours:
-		unit = "hours"
-	case IntervalMinutes:
-		unit = "minutes"
-	case IntervalMonths:
-		unit = "months"
-	case IntervalYears:
-		unit = "years"
-	}
-	return fmt.Sprintf("interval(%d %s)", i.value, unit)
+	unit := common.FormatIntervalType(int(i.intervalType))
+	return common.FormatFunction("interval", fmt.Sprintf("%d %s", i.value, unit))
 }
 
 func (i *IntervalExpr) Value() int64 {
