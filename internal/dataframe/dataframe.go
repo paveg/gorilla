@@ -614,7 +614,6 @@ func (df *DataFrame) concatSeries(name string, seriesList []ISeries) ISeries {
 	defer firstArray.Release()
 
 	mem := memory.NewGoAllocator()
-	_ = mem // TODO: Used by helper functions but flagged as unused due to build issues
 
 	// Delegate to type-specific concatenation helpers
 	switch firstArray.(type) {
@@ -1592,7 +1591,6 @@ func (df *DataFrame) buildJoinColumn(
 	}
 
 	name := sourceSeries.Name()
-	_ = name // TODO: Used in builder functions but flagged as unused due to build issues
 	sourceArr := sourceSeries.Array()
 	defer sourceArr.Release()
 

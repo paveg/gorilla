@@ -1196,12 +1196,7 @@ func (gh *GroupByHavingOperation) applyHavingFilterOptimized(df *DataFrame) (*Da
 	return gh.applyFilterMaskOptimizedWithAllocator(df, mask, allocator)
 }
 
-// applyFilterMask applies the boolean mask to filter the DataFrame
-//
-//nolint:unused // Used by optimized filter methods, but linter can't detect interface usage
-func (gh *GroupByHavingOperation) applyFilterMask(df *DataFrame, mask arrow.Array) (*DataFrame, error) {
-	return applyBooleanFilterMask(gh, df, mask, "HAVING filter mask must be boolean array")
-}
+
 
 // applyFilterMaskOptimizedWithAllocator applies the boolean mask with memory optimizations using provided allocator.
 func (gh *GroupByHavingOperation) applyFilterMaskOptimizedWithAllocator(
