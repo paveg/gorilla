@@ -275,7 +275,7 @@ func (mr *MemoryAwareChunkReader) estimateMemoryUsage(df *DataFrame) int64 {
 	if df == nil {
 		return 0
 	}
-	
+
 	// Create a slice representing the DataFrame's data for estimation
 	// This approach works with the consolidated utility function
 	width := df.Width()
@@ -284,7 +284,7 @@ func (mr *MemoryAwareChunkReader) estimateMemoryUsage(df *DataFrame) int64 {
 		// Represent each column's memory footprint
 		dataRepresentation[i] = make([]byte, df.Len()*BytesPerValue)
 	}
-	
+
 	return memoryutil.EstimateMemoryUsage(dataRepresentation...)
 }
 
@@ -375,18 +375,18 @@ func (sb *SpillableBatch) loadFromSpill() (*DataFrame, error) {
 func (sb *SpillableBatch) EstimateMemory() int64 {
 	sb.mu.RLock()
 	defer sb.mu.RUnlock()
-	
+
 	if sb.spilled || sb.data == nil {
 		return 0 // Spilled data doesn't consume memory
 	}
-	
+
 	// Use consolidated memory estimation
 	width := sb.data.Width()
 	dataRepresentation := make([]interface{}, width)
 	for i := range width {
 		dataRepresentation[i] = make([]byte, sb.data.Len()*BytesPerValue)
 	}
-	
+
 	return memoryutil.EstimateMemoryUsage(dataRepresentation...)
 }
 
@@ -407,14 +407,14 @@ func (sb *SpillableBatch) SpillIfNeeded() error {
 		return nil // Already spilled
 	}
 	sb.mu.RUnlock()
-	
+
 	// Check if we should spill based on memory pressure
 	estimatedMemory := sb.EstimateMemory()
 	const spillThresholdMultiplier = 10
 	if estimatedMemory > int64(DefaultChunkSize*BytesPerValue*spillThresholdMultiplier) { // Threshold for spilling
 		return sb.Spill()
 	}
-	
+
 	return nil
 }
 
@@ -480,14 +480,14 @@ func (bm *BatchManager) SpillLRU() error {
 func (bm *BatchManager) EstimateMemory() int64 {
 	bm.mu.RLock()
 	defer bm.mu.RUnlock()
-	
+
 	var total int64
 	for _, batch := range bm.batches {
 		if batch != nil {
 			total += batch.EstimateMemory()
 		}
 	}
-	
+
 	return total
 }
 
@@ -496,7 +496,7 @@ func (bm *BatchManager) EstimateMemory() int64 {
 func (bm *BatchManager) ForceCleanup() error {
 	bm.mu.RLock()
 	defer bm.mu.RUnlock()
-	
+
 	// Trigger cleanup on all batches
 	for _, batch := range bm.batches {
 		if batch != nil {
@@ -505,7 +505,7 @@ func (bm *BatchManager) ForceCleanup() error {
 			}
 		}
 	}
-	
+
 	// Trigger global GC
 	memoryutil.ForceGC()
 	return nil
@@ -516,7 +516,7 @@ func (bm *BatchManager) ForceCleanup() error {
 func (bm *BatchManager) SpillIfNeeded() error {
 	bm.mu.RLock()
 	defer bm.mu.RUnlock()
-	
+
 	// Check if any batches need spilling
 	for _, batch := range bm.batches {
 		if batch != nil {
@@ -525,7 +525,7 @@ func (bm *BatchManager) SpillIfNeeded() error {
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -534,7 +534,7 @@ func (bm *BatchManager) SpillIfNeeded() error {
 func (bm *BatchManager) Track(resource memoryutil.Resource) {
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
-	
+
 	// Type assert to SpillableBatch
 	if batch, ok := resource.(*SpillableBatch); ok {
 		bm.batches = append(bm.batches, batch)
