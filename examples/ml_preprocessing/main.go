@@ -15,6 +15,7 @@ import (
 	"log"
 	"math"
 	"math/rand/v2"
+	"strconv"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/paveg/gorilla"
@@ -581,17 +582,15 @@ func generatePreprocessingSummary(df *gorilla.DataFrame) *gorilla.DataFrame {
 		log.Fatalf("Summary generation failed: %v", err)
 	}
 
-	// Calculate total sample count  
-	var totalSamples float64
+	// Calculate total sample count by iterating through rows
+	var totalSamples int64
 	sampleCountCol, _ := result.Column("sample_count")
 	for i := 0; i < sampleCountCol.Len(); i++ {
-		if val, ok := sampleCountCol.IsNull(i); !ok && !val {
-			if v, err := sampleCountCol.GetOneForMarshal(i); err == nil {
-				if floatVal, ok := v.(float64); ok {
-					totalSamples += floatVal
-				} else if intVal, ok := v.(int64); ok {
-					totalSamples += float64(intVal)
-				}
+		if !sampleCountCol.IsNull(i) {
+			// Parse the value as string and convert to int64
+			valStr := sampleCountCol.GetAsString(i)
+			if count, err := strconv.ParseInt(valStr, 10, 64); err == nil {
+				totalSamples += count
 			}
 		}
 	}
@@ -599,16 +598,11 @@ func generatePreprocessingSummary(df *gorilla.DataFrame) *gorilla.DataFrame {
 	// Add class_percentage column
 	classPercentages := make([]float64, result.Len())
 	for i := 0; i < result.Len(); i++ {
-		if val, ok := sampleCountCol.IsNull(i); !ok && !val {
-			if v, err := sampleCountCol.GetOneForMarshal(i); err == nil {
-				var sampleCount float64
-				if floatVal, ok := v.(float64); ok {
-					sampleCount = floatVal
-				} else if intVal, ok := v.(int64); ok {
-					sampleCount = float64(intVal)
-				}
+		if !sampleCountCol.IsNull(i) {
+			valStr := sampleCountCol.GetAsString(i)
+			if count, err := strconv.ParseInt(valStr, 10, 64); err == nil {
 				if totalSamples > 0 {
-					classPercentages[i] = (sampleCount / totalSamples) * 100.0
+					classPercentages[i] = (float64(count) / float64(totalSamples)) * 100.0
 				}
 			}
 		}
@@ -618,7 +612,15 @@ func generatePreprocessingSummary(df *gorilla.DataFrame) *gorilla.DataFrame {
 	percentageSeries := gorilla.NewSeries("class_percentage", classPercentages, mem)
 	defer percentageSeries.Release()
 	
-	finalResult := result.WithColumn("class_percentage", percentageSeries)
+	// Create a new DataFrame with the percentage column added
+	columns := make([]gorilla.ISeries, 0, result.Width()+1)
+	for _, colName := range result.Columns() {
+		col, _ := result.Column(colName)
+		columns = append(columns, col)
+	}
+	columns = append(columns, percentageSeries)
+	
+	finalResult := gorilla.NewDataFrame(columns...)
 	result.Release() // Release the intermediate result
 	
 	return finalResult
