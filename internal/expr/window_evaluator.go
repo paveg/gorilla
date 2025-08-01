@@ -587,6 +587,7 @@ func (e *Evaluator) createWindowAggregationResult(
 	partitions [][]int,
 	aggType string,
 ) (arrow.Array, error) {
+	dataLength := columnExpr.Len()
 
 	// For now, implement simple partition-based aggregation
 	// TODO: Add support for window frames
