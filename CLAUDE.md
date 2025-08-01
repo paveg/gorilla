@@ -7,7 +7,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 # Build and test
 make build          # Build gorilla-cli binary
-make test           # Run all tests with race detection
+make release        # Build release binary with version information and build flags
+make test           # Run all tests with race detection (-short flag)
+make test-all       # Run all tests including long-running tests (comprehensive)
 make lint           # Run golangci-lint (pre-commit runs --fix)
 make run-demo       # Build and run interactive demo
 
@@ -15,15 +17,23 @@ make run-demo       # Build and run interactive demo
 make coverage       # Run tests with coverage and generate report
 make coverage-html  # Run tests with coverage and open HTML report
 
-# Development
-go test ./dataframe -v              # Test specific package
-go test -bench=. ./dataframe        # Run benchmarks
-go test ./dataframe -run="GroupBy"  # Run specific test pattern
-go run ./examples/usage.go          # Test example code
+# Development commands
+go test ./internal/dataframe -v              # Test specific package
+go test -bench=. ./internal/dataframe        # Run benchmarks
+go test ./internal/dataframe -run="GroupBy"  # Run specific test pattern
+go run ./examples/usage.go                   # Test example code
 
-# CI validation
+# Development setup and CI validation
+make install-tools  # Install required development tools (lefthook, golangci-lint, gocovmerge)
+make setup          # Complete development setup (install tools + git hooks)
 lefthook run pre-commit             # Run all pre-commit hooks locally
 ```
+
+## System Requirements
+
+- **Go Version**: Requires Go 1.24.4 or later for latest language features and performance optimizations
+- **Memory**: Minimum 4GB RAM recommended for large dataset processing
+- **CPU**: Multi-core processor recommended for automatic parallelization benefits
 
 ## Architecture Overview
 
@@ -34,6 +44,8 @@ Gorilla is a high-performance DataFrame library built on **Apache Arrow** with *
 Series[T] → DataFrame → LazyFrame → Parallel Execution → Result
    ↓           ↓           ↓              ↓              ↓
 Arrow Arrays  Column Map  Operation AST  Worker Chunks  Final DF
+   ↓           ↓           ↓              ↓              ↓
+memory.Resource → ResourceManager → MemoryMonitor → SpillableBatch
 ```
 
 ### Key Architectural Patterns
@@ -50,7 +62,14 @@ Arrow Arrays  Column Map  Operation AST  Worker Chunks  Final DF
 
 ## Critical Implementation Details
 
-### Memory Management
+### Advanced Memory Management Architecture
+
+Gorilla implements a sophisticated memory management system with several key interfaces:
+
+**Resource Management Interfaces:**
+- `memory.Resource`: Core interface for all memory-managed objects (EstimateMemory, ForceCleanup, SpillIfNeeded)
+- `memory.ResourceManager`: Manages collections of resources with tracking and bulk operations
+- `memory.MemoryUsageMonitor`: Monitors system memory pressure and triggers cleanup
 
 **Primary Pattern: Use `defer` for Resource Cleanup**
 
@@ -82,6 +101,16 @@ func processData() error {
 }
 ```
 
+**Spillable Architecture:**
+- `SpillableBatch`: DataFrames that can be spilled to disk under memory pressure
+- `BatchManager`: Manages collections of spillable batches with LRU eviction
+- Automatic spilling when memory thresholds are exceeded
+
+**Memory Utilities (internal/memory):**
+- Consolidated memory estimation across all data types
+- GC pressure monitoring and forced cleanup
+- Memory-aware chunking for large dataset processing
+
 #### 📋 Alternative: MemoryManager for Complex Scenarios
 
 Use `MemoryManager` only for scenarios with many short-lived resources:
@@ -110,14 +139,26 @@ The expression system uses an AST pattern with these key types:
 - `LiteralExpr`: Holds typed constants
 - `BinaryExpr`: Arithmetic/comparison operations  
 - `AggregationExpr`: Sum, Count, Mean, Min, Max
+- `FunctionExpr`: Function calls (If, Coalesce, Case)
+- `CaseExpr`: Case expressions for conditional logic
 
 Expressions are evaluated using the `Evaluator` which handles type conversions and Arrow array operations.
 
+### Window Functions (Advanced)
+Located in `internal/expr/window_evaluator.go` and `internal/expr/window_parallel.go`:
+- **Row-based Functions**: RowNumber, Rank, DenseRank, NthValue  
+- **Aggregate Functions**: Sum, Count, Mean over windows
+- **Parallel Evaluation**: Automatic parallelization for large window operations
+- **Memory Optimization**: Efficient buffering and type-specific array builders
+
+Window functions use partition-based processing with automatic memory management.
+
 ### Parallel Processing Infrastructure
-Located in `internal/parallel/worker.go`. Key functions:
-- `Process[T, R]()`: Generic parallel execution with fan-out/fan-in
-- `ProcessIndexed[T, R]()`: Order-preserving variant
-- Both use worker pools with configurable size (defaults to `runtime.NumCPU()`)
+Located in `internal/parallel/`:
+- **Basic Workers** (`worker.go`): `Process[T, R]()` and `ProcessIndexed[T, R]()` for generic parallel execution
+- **Advanced Workers** (`advanced_worker.go`): Work-stealing pools with priority queues and backpressure control
+- **Memory-Safe Processing** (`memory_safe.go`): Allocator pools and memory monitoring for safe parallel operations
+- All use worker pools with configurable size (defaults to `runtime.NumCPU()`)
 
 ### GroupBy Implementation
 GroupBy uses hash-based grouping with these phases:
@@ -135,10 +176,56 @@ HAVING clauses filter grouped data after aggregation with these components:
 - **Performance Optimization**: Memory overhead <10% with expression caching and allocator reuse
 - **SQL Compatibility**: Full support for standard SQL HAVING clause syntax
 
+### Streaming & Large Dataset Architecture
+
+**Core Components:**
+- `StreamingProcessor`: Main orchestrator for chunk-based processing
+- `MemoryAwareChunkReader`: Adaptive chunk sizing based on memory pressure  
+- `SpillableBatch`: Memory-efficient batch storage with disk spillover
+- `BatchManager`: Resource lifecycle management for streaming operations
+
+**Key Features:**
+- Automatic memory pressure detection and response
+- Configurable chunk sizes with adaptive adjustment
+- Error recovery and graceful degradation
+- Integration with lazy evaluation and query optimization
+
+**Memory Management:**
+- Uses consolidated memory estimation utilities
+- Implements Resource interface for consistent cleanup
+- Automatic GC triggering under memory pressure
+- Spillable batches for datasets larger than memory
+
+### Query Optimization Engine
+Located in `internal/dataframe/optimizer.go`:
+- **PredicatePushdownRule**: Moves filters closer to data sources
+- **FilterFusionRule**: Combines multiple filter operations
+- **ProjectionPushdownRule**: Eliminates unnecessary column reads
+- **ConstantFoldingRule**: Pre-evaluates constant expressions
+- **OperationFusionRule**: Combines compatible operations
+- Creates execution plans with cost estimation and dependency analysis
+
+### Join Optimization (Advanced)
+Located in `internal/dataframe/join_optimizer.go`:
+- **Strategy Selection**: Automatically chooses optimal join algorithm based on data characteristics
+  - **Hash Join**: Default strategy for most joins
+  - **Broadcast Join**: For small tables (< 1000 rows)
+  - **Merge Join**: For pre-sorted data
+  - **Optimized Hash Join**: Custom hash map with memory efficiency
+- **Performance Features**: Parallel hash map building, optimized memory layouts, adaptive work distribution
+
+### SQL Interface
+Complete SQL support via `SQLExecutor`:
+- Standard SQL syntax (SELECT, FROM, WHERE, GROUP BY, HAVING, ORDER BY, LIMIT)
+- Advanced features (JOINs, subqueries, window functions, aggregations)
+- Query validation and execution plan analysis
+- Batch execution capabilities
+- Full integration with DataFrame optimizations
+
 ## Type System & Patterns
 
 ### Series Types
-Supports: `string`, `int64`, `int32`, `float64`, `float32`, `bool`
+Supports: `string`, `int64`, `int32`, `int16`, `int8`, `uint64`, `uint32`, `uint16`, `uint8`, `float64`, `float32`, `bool`
 - Generic `Series[T]` wraps typed Arrow arrays
 - `ISeries` interface provides type-erased operations
 - Type coercion happens in expression evaluation
@@ -161,6 +248,12 @@ result, err := df.Lazy().
 - Integration tests in `dataframe/*_test.go` test end-to-end workflows
 - Benchmarks follow `BenchmarkXxx` naming with `-benchmem`
 
+#### Advanced Testing Patterns
+- **Table-Driven Tests**: Use structured test data for complex scenarios (see `internal/expr/evaluator_test.go`)
+- **Benchmark Memory Tracking**: Include `-benchmem` flag and track memory allocations
+- **Parallel Test Safety**: Ensure tests can run with `go test -parallel` without race conditions
+- **Resource Cleanup Validation**: Use `testing.TB.Cleanup()` for additional resource validation
+
 #### Memory Safety in Tests
 ```go
 func TestDataFrameOperation(t *testing.T) {
@@ -176,6 +269,7 @@ func TestDataFrameOperation(t *testing.T) {
     
     assert.Equal(t, expectedValue, result.SomeProperty())
 }
+```
 
 ### Test-Driven Development (TDD)
 **Always implement new features using TDD methodology:**
@@ -216,14 +310,25 @@ func TestNewFeature(t *testing.T) {
 - ✅ **HAVING clause support** with full SQL compatibility, alias resolution, and high-performance optimization
 - ✅ Expression system with arithmetic/comparison operations and advanced functions (If, Coalesce, Case)
 - ✅ Join operations (Inner, Left, Right, Full Outer) with multi-key support and optimization
+- ✅ **Advanced join optimization** with automatic strategy selection (Hash, Broadcast, Merge, Optimized Hash)
 - ✅ I/O operations (CSV reader/writer with automatic type inference)
 - ✅ Enhanced type system (int8, int16, int32, int64, uint8, uint16, uint32, uint64, float32, float64, bool, string)
 - ✅ Streaming and large dataset processing with memory management
+- ✅ **Advanced memory management** with Resource interfaces, spillable batches, and memory monitoring
 - ✅ Debug mode and execution plan visualization with performance profiling
 - ✅ Comprehensive configuration system (JSON/YAML/env with performance tuning)
 - ✅ Query optimization engine (predicate pushdown, filter fusion, join optimization, constant folding)
+- ✅ **Window functions** with parallel evaluation (RowNumber, Rank, DenseRank, NthValue, aggregations)
+- ✅ **Complete SQL interface** with query validation, execution plans, and batch processing
 - ✅ CLI tool (gorilla-cli) with benchmarking and demo capabilities
 - ✅ Memory management improvements with GC pressure monitoring and spillable batches
+
+### Recent Code Quality Improvements
+- ✅ **Cognitive Complexity Reduction**: All functions now have cognitive complexity ≤20 (gocognit compliance)
+- ✅ **Comprehensive Linting**: Full golangci-lint v2 compatibility with 80+ enabled linters
+- ✅ **Refactoring Methodology**: Applied systematic refactoring patterns (Extract Method, Early Returns, Helper Functions)
+- ✅ **Memory Safety**: Enhanced resource cleanup patterns and spillable batch architecture
+- ✅ **Performance Optimization**: Window function parallel evaluation and optimized memory estimation
 
 ### Task Management
 All development tasks are tracked via **GitHub Issues** with organized label system:
@@ -288,11 +393,9 @@ gh issue list --label="priority: high,area: core"    # High priority core featur
 ### Remaining Future Enhancements
 1. **Enhanced type system**: Date/time and decimal types (Issue #5 - partial)
 2. **Additional I/O formats**: Parquet, JSON, Arrow IPC readers/writers
-3. **Window functions**: Ranking, lead/lag, rolling aggregations
-4. **Advanced string operations**: Regex matching, advanced text processing
-5. **Time series operations**: Resampling, time-based grouping
-6. **SQL interface**: SQL query parser and executor
-7. **Distributed processing**: Multi-node parallel execution
+3. **Advanced string operations**: Regex matching, advanced text processing
+4. **Time series operations**: Resampling, time-based grouping
+5. **Distributed processing**: Multi-node parallel execution
 
 ### Code Quality Standards
 - All operations must handle memory cleanup properly
@@ -350,6 +453,14 @@ When creating pull requests:
 
 7. **Information Accuracy**: Making assumptions about dependencies, licenses, or APIs without verification
    - **Fix**: Always verify information from official sources before making changes
+
+8. **Development Setup**: Not running complete setup process
+   - **Fix**: Use `make setup` for complete development environment (tools + git hooks)
+   - **Best Practice**: Run `make install-tools` first, then `lefthook install` for git hooks
+
+9. **Test Coverage**: Running only short tests during development
+   - **Fix**: Use `make test-all` for comprehensive testing including long-running tests
+   - **Development**: Use `make test` for quick feedback, `make test-all` before commits
 
 ## Commit Message Guidelines
 
