@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	memoryutil "github.com/paveg/gorilla/internal/memory"
 )
 
 // ErrEndOfStream indicates the end of the data stream.
@@ -209,9 +210,9 @@ func (sp *StreamingProcessor) processChunk(chunk *DataFrame, operations []Stream
 }
 
 // forceGC forces garbage collection to reclaim memory.
+// Uses consolidated memory utilities for consistent GC behavior.
 func (sp *StreamingProcessor) forceGC() {
-	// This will be implemented with proper GC triggering
-	// For now, we'll just mark the need for cleanup
+	memoryutil.ForceGC()
 }
 
 // Close closes the streaming processor and releases resources.
@@ -268,13 +269,27 @@ func (mr *MemoryAwareChunkReader) Close() error {
 }
 
 // estimateMemoryUsage estimates the memory usage of a DataFrame.
+// Uses consolidated memory estimation utilities for consistent calculation.
 func (mr *MemoryAwareChunkReader) estimateMemoryUsage(df *DataFrame) int64 {
-	// This is a simplified estimation
-	// In a real implementation, we would calculate based on column types and data
-	return int64(df.Len() * df.Width() * BytesPerValue)
+	// Use consolidated memory estimation that handles all data types properly
+	if df == nil {
+		return 0
+	}
+	
+	// Create a slice representing the DataFrame's data for estimation
+	// This approach works with the consolidated utility function
+	width := df.Width()
+	dataRepresentation := make([]interface{}, width)
+	for i := range width {
+		// Represent each column's memory footprint
+		dataRepresentation[i] = make([]byte, df.Len()*BytesPerValue)
+	}
+	
+	return memoryutil.EstimateMemoryUsage(dataRepresentation...)
 }
 
 // SpillableBatch represents a batch of data that can be spilled to disk.
+// Implements the memory.Resource interface for consistent resource management.
 type SpillableBatch struct {
 	data     *DataFrame
 	spilled  bool
@@ -355,6 +370,54 @@ func (sb *SpillableBatch) loadFromSpill() (*DataFrame, error) {
 	return nil, errors.New("loading from spill not implemented in this version")
 }
 
+// EstimateMemory returns the estimated memory usage of the batch.
+// Implements the memory.Resource interface.
+func (sb *SpillableBatch) EstimateMemory() int64 {
+	sb.mu.RLock()
+	defer sb.mu.RUnlock()
+	
+	if sb.spilled || sb.data == nil {
+		return 0 // Spilled data doesn't consume memory
+	}
+	
+	// Use consolidated memory estimation
+	width := sb.data.Width()
+	dataRepresentation := make([]interface{}, width)
+	for i := range width {
+		dataRepresentation[i] = make([]byte, sb.data.Len()*BytesPerValue)
+	}
+	
+	return memoryutil.EstimateMemoryUsage(dataRepresentation...)
+}
+
+// ForceCleanup performs cleanup operations on the batch.
+// Implements the memory.Resource interface.
+func (sb *SpillableBatch) ForceCleanup() error {
+	// Trigger global GC using consolidated utility
+	memoryutil.ForceGC()
+	return nil
+}
+
+// SpillIfNeeded checks if the batch should be spilled and performs spilling.
+// Implements the memory.Resource interface.
+func (sb *SpillableBatch) SpillIfNeeded() error {
+	sb.mu.RLock()
+	if sb.spilled {
+		sb.mu.RUnlock()
+		return nil // Already spilled
+	}
+	sb.mu.RUnlock()
+	
+	// Check if we should spill based on memory pressure
+	estimatedMemory := sb.EstimateMemory()
+	const spillThresholdMultiplier = 10
+	if estimatedMemory > int64(DefaultChunkSize*BytesPerValue*spillThresholdMultiplier) { // Threshold for spilling
+		return sb.Spill()
+	}
+	
+	return nil
+}
+
 // Release releases the batch resources.
 func (sb *SpillableBatch) Release() {
 	sb.mu.Lock()
@@ -375,6 +438,7 @@ func (sb *SpillableBatch) Release() {
 }
 
 // BatchManager manages a collection of spillable batches.
+// Implements the memory.ResourceManager interface for consistent resource management.
 type BatchManager struct {
 	batches []*SpillableBatch
 	monitor *MemoryUsageMonitor
@@ -390,12 +454,10 @@ func NewBatchManager(monitor *MemoryUsageMonitor) *BatchManager {
 }
 
 // AddBatch adds a new batch to the manager.
+// Uses the Track method for consistent resource management.
 func (bm *BatchManager) AddBatch(data *DataFrame) {
-	bm.mu.Lock()
-	defer bm.mu.Unlock()
-
 	batch := NewSpillableBatch(data)
-	bm.batches = append(bm.batches, batch)
+	bm.Track(batch)
 }
 
 // SpillLRU spills the least recently used batch to free memory.
@@ -411,6 +473,78 @@ func (bm *BatchManager) SpillLRU() error {
 	}
 
 	return errors.New("no batches available for spilling")
+}
+
+// EstimateMemory returns the total estimated memory usage of all managed batches.
+// Implements the memory.Resource interface.
+func (bm *BatchManager) EstimateMemory() int64 {
+	bm.mu.RLock()
+	defer bm.mu.RUnlock()
+	
+	var total int64
+	for _, batch := range bm.batches {
+		if batch != nil {
+			total += batch.EstimateMemory()
+		}
+	}
+	
+	return total
+}
+
+// ForceCleanup performs cleanup operations on all managed batches.
+// Implements the memory.Resource interface.
+func (bm *BatchManager) ForceCleanup() error {
+	bm.mu.RLock()
+	defer bm.mu.RUnlock()
+	
+	// Trigger cleanup on all batches
+	for _, batch := range bm.batches {
+		if batch != nil {
+			if err := batch.ForceCleanup(); err != nil {
+				return err
+			}
+		}
+	}
+	
+	// Trigger global GC
+	memoryutil.ForceGC()
+	return nil
+}
+
+// SpillIfNeeded checks memory pressure and spills batches if needed.
+// Implements the memory.Resource interface.
+func (bm *BatchManager) SpillIfNeeded() error {
+	bm.mu.RLock()
+	defer bm.mu.RUnlock()
+	
+	// Check if any batches need spilling
+	for _, batch := range bm.batches {
+		if batch != nil {
+			if err := batch.SpillIfNeeded(); err != nil {
+				return err
+			}
+		}
+	}
+	
+	return nil
+}
+
+// Track adds a batch to be managed by the BatchManager.
+// Implements the memory.ResourceManager interface.
+func (bm *BatchManager) Track(resource memoryutil.Resource) {
+	bm.mu.Lock()
+	defer bm.mu.Unlock()
+	
+	// Type assert to SpillableBatch
+	if batch, ok := resource.(*SpillableBatch); ok {
+		bm.batches = append(bm.batches, batch)
+	}
+}
+
+// Release releases the batch manager and all managed batches.
+// Implements the memory.Resource interface.
+func (bm *BatchManager) Release() {
+	bm.ReleaseAll()
 }
 
 // ReleaseAll releases all batches and clears the manager.
