@@ -35,6 +35,10 @@ func ApplyLimitOffset(df *dataframe.DataFrame, limit, offset int64) (*dataframe.
 	// Safe conversion with bounds checking
 	offsetInt, err := SafeInt64ToInt(offset)
 	if err != nil {
+		// NOTE: This returns empty results for invalid OFFSET values (e.g., negative values)
+		// to maintain SQL compatibility. Some SQL engines treat negative OFFSET as 0,
+		// others return empty results. This behavior is inconsistent with LIMIT validation
+		// which returns errors. Consider making this behavior consistent in future versions.
 		return CreateEmptyDataFrame(df), nil //nolint:nilerr // Intentional: invalid offset returns empty result
 	}
 

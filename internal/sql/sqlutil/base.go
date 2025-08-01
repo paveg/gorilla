@@ -1,8 +1,8 @@
 package sqlutil
 
 import (
-	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/paveg/gorilla/internal/dataframe"
@@ -75,13 +75,14 @@ func (bt *BaseTranslator) HandleCommonErrors(operation string, err error) error 
 		return nil
 	}
 
-	// Wrap common error types with more descriptive messages
+	// Use string-based error matching since errors.Is won't work with newly created error instances
+	errMsg := err.Error()
 	switch {
-	case errors.Is(err, errors.New("table not found")):
+	case strings.Contains(errMsg, "table not found"):
 		return fmt.Errorf("%s failed: %w", operation, err)
-	case errors.Is(err, errors.New("column not found")):
+	case strings.Contains(errMsg, "column not found"):
 		return fmt.Errorf("%s failed: %w", operation, err)
-	case errors.Is(err, errors.New("invalid expression")):
+	case strings.Contains(errMsg, "invalid expression"):
 		return fmt.Errorf("%s failed: invalid expression syntax: %w", operation, err)
 	default:
 		return fmt.Errorf("%s failed: %w", operation, err)

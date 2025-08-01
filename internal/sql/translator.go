@@ -88,6 +88,8 @@ func (t *SQLTranslator) processFromClause(fromClause *FromClause) (*dataframe.La
 		return nil, t.HandleCommonErrors("FROM clause processing", err)
 	}
 
+	// The boolean return value from GetTable is ignored because ValidateTableExists
+	// ensures the table exists. This is safe as long as ValidateTableExists is called first.
 	df, _ := t.GetTable(fromClause.TableName)
 	return df.Lazy(), nil
 }
