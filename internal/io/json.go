@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/paveg/gorilla/internal/dataframe"
 	"github.com/paveg/gorilla/internal/series"
 )
-
 
 // Read reads JSON data and returns a DataFrame.
 func (r *JSONReader) Read() (*dataframe.DataFrame, error) {
@@ -32,7 +32,7 @@ func (r *JSONReader) readJSONArray() (*dataframe.DataFrame, error) {
 		return nil, fmt.Errorf("reading JSON data: %w", err)
 	}
 
-	var records []map[string]interface{}
+	var records []map[string]any
 	if unmarshalErr := json.Unmarshal(data, &records); unmarshalErr != nil {
 		return nil, fmt.Errorf("unmarshaling JSON array: %w", unmarshalErr)
 	}
@@ -52,7 +52,7 @@ func (r *JSONReader) readJSONArray() (*dataframe.DataFrame, error) {
 // readJSONLines reads JSON Lines format.
 func (r *JSONReader) readJSONLines() (*dataframe.DataFrame, error) {
 	scanner := bufio.NewScanner(r.reader)
-	var records []map[string]interface{}
+	var records []map[string]any
 
 	lineNum := 0
 	for scanner.Scan() {
@@ -61,7 +61,7 @@ func (r *JSONReader) readJSONLines() (*dataframe.DataFrame, error) {
 			continue // Skip empty lines
 		}
 
-		var record map[string]interface{}
+		var record map[string]any
 		if err := json.Unmarshal([]byte(line), &record); err != nil {
 			return nil, fmt.Errorf("unmarshaling JSON line %d: %w", lineNum+1, err)
 		}
@@ -87,7 +87,7 @@ func (r *JSONReader) readJSONLines() (*dataframe.DataFrame, error) {
 }
 
 // recordsToDataFrame converts JSON records to a DataFrame.
-func (r *JSONReader) recordsToDataFrame(records []map[string]interface{}) (*dataframe.DataFrame, error) {
+func (r *JSONReader) recordsToDataFrame(records []map[string]any) (*dataframe.DataFrame, error) {
 	if len(records) == 0 {
 		return dataframe.New(), nil
 	}
@@ -107,7 +107,7 @@ func (r *JSONReader) recordsToDataFrame(records []map[string]interface{}) (*data
 	}
 
 	// Extract data by column
-	columnData := make(map[string][]interface{})
+	columnData := make(map[string][]any)
 	for _, col := range columns {
 		columnData[col] = make([]interface{}, len(records))
 		for i, record := range records {
@@ -136,7 +136,7 @@ func (r *JSONReader) recordsToDataFrame(records []map[string]interface{}) (*data
 }
 
 // createSeriesFromData creates a Series from interface{} data with type inference.
-func (r *JSONReader) createSeriesFromData(name string, data []interface{}) (dataframe.ISeries, error) {
+func (r *JSONReader) createSeriesFromData(name string, data []any) (dataframe.ISeries, error) {
 	if !r.options.TypeInference {
 		// Convert all to strings if type inference is disabled
 		stringData := make([]string, len(data))
@@ -164,7 +164,7 @@ func (r *JSONReader) createSeriesFromData(name string, data []interface{}) (data
 }
 
 // inferDataType infers the most appropriate data type for the column.
-func (r *JSONReader) inferDataType(data []interface{}) string {
+func (r *JSONReader) inferDataType(data []any) string {
 	typeFlags := r.analyzeDataTypes(data)
 
 	// Early exit if we have explicit string values
@@ -189,7 +189,7 @@ type dataTypeFlags struct {
 }
 
 // analyzeDataTypes analyzes the data and returns type flags.
-func (r *JSONReader) analyzeDataTypes(data []interface{}) dataTypeFlags {
+func (r *JSONReader) analyzeDataTypes(data []any) dataTypeFlags {
 	var flags dataTypeFlags
 
 	for _, v := range data {
@@ -209,7 +209,7 @@ func (r *JSONReader) analyzeDataTypes(data []interface{}) dataTypeFlags {
 }
 
 // updateTypeFlags updates type flags based on a single value.
-func (r *JSONReader) updateTypeFlags(v interface{}, flags *dataTypeFlags) {
+func (r *JSONReader) updateTypeFlags(v any, flags *dataTypeFlags) {
 	switch val := v.(type) {
 	case bool:
 		flags.hasBool = true
@@ -240,7 +240,7 @@ func (r *JSONReader) analyzeStringValue(s string, flags *dataTypeFlags) {
 }
 
 // hasMixedNumberTypes checks if we have both actual numbers and string numbers.
-func (r *JSONReader) hasMixedNumberTypes(data []interface{}) bool {
+func (r *JSONReader) hasMixedNumberTypes(data []any) bool {
 	hasActualNumbers := false
 	hasStringNumbers := false
 
@@ -289,7 +289,7 @@ func (r *JSONReader) selectBestType(flags dataTypeFlags) string {
 }
 
 // createInt64Series creates an int64 series from interface{} data.
-func (r *JSONReader) createInt64Series(name string, data []interface{}) (dataframe.ISeries, error) {
+func (r *JSONReader) createInt64Series(name string, data []any) (dataframe.ISeries, error) {
 	values := make([]int64, len(data))
 	for i, v := range data {
 		values[i] = r.toInt64(v)
@@ -298,7 +298,7 @@ func (r *JSONReader) createInt64Series(name string, data []interface{}) (datafra
 }
 
 // createFloat64Series creates a float64 series from interface{} data.
-func (r *JSONReader) createFloat64Series(name string, data []interface{}) (dataframe.ISeries, error) {
+func (r *JSONReader) createFloat64Series(name string, data []any) (dataframe.ISeries, error) {
 	values := make([]float64, len(data))
 	for i, v := range data {
 		values[i] = r.toFloat64(v)
@@ -307,7 +307,7 @@ func (r *JSONReader) createFloat64Series(name string, data []interface{}) (dataf
 }
 
 // createBoolSeries creates a bool series from interface{} data.
-func (r *JSONReader) createBoolSeries(name string, data []interface{}) (dataframe.ISeries, error) {
+func (r *JSONReader) createBoolSeries(name string, data []any) (dataframe.ISeries, error) {
 	values := make([]bool, len(data))
 	for i, v := range data {
 		values[i] = r.toBool(v)
@@ -316,7 +316,7 @@ func (r *JSONReader) createBoolSeries(name string, data []interface{}) (datafram
 }
 
 // createStringSeries creates a string series from interface{} data.
-func (r *JSONReader) createStringSeries(name string, data []interface{}) (dataframe.ISeries, error) {
+func (r *JSONReader) createStringSeries(name string, data []any) (dataframe.ISeries, error) {
 	values := make([]string, len(data))
 	for i, v := range data {
 		values[i] = r.interfaceToString(v)
@@ -326,17 +326,12 @@ func (r *JSONReader) createStringSeries(name string, data []interface{}) (datafr
 
 // Type conversion helpers
 
-func (r *JSONReader) isNull(v interface{}) bool {
+func (r *JSONReader) isNull(v any) bool {
 	if v == nil {
 		return true
 	}
 	str := r.interfaceToString(v)
-	for _, nullValue := range r.options.NullValues {
-		if str == nullValue {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(r.options.NullValues, str)
 }
 
 func (r *JSONReader) isBoolString(s string) bool {
@@ -346,7 +341,7 @@ func (r *JSONReader) isBoolString(s string) bool {
 		lower == "1" || lower == "0"
 }
 
-func (r *JSONReader) toInt64(v interface{}) int64 {
+func (r *JSONReader) toInt64(v any) int64 {
 	if v == nil || r.isNull(v) {
 		return 0
 	}
@@ -373,7 +368,7 @@ func (r *JSONReader) toInt64(v interface{}) int64 {
 	}
 }
 
-func (r *JSONReader) toFloat64(v interface{}) float64 {
+func (r *JSONReader) toFloat64(v any) float64 {
 	if v == nil || r.isNull(v) {
 		return 0.0
 	}
@@ -400,7 +395,7 @@ func (r *JSONReader) toFloat64(v interface{}) float64 {
 	}
 }
 
-func (r *JSONReader) toBool(v interface{}) bool {
+func (r *JSONReader) toBool(v any) bool {
 	if v == nil || r.isNull(v) {
 		return false
 	}
@@ -420,7 +415,7 @@ func (r *JSONReader) toBool(v interface{}) bool {
 	}
 }
 
-func (r *JSONReader) interfaceToString(v interface{}) string {
+func (r *JSONReader) interfaceToString(v any) string {
 	if v == nil {
 		return ""
 	}
@@ -498,11 +493,11 @@ func (w *JSONWriter) writeJSONLines(df *dataframe.DataFrame) error {
 }
 
 // dataFrameToRecords converts DataFrame to slice of maps.
-func (w *JSONWriter) dataFrameToRecords(df *dataframe.DataFrame) []map[string]interface{} {
-	records := make([]map[string]interface{}, df.Len())
+func (w *JSONWriter) dataFrameToRecords(df *dataframe.DataFrame) []map[string]any {
+	records := make([]map[string]any, df.Len())
 
 	for i := range df.Len() {
-		record := make(map[string]interface{})
+		record := make(map[string]any)
 
 		for _, colName := range df.Columns() {
 			col, exists := df.Column(colName)
@@ -522,7 +517,7 @@ func (w *JSONWriter) dataFrameToRecords(df *dataframe.DataFrame) []map[string]in
 }
 
 // getSeriesValue gets value from series at specified index.
-func (w *JSONWriter) getSeriesValue(s dataframe.ISeries, index int) interface{} {
+func (w *JSONWriter) getSeriesValue(s dataframe.ISeries, index int) any {
 	if index >= s.Len() {
 		return nil
 	}
@@ -547,7 +542,7 @@ func (w *JSONWriter) getSeriesValue(s dataframe.ISeries, index int) interface{} 
 }
 
 // getInt64Value extracts int64 value from series.
-func (w *JSONWriter) getInt64Value(s dataframe.ISeries, index int) interface{} {
+func (w *JSONWriter) getInt64Value(s dataframe.ISeries, index int) any {
 	if typed, ok := s.(*series.Series[int64]); ok {
 		values := typed.Values()
 		if index < len(values) {
@@ -558,7 +553,7 @@ func (w *JSONWriter) getInt64Value(s dataframe.ISeries, index int) interface{} {
 }
 
 // getInt32Value extracts int32 value from series.
-func (w *JSONWriter) getInt32Value(s dataframe.ISeries, index int) interface{} {
+func (w *JSONWriter) getInt32Value(s dataframe.ISeries, index int) any {
 	if typed, ok := s.(*series.Series[int32]); ok {
 		values := typed.Values()
 		if index < len(values) {
@@ -569,7 +564,7 @@ func (w *JSONWriter) getInt32Value(s dataframe.ISeries, index int) interface{} {
 }
 
 // getFloat64Value extracts float64 value from series.
-func (w *JSONWriter) getFloat64Value(s dataframe.ISeries, index int) interface{} {
+func (w *JSONWriter) getFloat64Value(s dataframe.ISeries, index int) any {
 	if typed, ok := s.(*series.Series[float64]); ok {
 		values := typed.Values()
 		if index < len(values) {
@@ -580,7 +575,7 @@ func (w *JSONWriter) getFloat64Value(s dataframe.ISeries, index int) interface{}
 }
 
 // getFloat32Value extracts float32 value from series.
-func (w *JSONWriter) getFloat32Value(s dataframe.ISeries, index int) interface{} {
+func (w *JSONWriter) getFloat32Value(s dataframe.ISeries, index int) any {
 	if typed, ok := s.(*series.Series[float32]); ok {
 		values := typed.Values()
 		if index < len(values) {
@@ -591,7 +586,7 @@ func (w *JSONWriter) getFloat32Value(s dataframe.ISeries, index int) interface{}
 }
 
 // getStringValue extracts string value from series.
-func (w *JSONWriter) getStringValue(s dataframe.ISeries, index int) interface{} {
+func (w *JSONWriter) getStringValue(s dataframe.ISeries, index int) any {
 	if typed, ok := s.(*series.Series[string]); ok {
 		values := typed.Values()
 		if index < len(values) {
@@ -602,7 +597,7 @@ func (w *JSONWriter) getStringValue(s dataframe.ISeries, index int) interface{} 
 }
 
 // getBoolValue extracts bool value from series.
-func (w *JSONWriter) getBoolValue(s dataframe.ISeries, index int) interface{} {
+func (w *JSONWriter) getBoolValue(s dataframe.ISeries, index int) any {
 	if typed, ok := s.(*series.Series[bool]); ok {
 		values := typed.Values()
 		if index < len(values) {
