@@ -7,6 +7,8 @@
 // - Multi-level grouping and aggregation
 // - Complex filtering with HAVING clauses
 // - Performance optimization techniques
+//
+//nolint:gosec,mnd // Example code: random generation and magic numbers acceptable for demo
 package main
 
 import (

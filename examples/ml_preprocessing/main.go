@@ -8,6 +8,8 @@
 // - Missing value imputation
 // - Outlier detection and handling
 // - Feature selection and dimensionality reduction
+//
+//nolint:gosec,mnd // Example code: random generation and magic numbers acceptable for demo
 package main
 
 import (
@@ -92,6 +94,7 @@ func main() {
 }
 
 // generateMLDataset creates a realistic ML dataset with various data types and quality issues.
+//nolint:gocognit,gosec,mnd,funlen // Example code: complexity and random generation acceptable for demo
 func generateMLDataset(mem memory.Allocator) *gorilla.DataFrame {
 	const numSamples = 1000
 
@@ -119,6 +122,7 @@ func generateMLDataset(mem memory.Allocator) *gorilla.DataFrame {
 		}
 
 		// Income with outliers and missing values
+		//nolint:gocritic // Example code: if-else chain acceptable for demo
 		if rand.Float32() < 0.03 {
 			incomes[i] = -1.0 // Missing value
 		} else if rand.Float32() < 0.02 {
@@ -585,11 +589,11 @@ func generatePreprocessingSummary(df *gorilla.DataFrame) *gorilla.DataFrame {
 	// Calculate total sample count by iterating through rows
 	var totalSamples int64
 	sampleCountCol, _ := result.Column("sample_count")
-	for i := 0; i < sampleCountCol.Len(); i++ {
+	for i := range sampleCountCol.Len() {
 		if !sampleCountCol.IsNull(i) {
 			// Parse the value as string and convert to int64
 			valStr := sampleCountCol.GetAsString(i)
-			if count, err := strconv.ParseInt(valStr, 10, 64); err == nil {
+			if count, parseErr := strconv.ParseInt(valStr, 10, 64); parseErr == nil {
 				totalSamples += count
 			}
 		}
@@ -597,10 +601,10 @@ func generatePreprocessingSummary(df *gorilla.DataFrame) *gorilla.DataFrame {
 
 	// Add class_percentage column
 	classPercentages := make([]float64, result.Len())
-	for i := 0; i < result.Len(); i++ {
+	for i := range result.Len() {
 		if !sampleCountCol.IsNull(i) {
 			valStr := sampleCountCol.GetAsString(i)
-			if count, err := strconv.ParseInt(valStr, 10, 64); err == nil {
+			if count, parseErr := strconv.ParseInt(valStr, 10, 64); parseErr == nil {
 				if totalSamples > 0 {
 					classPercentages[i] = (float64(count) / float64(totalSamples)) * 100.0
 				}

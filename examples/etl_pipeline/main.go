@@ -7,6 +7,8 @@
 // - Efficient data loading and export
 // - Error handling and recovery patterns
 // - Memory-efficient processing for large datasets
+//
+//nolint:gosec,mnd,revive // Example code: random generation and magic numbers acceptable for demo
 package main
 
 import (
@@ -83,7 +85,7 @@ func extractCustomerData(mem memory.Allocator) *gorilla.DataFrame {
 	cities := make([]string, numCustomers)
 	signupDates := make([]string, numCustomers)
 
-	cities_list := []string{"New York", "Los Angeles", "Chicago", "Houston", "Phoenix", "Philadelphia"}
+	citiesList := []string{"New York", "Los Angeles", "Chicago", "Houston", "Phoenix", "Philadelphia"}
 	baseDate := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	for i := range numCustomers {
@@ -103,7 +105,7 @@ func extractCustomerData(mem memory.Allocator) *gorilla.DataFrame {
 			ages[i] = int64(18 + rand.IntN(65))
 		}
 
-		cities[i] = cities_list[rand.IntN(len(cities_list))]
+		cities[i] = citiesList[rand.IntN(len(citiesList))]
 
 		// Random signup date within last 4 years
 		daysAgo := rand.IntN(365 * 4)
@@ -141,7 +143,7 @@ func extractOrderData(mem memory.Allocator) *gorilla.DataFrame {
 	orderDates := make([]string, numOrders)
 	statuses := make([]string, numOrders)
 
-	statuses_list := []string{"completed", "pending", "cancelled", "shipped"}
+	statusesList := []string{"completed", "pending", "cancelled", "shipped"}
 	baseDate := time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	for i := range numOrders {
@@ -156,27 +158,27 @@ func extractOrderData(mem memory.Allocator) *gorilla.DataFrame {
 		orderDate := baseDate.AddDate(0, 0, daysAgo)
 		orderDates[i] = orderDate.Format("2006-01-02")
 
-		statuses[i] = statuses_list[rand.IntN(len(statuses_list))]
+		statuses[i] = statusesList[rand.IntN(len(statusesList))]
 	}
 
 	// Create series
-	orderIdSeries := gorilla.NewSeries("order_id", orderIds, mem)
-	customerIdSeries := gorilla.NewSeries("customer_id", customerIds, mem)
-	productIdSeries := gorilla.NewSeries("product_id", productIds, mem)
+	orderIDSeries := gorilla.NewSeries("order_id", orderIds, mem)
+	customerIDSeries := gorilla.NewSeries("customer_id", customerIds, mem)
+	productIDSeries := gorilla.NewSeries("product_id", productIds, mem)
 	quantitySeries := gorilla.NewSeries("quantity", quantities, mem)
 	priceSeries := gorilla.NewSeries("unit_price", unitPrices, mem)
 	dateSeries := gorilla.NewSeries("order_date", orderDates, mem)
 	statusSeries := gorilla.NewSeries("status", statuses, mem)
 
-	defer orderIdSeries.Release()
-	defer customerIdSeries.Release()
-	defer productIdSeries.Release()
+	defer orderIDSeries.Release()
+	defer customerIDSeries.Release()
+	defer productIDSeries.Release()
 	defer quantitySeries.Release()
 	defer priceSeries.Release()
 	defer dateSeries.Release()
 	defer statusSeries.Release()
 
-	return gorilla.NewDataFrame(orderIdSeries, customerIdSeries, productIdSeries, quantitySeries, priceSeries, dateSeries, statusSeries)
+	return gorilla.NewDataFrame(orderIDSeries, customerIDSeries, productIDSeries, quantitySeries, priceSeries, dateSeries, statusSeries)
 }
 
 // extractProductData simulates extracting product catalog data.
@@ -188,12 +190,12 @@ func extractProductData(mem memory.Allocator) *gorilla.DataFrame {
 	categories := make([]string, numProducts)
 	costs := make([]float64, numProducts)
 
-	categories_list := []string{"Electronics", "Clothing", "Books", "Home", "Sports"}
+	categoriesList := []string{"Electronics", "Clothing", "Books", "Home", "Sports"}
 
 	for i := range numProducts {
 		ids[i] = int64(i + 1)
 		names[i] = fmt.Sprintf("Product_%d", i+1)
-		categories[i] = categories_list[i%len(categories_list)]
+		categories[i] = categoriesList[i%len(categoriesList)]
 		costs[i] = 5.0 + float64(i)*0.5 // Incrementally increasing cost
 	}
 
@@ -314,7 +316,7 @@ func createAnalyticalView(customers, orders, products *gorilla.DataFrame) *goril
 		RightKey: "product_id",
 	})
 	if err != nil {
-		customerOrders.Release()
+		//nolint:gocritic // Example code: exitAfterDefer acceptable for demo error handling
 		log.Fatalf("Product join failed: %v", err)
 	}
 

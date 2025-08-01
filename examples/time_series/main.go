@@ -7,6 +7,8 @@
 // - Data resampling and aggregation
 // - Trend analysis and forecasting
 // - Performance optimization for time series data
+//
+//nolint:gosec,mnd // Example code: random generation and magic numbers acceptable for demo
 package main
 
 import (
