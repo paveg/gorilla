@@ -109,7 +109,7 @@ func (r *JSONReader) recordsToDataFrame(records []map[string]any) (*dataframe.Da
 	// Extract data by column
 	columnData := make(map[string][]any)
 	for _, col := range columns {
-		columnData[col] = make([]interface{}, len(records))
+		columnData[col] = make([]any, len(records))
 		for i, record := range records {
 			if value, exists := record[col]; exists {
 				columnData[col][i] = value
@@ -135,7 +135,7 @@ func (r *JSONReader) recordsToDataFrame(records []map[string]any) (*dataframe.Da
 	return dataframe.New(seriesList...), nil
 }
 
-// createSeriesFromData creates a Series from interface{} data with type inference.
+// createSeriesFromData creates a Series from any data with type inference.
 func (r *JSONReader) createSeriesFromData(name string, data []any) (dataframe.ISeries, error) {
 	if !r.options.TypeInference {
 		// Convert all to strings if type inference is disabled
@@ -288,7 +288,7 @@ func (r *JSONReader) selectBestType(flags dataTypeFlags) string {
 	return ArrowTypeString
 }
 
-// createInt64Series creates an int64 series from interface{} data.
+// createInt64Series creates an int64 series from any data.
 func (r *JSONReader) createInt64Series(name string, data []any) (dataframe.ISeries, error) {
 	values := make([]int64, len(data))
 	for i, v := range data {
@@ -297,7 +297,7 @@ func (r *JSONReader) createInt64Series(name string, data []any) (dataframe.ISeri
 	return series.NewSafe(name, values, r.mem)
 }
 
-// createFloat64Series creates a float64 series from interface{} data.
+// createFloat64Series creates a float64 series from any data.
 func (r *JSONReader) createFloat64Series(name string, data []any) (dataframe.ISeries, error) {
 	values := make([]float64, len(data))
 	for i, v := range data {
@@ -306,7 +306,7 @@ func (r *JSONReader) createFloat64Series(name string, data []any) (dataframe.ISe
 	return series.NewSafe(name, values, r.mem)
 }
 
-// createBoolSeries creates a bool series from interface{} data.
+// createBoolSeries creates a bool series from any data.
 func (r *JSONReader) createBoolSeries(name string, data []any) (dataframe.ISeries, error) {
 	values := make([]bool, len(data))
 	for i, v := range data {
@@ -315,7 +315,7 @@ func (r *JSONReader) createBoolSeries(name string, data []any) (dataframe.ISerie
 	return series.NewSafe(name, values, r.mem)
 }
 
-// createStringSeries creates a string series from interface{} data.
+// createStringSeries creates a string series from any data.
 func (r *JSONReader) createStringSeries(name string, data []any) (dataframe.ISeries, error) {
 	values := make([]string, len(data))
 	for i, v := range data {
