@@ -26,6 +26,26 @@ const (
 	DefaultChunkSize = 1000
 	// DefaultBatchSize is the default batch size for I/O operations.
 	DefaultBatchSize = 1000
+	// DefaultRowGroupSize is the default row group size for Parquet files.
+	DefaultRowGroupSize = 100000 // 100K rows per group
+	// DefaultPageSize is the default page size for Parquet files.
+	DefaultPageSize = 1048576 // 1MB pages
+)
+
+// Arrow data type name constants for consistent usage across I/O implementations.
+const (
+	// ArrowTypeInt64 is the Arrow type name for int64 columns.
+	ArrowTypeInt64 = "int64"
+	// ArrowTypeInt32 is the Arrow type name for int32 columns.
+	ArrowTypeInt32 = "int32"
+	// ArrowTypeFloat64 is the Arrow type name for float64 columns.
+	ArrowTypeFloat64 = "float64"
+	// ArrowTypeFloat32 is the Arrow type name for float32 columns.
+	ArrowTypeFloat32 = "float32"
+	// ArrowTypeBool is the Arrow type name for bool columns.
+	ArrowTypeBool = "bool"
+	// ArrowTypeString is the Arrow type name for string columns.
+	ArrowTypeString = "utf8"
 )
 
 // DataReader defines the interface for reading data from various sources.
@@ -100,17 +120,32 @@ func NewCSVWriter(writer io.Writer, options CSVOptions) *CSVWriter {
 
 // ParquetOptions contains configuration options for Parquet operations.
 type ParquetOptions struct {
-	// Compression type for Parquet files
+	// Compression type for Parquet files (snappy, gzip, lz4, zstd, uncompressed)
 	Compression string
 	// BatchSize for reading/writing operations
 	BatchSize int
+	// ColumnsToRead for selective column reading (nil reads all columns)
+	ColumnsToRead []string
+	// ParallelDecoding enables parallel decoding for better performance
+	ParallelDecoding bool
+	// RowGroupSize specifies the target size for row groups in rows
+	RowGroupSize int64
+	// PageSize specifies the target size for pages in bytes
+	PageSize int64
+	// EnableDict enables dictionary encoding for string columns
+	EnableDict bool
 }
 
 // DefaultParquetOptions returns default Parquet options.
 func DefaultParquetOptions() ParquetOptions {
 	return ParquetOptions{
-		Compression: "snappy",
-		BatchSize:   DefaultBatchSize,
+		Compression:      "snappy",
+		BatchSize:        DefaultBatchSize,
+		ColumnsToRead:    nil, // Read all columns
+		ParallelDecoding: true,
+		RowGroupSize:     DefaultRowGroupSize,
+		PageSize:         DefaultPageSize,
+		EnableDict:       true,
 	}
 }
 
@@ -139,6 +174,74 @@ type ParquetWriter struct {
 // NewParquetWriter creates a new Parquet writer with the specified options.
 func NewParquetWriter(writer io.Writer, options ParquetOptions) *ParquetWriter {
 	return &ParquetWriter{
+		writer:  writer,
+		options: options,
+	}
+}
+
+// JSONFormat specifies the JSON format type.
+type JSONFormat int
+
+const (
+	// JSONArray format stores data as a JSON array of objects.
+	JSONArray JSONFormat = iota
+	// JSONLines format stores data as newline-delimited JSON objects.
+	JSONLines
+)
+
+// JSONOptions contains configuration options for JSON operations.
+type JSONOptions struct {
+	// Format specifies whether to use JSON array or JSON Lines format
+	Format JSONFormat
+	// TypeInference enables automatic type inference from JSON values
+	TypeInference bool
+	// DateFormat specifies the format for parsing date strings
+	DateFormat string
+	// NullValues specifies string values that should be treated as null
+	NullValues []string
+	// MaxRecords limits the number of records to read (0 = no limit)
+	MaxRecords int
+	// Parallel enables parallel processing for large JSON files
+	Parallel bool
+}
+
+// DefaultJSONOptions returns default JSON options.
+func DefaultJSONOptions() JSONOptions {
+	return JSONOptions{
+		Format:        JSONArray,
+		TypeInference: true,
+		DateFormat:    "2006-01-02T15:04:05Z",
+		NullValues:    []string{"", "null", "NULL", "nil"},
+		MaxRecords:    0,
+		Parallel:      false,
+	}
+}
+
+// JSONReader reads JSON data and converts it to DataFrames.
+type JSONReader struct {
+	reader  io.Reader
+	options JSONOptions
+	mem     memory.Allocator
+}
+
+// NewJSONReader creates a new JSON reader with the specified options.
+func NewJSONReader(reader io.Reader, options JSONOptions, mem memory.Allocator) *JSONReader {
+	return &JSONReader{
+		reader:  reader,
+		options: options,
+		mem:     mem,
+	}
+}
+
+// JSONWriter writes DataFrames to JSON format.
+type JSONWriter struct {
+	writer  io.Writer
+	options JSONOptions
+}
+
+// NewJSONWriter creates a new JSON writer with the specified options.
+func NewJSONWriter(writer io.Writer, options JSONOptions) *JSONWriter {
+	return &JSONWriter{
 		writer:  writer,
 		options: options,
 	}
