@@ -25,11 +25,11 @@ func TestWorkerIdleBehavior(t *testing.T) {
 		defer pool.Close()
 
 		// Allow workers to start up
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(5 * time.Millisecond)
 
 		// Submit a single work item after a delay to test idle behavior
 		go func() {
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(10 * time.Millisecond)
 			parallel.ProcessGeneric(pool, []int{1}, func(x int) int {
 				return x * 2
 			})
@@ -38,7 +38,7 @@ func TestWorkerIdleBehavior(t *testing.T) {
 		// The test passes if workers don't consume excessive CPU while idle
 		// This is more of a behavioral test - we'll verify the implementation
 		// uses proper blocking instead of busy-waiting
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond)
 	})
 
 	t.Run("workers respond quickly to work after idle period", func(t *testing.T) {
@@ -78,7 +78,7 @@ func TestWorkerIdleBehavior(t *testing.T) {
 		})
 
 		// Allow workers to start up
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(5 * time.Millisecond)
 
 		// Close the pool and measure how long it takes
 		start := time.Now()
@@ -157,7 +157,7 @@ func TestWorkerResourceEfficiency(t *testing.T) {
 		defer pool.Close()
 
 		// Let workers idle for a period
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 
 		// Submit work to verify workers are still responsive
 		results := parallel.ProcessGeneric(pool, []int{1, 2, 3, 4, 5}, func(x int) int {

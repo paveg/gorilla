@@ -268,7 +268,7 @@ func TestMemoryUsageMonitor(t *testing.T) {
 		monitor.RecordAllocation(1500)
 
 		// Wait a bit for the callback to be called
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond)
 		assert.Equal(t, int32(1), atomic.LoadInt32(&spillCalled))
 		assert.Equal(t, int64(1), monitor.SpillCount())
 	})
@@ -299,8 +299,8 @@ func TestMemoryUsageMonitor(t *testing.T) {
 		// Monitoring should be active (we can't directly test the private field,
 		// but we can verify the monitoring loop runs without crashing)
 
-		// Wait for at least one monitoring cycle
-		time.Sleep(1 * time.Second)
+		// Wait for at least one monitoring cycle (reduced for CI efficiency)
+		time.Sleep(50 * time.Millisecond)
 
 		// This test mainly verifies the monitoring loop runs without crashing
 	})
