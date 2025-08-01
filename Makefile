@@ -57,7 +57,7 @@ test-all:
 
 lint:
 	@echo "Running linter..."
-	@golangci-lint run
+	@golangci-lint run ./...
 
 fmt:
 	@echo "Formatting code..."
