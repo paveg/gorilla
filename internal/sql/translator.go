@@ -8,25 +8,22 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/paveg/gorilla/internal/dataframe"
 	"github.com/paveg/gorilla/internal/expr"
+	"github.com/paveg/gorilla/internal/sql/sqlutil"
 )
 
 // SQLTranslator translates SQL AST to DataFrame operations.
 type SQLTranslator struct { //nolint:revive // Maintained for consistent API naming
-	tables    map[string]*dataframe.DataFrame
+	*sqlutil.BaseTranslator
+
 	evaluator *expr.Evaluator
 }
 
 // NewSQLTranslator creates a new SQL translator.
 func NewSQLTranslator(mem memory.Allocator) *SQLTranslator {
 	return &SQLTranslator{
-		tables:    make(map[string]*dataframe.DataFrame),
-		evaluator: expr.NewEvaluator(mem),
+		BaseTranslator: sqlutil.NewBaseTranslator(mem),
+		evaluator:      expr.NewEvaluator(mem),
 	}
-}
-
-// RegisterTable registers a DataFrame with a table name for SQL queries.
-func (t *SQLTranslator) RegisterTable(name string, df *dataframe.DataFrame) {
-	t.tables[name] = df
 }
 
 // TranslateStatement translates a SQL statement to a LazyFrame.
@@ -83,14 +80,15 @@ func (t *SQLTranslator) translateSelect(stmt *SelectStatement) (*dataframe.LazyF
 // processFromClause processes the FROM clause and returns the initial LazyFrame.
 func (t *SQLTranslator) processFromClause(fromClause *FromClause) (*dataframe.LazyFrame, error) {
 	if fromClause == nil {
-		return nil, errors.New("FROM clause is required")
+		return nil, t.HandleCommonErrors("FROM clause processing", errors.New("FROM clause is required"))
 	}
 
-	df, exists := t.tables[fromClause.TableName]
-	if !exists {
-		return nil, fmt.Errorf("table not found: %s", fromClause.TableName)
+	// Use common validation
+	if err := t.ValidateTableExists(fromClause.TableName); err != nil {
+		return nil, t.HandleCommonErrors("FROM clause processing", err)
 	}
 
+	df, _ := t.GetTable(fromClause.TableName)
 	return df.Lazy(), nil
 }
 
@@ -560,16 +558,12 @@ func (t *SQLTranslator) validateSelectStatement(stmt *SelectStatement) error {
 
 // GetRegisteredTables returns the list of registered table names.
 func (t *SQLTranslator) GetRegisteredTables() []string {
-	var tables []string
-	for name := range t.tables {
-		tables = append(tables, name)
-	}
-	return tables
+	return t.BaseTranslator.GetRegisteredTables()
 }
 
 // ClearTables removes all registered tables.
 func (t *SQLTranslator) ClearTables() {
-	t.tables = make(map[string]*dataframe.DataFrame)
+	t.BaseTranslator.ClearTables()
 }
 
 // resolveAliasesInExpression recursively resolves aliases in an expression tree.
