@@ -307,7 +307,7 @@ func TestDataFrameDateTimeGroupBy(t *testing.T) {
 			GroupBy("month").
 			Agg(
 				expr.Sum(expr.Col("amount")).As("total_amount"),
-				expr.Count(expr.Col("*")).As("transaction_count"),
+				expr.Count(expr.Col("type")).As("transaction_count"),
 			).
 			Collect()
 		require.NoError(t, err)
@@ -404,7 +404,7 @@ func TestDataFrameDateTimeComplexQuery(t *testing.T) {
 			Filter(expr.Col("years_of_service").Ge(expr.Lit(int64(2)))).
 			GroupBy("department").
 			Agg(
-				expr.Count(expr.Col("*")).As("employee_count"),
+				expr.Count(expr.Col("employee")).As("employee_count"),
 				expr.Mean(expr.Col("years_of_service")).As("avg_years_service"),
 				expr.Sum(expr.Col("salary")).As("total_salary"),
 			).
@@ -438,7 +438,7 @@ func TestDataFrameDateTimeComplexQuery(t *testing.T) {
 			WithColumn("hire_year", expr.Col("hire_date").Year()).
 			GroupBy("hire_year", "hire_quarter").
 			Agg(
-				expr.Count(expr.Col("*")).As("hires"),
+				expr.Count(expr.Col("employee")).As("hires"),
 				expr.Mean(expr.Col("salary")).As("avg_salary"),
 			).
 			Collect()
