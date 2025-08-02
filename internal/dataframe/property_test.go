@@ -207,12 +207,12 @@ func TestDataFrameGroupByProperties(t *testing.T) {
 	// Property: GroupBy result should have at most as many rows as unique group values
 	property1 := func(seed int64) bool {
 		rng := rand.New(rand.NewSource(seed))
-		
+
 		// Create test data with known cardinality
 		size := 100
 		data := make([]string, size)
 		values := make([]int64, size)
-		
+
 		// Create data with at most 5 unique groups
 		groups := []string{"A", "B", "C", "D", "E"}
 		for i := range size {
