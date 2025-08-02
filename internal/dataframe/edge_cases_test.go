@@ -104,7 +104,7 @@ func TestDataFrameBoundaryValues(t *testing.T) {
 	// Test with boundary integer values
 	boundaryInts := []int64{0, 1, -1, 9223372036854775807, -9223372036854775808}
 	intSeries := series.New("boundary_ints", boundaryInts, mem)
-	
+
 	// Test with boundary float values
 	boundaryFloats := []float64{0.0, 1.0, -1.0, 1.7976931348623157e+308, 2.2250738585072014e-308}
 	floatSeries := series.New("boundary_floats", boundaryFloats, mem)
@@ -117,7 +117,7 @@ func TestDataFrameBoundaryValues(t *testing.T) {
 		result, err := df.Lazy().Filter(expr.Col("boundary_ints").Gt(expr.Lit(int64(0)))).Collect()
 		require.NoError(t, err)
 		defer result.Release()
-		
+
 		// Should find positive values
 		assert.Positive(t, result.Len())
 	})
@@ -129,7 +129,7 @@ func TestDataFrameBoundaryValues(t *testing.T) {
 			Collect()
 		require.NoError(t, err)
 		defer result.Release()
-		
+
 		assert.Equal(t, 3, result.Width()) // Original 2 + new column
 	})
 }
@@ -286,7 +286,7 @@ func TestDataFrameStressOperations(t *testing.T) {
 				// - At most 10 unique categories (cat_0 through cat_9)
 				// - But due to filtering, we might have fewer if some categories have no values > 50
 				assert.LessOrEqual(t, result.Len(), size/10) // Should have reasonable number of groups
-				assert.Equal(t, 2, result.Width()) // category + count
+				assert.Equal(t, 2, result.Width())           // category + count
 			}
 
 			// Memory usage should be reasonable

@@ -94,6 +94,7 @@ func main() {
 }
 
 // generateMLDataset creates a realistic ML dataset with various data types and quality issues.
+//
 //nolint:gocognit,gosec,mnd,funlen // Example code: complexity and random generation acceptable for demo
 func generateMLDataset(mem memory.Allocator) *gorilla.DataFrame {
 	const numSamples = 1000
@@ -611,11 +612,11 @@ func generatePreprocessingSummary(df *gorilla.DataFrame) *gorilla.DataFrame {
 			}
 		}
 	}
-	
+
 	mem := memory.NewGoAllocator()
 	percentageSeries := gorilla.NewSeries("class_percentage", classPercentages, mem)
 	defer percentageSeries.Release()
-	
+
 	// Create a new DataFrame with the percentage column added
 	columns := make([]gorilla.ISeries, 0, result.Width()+1)
 	for _, colName := range result.Columns() {
@@ -623,9 +624,9 @@ func generatePreprocessingSummary(df *gorilla.DataFrame) *gorilla.DataFrame {
 		columns = append(columns, col)
 	}
 	columns = append(columns, percentageSeries)
-	
+
 	finalResult := gorilla.NewDataFrame(columns...)
 	result.Release() // Release the intermediate result
-	
+
 	return finalResult
 }
