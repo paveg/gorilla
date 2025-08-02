@@ -327,7 +327,7 @@ make build
 ./bin/gorilla-cli demo
 
 # Run benchmarks
-./bin/gorilla-cli benchmark --rows 100000
+./bin/gorilla-cli benchmark
 ```
 
 ## ⚡ Performance
