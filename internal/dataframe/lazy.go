@@ -21,10 +21,11 @@ import (
 
 // Data type constants for Arrow type name matching.
 const (
-	dataTypeUTF8    = "utf8"
-	dataTypeInt64   = "int64"
-	dataTypeFloat64 = "float64"
-	dataTypeBool    = "bool"
+	dataTypeUTF8      = "utf8"
+	dataTypeInt64     = "int64"
+	dataTypeFloat64   = "float64"
+	dataTypeBool      = "bool"
+	dataTypeTimestamp = "timestamp"
 )
 
 // FilterMemoryPoolManager manages the global memory pool for filter operations.
@@ -158,6 +159,8 @@ func (f *FilterOperation) createEmptyDataFrame(df *DataFrame) *DataFrame {
 				emptySeries = append(emptySeries, series.New(colName, []float64{}, mem))
 			case dataTypeBool:
 				emptySeries = append(emptySeries, series.New(colName, []bool{}, mem))
+			case dataTypeTimestamp:
+				emptySeries = append(emptySeries, series.New(colName, []time.Time{}, mem))
 			}
 		}
 	}
@@ -182,6 +185,8 @@ func (f *FilterOperation) filterSeries(
 		return f.filterFloat64Series(originalSeries, mask, resultSize, name, mem)
 	case dataTypeBool:
 		return f.filterBoolSeries(originalSeries, mask, resultSize, name, mem)
+	case dataTypeTimestamp:
+		return f.filterTimestampSeries(originalSeries, mask, resultSize, name, mem)
 	default:
 		return nil, fmt.Errorf("unsupported series type for filtering: %s", originalSeries.DataType().Name())
 	}
@@ -295,6 +300,36 @@ func (f *FilterOperation) filterBoolSeries(
 	return series.New(name, filteredValues, mem), nil
 }
 
+func (f *FilterOperation) filterTimestampSeries(
+	originalSeries ISeries,
+	mask *array.Boolean,
+	resultSize int,
+	name string,
+	mem memory.Allocator,
+) (ISeries, error) {
+	originalArray := originalSeries.Array()
+	defer originalArray.Release()
+
+	timestampArray, ok := originalArray.(*array.Timestamp)
+	if !ok {
+		return nil, errors.New("expected timestamp array")
+	}
+
+	filteredValues := make([]time.Time, 0, resultSize)
+	for i := range mask.Len() {
+		if !mask.IsNull(i) && mask.Value(i) {
+			if !timestampArray.IsNull(i) {
+				// Convert Arrow timestamp back to time.Time
+				timestamp := timestampArray.Value(i)
+				nanos := int64(timestamp)
+				filteredValues = append(filteredValues, time.Unix(nanos/nanosPerSecond, nanos%nanosPerSecond).UTC())
+			}
+		}
+	}
+
+	return series.New(name, filteredValues, mem), nil
+}
+
 func (f *FilterOperation) String() string {
 	return fmt.Sprintf("filter(%s)", f.predicate.String())
 }
@@ -390,6 +425,8 @@ func (w *WithColumnOperation) createSeriesFromArray(name string, arr arrow.Array
 		return w.createFloat64SeriesFromArray(name, typedArr, mem)
 	case *array.Boolean:
 		return w.createBoolSeriesFromArray(name, typedArr, mem)
+	case *array.Timestamp:
+		return w.createTimestampSeriesFromArray(name, typedArr, mem)
 	default:
 		return nil, fmt.Errorf("unsupported array type for series creation: %T", arr)
 	}
@@ -409,6 +446,8 @@ func (w *WithColumnOperation) copySeries(originalSeries ISeries, mem memory.Allo
 		return w.copyFloat64Array(name, originalArray, mem)
 	case dataTypeBool:
 		return w.copyBoolArray(name, originalArray, mem)
+	case dataTypeTimestamp:
+		return w.copyTimestampArray(name, originalArray, mem)
 	default:
 		return nil, fmt.Errorf("unsupported series type for copying: %s", originalSeries.DataType().Name())
 	}
@@ -486,6 +525,27 @@ func (w *WithColumnOperation) copyBoolArray(
 	return series.New(name, values, mem), nil
 }
 
+func (w *WithColumnOperation) copyTimestampArray(
+	name string,
+	originalArray arrow.Array,
+	mem memory.Allocator,
+) (ISeries, error) {
+	timestampArray, ok := originalArray.(*array.Timestamp)
+	if !ok {
+		return nil, fmt.Errorf("expected timestamp array, got %T", originalArray)
+	}
+	values := make([]time.Time, timestampArray.Len())
+	for i := range timestampArray.Len() {
+		if !timestampArray.IsNull(i) {
+			// Convert Arrow timestamp back to time.Time
+			timestamp := timestampArray.Value(i)
+			nanos := int64(timestamp)
+			values[i] = time.Unix(nanos/nanosPerSecond, nanos%nanosPerSecond).UTC()
+		}
+	}
+	return series.New(name, values, mem), nil
+}
+
 func (w *WithColumnOperation) createStringSeriesFromArray(
 	name string,
 	arr *array.String,
@@ -537,6 +597,23 @@ func (w *WithColumnOperation) createBoolSeriesFromArray(
 	for i := range arr.Len() {
 		if !arr.IsNull(i) {
 			values[i] = arr.Value(i)
+		}
+	}
+	return series.New(name, values, mem), nil
+}
+
+func (w *WithColumnOperation) createTimestampSeriesFromArray(
+	name string,
+	arr *array.Timestamp,
+	mem memory.Allocator,
+) (ISeries, error) {
+	values := make([]time.Time, arr.Len())
+	for i := range arr.Len() {
+		if !arr.IsNull(i) {
+			// Convert Arrow timestamp back to time.Time
+			timestamp := arr.Value(i)
+			nanos := int64(timestamp)
+			values[i] = time.Unix(nanos/nanosPerSecond, nanos%nanosPerSecond).UTC()
 		}
 	}
 	return series.New(name, values, mem), nil
@@ -679,6 +756,8 @@ func (g *GroupByOperation) createEmptyDataFrame(df *DataFrame) *DataFrame {
 				emptySeries = append(emptySeries, series.New(colName, []float64{}, mem))
 			case dataTypeBool:
 				emptySeries = append(emptySeries, series.New(colName, []bool{}, mem))
+			case dataTypeTimestamp:
+				emptySeries = append(emptySeries, series.New(colName, []time.Time{}, mem))
 			default:
 				// For unsupported types, create an empty string series as fallback
 				// This ensures the DataFrame structure is preserved even with unexpected types
@@ -708,6 +787,8 @@ func (g *GroupByOperation) filterSeries(
 		return g.filterFloat64Series(originalSeries, mask, resultSize, name, mem)
 	case dataTypeBool:
 		return g.filterBoolSeries(originalSeries, mask, resultSize, name, mem)
+	case dataTypeTimestamp:
+		return g.filterTimestampSeries(originalSeries, mask, resultSize, name, mem)
 	default:
 		return nil, fmt.Errorf("unsupported series type for HAVING filtering: %s", originalSeries.DataType().Name())
 	}
@@ -830,6 +911,39 @@ func (g *GroupByOperation) filterBoolSeries(
 			} else {
 				// Handle null values consistently by using false as placeholder
 				filteredValues = append(filteredValues, false)
+			}
+		}
+	}
+
+	return series.New(name, filteredValues, mem), nil
+}
+
+func (g *GroupByOperation) filterTimestampSeries(
+	originalSeries ISeries,
+	mask *array.Boolean,
+	resultSize int,
+	name string,
+	mem memory.Allocator,
+) (ISeries, error) {
+	originalArray := originalSeries.Array()
+	// Note: Array from series.Array() is managed by the parent series
+
+	timestampArray, ok := originalArray.(*array.Timestamp)
+	if !ok {
+		return nil, errors.New("expected timestamp array")
+	}
+
+	filteredValues := make([]time.Time, 0, resultSize)
+	for i := range mask.Len() {
+		if !mask.IsNull(i) && mask.Value(i) {
+			if !timestampArray.IsNull(i) {
+				// Convert Arrow timestamp back to time.Time
+				timestamp := timestampArray.Value(i)
+				nanos := int64(timestamp)
+				filteredValues = append(filteredValues, time.Unix(nanos/nanosPerSecond, nanos%nanosPerSecond).UTC())
+			} else {
+				// Handle null values consistently by using zero time as placeholder
+				filteredValues = append(filteredValues, time.Time{})
 			}
 		}
 	}
