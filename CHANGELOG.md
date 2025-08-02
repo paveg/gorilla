@@ -9,6 +9,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+## [0.4.0] - 2025-08-02
+
+### Added
+
+- **DateTime Arithmetic Support**: Comprehensive datetime operations for DataFrame workflows
+  - `DateAdd`, `DateSub`, `DateDiff` functions with support for days, hours, minutes, months, years
+  - DateTime extraction functions: `Year()`, `Month()`, `Hour()`
+  - Full integration with LazyFrame and GroupBy operations
+  - Example: `df.Lazy().WithColumn("expiry", expr.Col("date").DateAdd(expr.Days(30)))`
+
+- **Performance Monitoring and Metrics System**: Built-in performance analysis
+  - Real-time memory usage tracking and optimization
+  - Execution profiling with detailed timing metrics
+  - Adaptive processing based on data size and system resources
+  - Comprehensive benchmarking suite for performance regression detection
+
+- **Enhanced Test Coverage and Quality**: Significantly expanded testing infrastructure
+  - Comprehensive integration testing for complex DataFrame workflows
+  - Real-world scenario testing with financial and employee analytics use cases
+  - Enhanced code quality standards with improved linting and pre-commit hooks
+
+- **CLI Enhancements**: Improved command-line interface capabilities
+  - New `--rows` option for customizable demo data size
+  - Enhanced benchmark reporting and analysis features
+
+### Improved
+
+- **Code Modernization**: Updated to leverage Go 1.18+ features
+  - Complete migration from `interface{}` to `any` type for better type safety
+  - Enhanced Arrow memory management with improved resource cleanup patterns
+  - Modernized JSON I/O implementation
+
+- **Performance Optimizations**: Enhanced parallel processing and memory management
+  - Adaptive chunking for optimal parallel execution
+  - Improved memory usage patterns and garbage collection
+  - Optimized Arrow array operations
+
+### Fixed
+
+- Count aggregation issues in multi-aggregation GroupBy operations
+- Arrow array memory leaks in parallel processing scenarios
+- Compilation errors related to incomplete debug functionality
+- Type checking and error handling for datetime operations
+
+### Migration Notes
+
+- Update Count aggregations to reference specific columns instead of `"*"`
+- Example: `expr.Count(expr.Col("*"))` → `expr.Count(expr.Col("column_name"))`
+
 ## [0.3.1] - 2025-08-01
 
 ### Added
