@@ -326,6 +326,9 @@ make build
 # Run interactive demo
 ./bin/gorilla-cli demo
 
+# Run demo with custom data size
+./bin/gorilla-cli demo --rows 5000
+
 # Run benchmarks
 ./bin/gorilla-cli benchmark
 ```

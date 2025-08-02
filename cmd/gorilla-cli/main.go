@@ -18,6 +18,7 @@ func customUsage() {
 	fmt.Fprintf(os.Stderr, "Options:\n")
 	fmt.Fprintf(os.Stderr, "  --demo\n\t\tRun basic demo\n")
 	fmt.Fprintf(os.Stderr, "  --benchmark\n\t\tRun benchmark tests\n")
+	fmt.Fprintf(os.Stderr, "  --rows N\n\t\tNumber of rows to use (default: 1000 for demo, 1000000 for benchmark)\n")
 	fmt.Fprintf(os.Stderr, "  -v, --version\n\t\tPrint version information and exit\n")
 	fmt.Fprintf(os.Stderr, "  -h, --help\n\t\tShow this help message and exit\n")
 }
@@ -30,6 +31,7 @@ func main() {
 	flag.BoolVar(versionFlag, "version", false, "Print version and exit") // alias
 	demoFlag := flag.Bool("demo", false, "Run basic demo")
 	benchmarkFlag := flag.Bool("benchmark", false, "Run benchmark tests")
+	rowsFlag := flag.Int("rows", 0, "Number of rows to use (default: 1000 for demo, 1000000 for benchmark)")
 
 	// Customize usage message for -h, --help
 	//nolint:reassign // Standard Go pattern for customizing flag usage message
@@ -46,9 +48,9 @@ func main() {
 	// Handle other flags
 	switch {
 	case *demoFlag:
-		runDemo()
+		runDemo(*rowsFlag)
 	case *benchmarkFlag:
-		runBenchmark()
+		runBenchmark(*rowsFlag)
 	default:
 		// If no flags are provided, print usage and exit.
 		flag.Usage()
@@ -56,7 +58,7 @@ func main() {
 	}
 }
 
-func runDemo() {
+func runDemo(rows int) {
 	fmt.Println("🦍 Gorilla DataFrame Library Demo")
 	fmt.Println("=================================")
 
@@ -65,8 +67,13 @@ func runDemo() {
 	// Create larger sample dataset
 	fmt.Println("Creating sample dataset...")
 
+	// Set default if not specified
+	if rows == 0 {
+		rows = 1000
+	}
+	sampleSize := rows
+
 	const (
-		sampleSize         = 1000
 		baseAge            = 25
 		ageRange           = 40
 		baseSalary         = 40000
@@ -136,12 +143,18 @@ func runDemo() {
 	fmt.Println("Demo completed successfully! 🎉")
 }
 
-func runBenchmark() {
+//nolint:funlen // Benchmark function requires extensive setup and measurement code
+func runBenchmark(rows int) {
 	fmt.Println("🚀 Gorilla DataFrame Library Benchmark")
 	fmt.Println("=====================================")
 
+	// Set default if not specified
+	if rows == 0 {
+		rows = 1_000_000 // 1 million rows for benchmarking
+	}
+	numRows := rows
+
 	const (
-		numRows            = 1_000_000 // 1 million rows for benchmarking
 		baseAge            = 25
 		ageRange           = 40
 		baseSalary         = 40000
