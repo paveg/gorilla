@@ -1,6 +1,6 @@
 module github.com/paveg/gorilla
 
-go 1.24.4
+go 1.25
 
 require (
 	github.com/apache/arrow-go/v18 v18.3.1
@@ -12,7 +12,7 @@ require (
 
 require (
 	github.com/andybalholm/brotli v1.1.1 // indirect
-	github.com/apache/thrift v0.21.0 // indirect
+	github.com/apache/thrift v0.23.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/golang/snappy v1.0.0 // indirect
